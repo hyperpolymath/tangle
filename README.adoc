@@ -1,133 +1,247 @@
-= RSR template repo - see RSR_OUTLINE.adoc in root for general background and specification
+= TANGLE: A Turing-Complete Topological Programming Language
+:toc:
+:source-highlighter: highlight.js
+:sectnums:
 
-== This is your repo - don't forget to rename me!
+== Introduction
 
-== ABI/FFI Standards (Hyperpolymath Universal Standard)
+Computation is braiding. Data flows along strands. Strands interact only at crossings.
 
-**All repos with foreign function interfaces MUST follow this standard:**
+TANGLE is an experimental, Turing-complete, topologically inspired programming language where programs are represented as tangles—isotopy classes of braided strands in 3D space. Instead of traditional control flow, computation proceeds via the braiding of data-carrying strands, with interactions occurring strictly at crossings.
 
-* **ABI (Application Binary Interface)** → **Idris2** (`src/abi/*.idr`)
-** Type definitions with dependent type proofs
-** Memory layout verification
-** Platform-specific ABIs with compile-time selection
-** Formal verification of interface correctness
+Unlike conventional functional or imperative models, TANGLE treats code as physical structures: knots, links, and braids. The language leverages deep connections between topology, algebra, and computation, enabling novel reasoning about program equivalence through knot invariants like the Jones polynomial.
 
-* **FFI (Foreign Function Interface)** → **Zig** (`ffi/zig/src/*.zig`)
-** C-compatible function implementations
-** Zero-cost abstractions
-** Memory-safe by default
-** Cross-compilation support
+Despite its geometric foundation, TANGLE supports full recursion, pattern matching, and local binding—making it surprisingly expressive and computationally universal.
 
-* **Generated C Headers** → Auto-generated from Idris2 ABI (`generated/abi/*.h`)
-** Bridge between Idris2 and Zig
-** Consumed by any language via C ABI
+This project explores the frontier of spatial computing, where syntax mirrors structure, and evaluation reflects deformation.
 
-**Directory Structure:**
-----
-project/
-├── src/abi/          # Idris2 ABI definitions (REQUIRED)
-├── ffi/zig/          # Zig FFI implementation (REQUIRED)
-├── generated/abi/    # Auto-generated C headers
-└── bindings/         # Language-specific wrappers (optional)
-----
+== Key Features
 
-**See:** `ABI-FFI-README.md` for complete documentation
+    ✅ Topological Semantics: Programs are tangles; equivalence is isotopy.
+    ✅ Braiding as Computation: Strand crossings define operations.
+    ✅ Knot Invariant Evaluation: Compute Jones, Alexander, HOMFLY, Kauffman polynomials.
+    ✅ Recursive Definitions & Pattern Matching: Enables general recursion → Turing completeness.
+    ✅ Algebraic Data via Braid Words: Braid sequences act like cons-lists over generators.
+    ✅ Let Binding & Local Scope
+    ✅ Weave Blocks: Define transformations on named strand configurations.
 
-== AI Gatekeeper Protocol (MANDATORY)
+== Syntax Overview (EBNF Summary)
 
-**CRITICAL:** All hyperpolymath repos MUST include an AI manifest.
+The full grammar is specified in ISO/IEC 14977 EBNF format within the source. Highlights include:
+[source,ebnf]
 
-* **File:** `0-AI-MANIFEST.a2ml` (included in this template)
-* **Purpose:** Universal entry point for ALL AI agents (Claude, Gemini, OpenAI, etc.)
-* **Location:** Repository root (alphabetically first)
-* **Customize:** Update `[YOUR-REPO-NAME]` placeholders and repository structure section
+program = { statement } ;
+statement = definition | weave_block | computation | assertion ;
 
-**The manifest declares:**
+definition = "def", identifier, [ "(", param_list, ")" ], "=", expr ;
+weave_block = "weave", input_decl, "into", expr, "yield", output_decl ;
+computation = "compute", invariant, "(", expr, ")" ;
+assertion = "assert", predicate ;
+expr = match_expr | let_expr | pipeline ;
+match_expr = "match", expr, "with", match_arm+, "end" ;
+let_expr = "let", identifier, "=", expr, "in", expr ;
 
-* Canonical file locations (e.g., "SCM files ONLY in `.machine_readable/`")
-* Critical invariants (rules that must NEVER be violated)
-* Repository structure and organization
-* Lifecycle hooks (on-enter, on-exit) for session logging
+=== Core Operators (Precedence Ascending)
 
-**Benefits:**
-
-* ✅ Prevents duplicate file errors (e.g., SCM files in wrong locations)
-* ✅ Context preserved across sessions and AI platforms
-* ✅ No repeated explanations - mechanical enforcement
-* ✅ Works universally (not just Claude)
-
-**See:** link:https://github.com/hyperpolymath/0-ai-gatekeeper-protocol[AI Gatekeeper Protocol] for details
-
-**Enforcement:**
-
-* MCP server (mcp-repo-guardian) - Hard enforcement for Claude
-* FUSE wrapper (repo-guardian-fs) - Universal enforcement (coming soon)
-* CI/CD validation - Continuous compliance checking
-
-== AI CLI standards
-
-- **FIRST:** Customize `0-AI-MANIFEST.a2ml` for your repo before any other work
-- Include `ai-cli-crash-capture/` and `contractiles/` from this template in new repos.
-- Mirror 6SCM files into `.machine_readable/` (NOT `.machine_readable/6scm/`).
-- Before any code generation, check `/var/mnt/eclipse/repos/proven` for the current Idris "unbreakable" library status.
-- If a project uses that Idris library, add an *Idris Inside* badge to the repo.
-- If new bindings are required, add them in `/var/mnt/eclipse/repos/proven` as `idris2-zig-<language>` during the work.
-- If new code suggests additional "unbreakable" Idris modules, add them under `/var/mnt/eclipse/repos/proven` and update binders across all supported languages.
-
-== Standard Dependencies
-
-=== Web Projects
-
-ReScript web projects in the hyperpolymath ecosystem **MUST** use these formally verified components:
-
-[cols="1,2,1"]
 |===
-|Library |Purpose |Status
+| Operator | Name | Meaning | Precedence
 
-|link:https://github.com/hyperpolymath/rescript-dom-mounter[rescript-dom-mounter]
-|Formally verified DOM mounting
-|**REQUIRED**
+| >>
+| Pipeline
+| Feed outputs into inputs
+| Lowest
 
-|link:https://github.com/hyperpolymath/rescript-tea[rescript-tea]
-|TEA architecture framework
-|Recommended
+| +
+| Connect Sum
+| Join two tangles/knots
+| ↑
 
-|link:https://github.com/hyperpolymath/cadre-tea-router[cadre-tea-router]
-|Proven-safe URL routing
-|Recommended
+| .
+| Vertical Stack / Cons
+| Compose tangles top-to-bottom; builds braid words
+| ↑
 
-|link:https://github.com/hyperpolymath/proven[proven]
-|Idris2 formally verified library
-|Core Dependency
+| |
+| Horizontal Lay
+| Place tangles side-by-side (tensor)
+| Highest
 |===
 
-==== Why SafeDOM is Required
+=== Primary Constructs
 
-Traditional DOM mounting can fail:
+==== Braid Literals
 
-[source,javascript]
-----
-// ❌ UNSAFE: Can crash with null pointer
-const el = document.getElementById('app')
-el.innerHTML = html  // 💥
-----
+Represent braid group elements directly:
 
-SafeDOM provides **compile-time proofs** that DOM operations cannot fail:
+tangle
 
-[source,rescript]
-----
-// ✅ PROVEN SAFE: Mathematically guaranteed
-SafeDOM.mountSafe("#app", html,
-  ~onSuccess=el => Console.log("Success"),
-  ~onError=err => Console.error(err))
-----
+braid[s1, s2^-1, s1]   // σ₁σ₂⁻¹σ₁ — a trefoil precursor
+braid[]                 // identity braid
 
-**Mathematical Guarantees:**
+Crossings
 
-✓ No null pointer dereferences (Idris2 proof)
-✓ No invalid CSS selectors (dependent types)
-✓ No malformed HTML (balanced tag checking)
-✓ Type-safe operations (ReScript + Idris2)
-✓ Zero runtime overhead (proofs erased)
+Explicit interaction between named strands:
 
-See link:https://github.com/hyperpolymath/rescript-dom-mounter[rescript-dom-mounter documentation] for full details.
+tangle
+
+(a > b)  // a crosses over b
+(b < a)  // same as above
+
+Twists
+
+Apply framing or self-writhe:
+
+tangle
+
+(~x)     // twist on strand x
+
+Unary Operations
+Operation	Effect
+close(e)	Close braid e into a link
+mirror(e)	Reflect spatial orientation
+reverse(e)	Reverse temporal direction (inverse braid)
+simplify(e)	Apply Reidemeister moves
+cap(e,f), cup(e,f)	Attach caps/cups to form closed components
+
+== Example Programs
+
+=== Identity Twist (Trivial Knot)
+
+tangle
+
+weave strands a into identity yield strands a
+
+Simple Crossing → Hopf Link
+
+tangle
+
+weave strands a, b into (a > b) yield strands b, a
+
+Recursive Fibonacci Braid Generator
+
+Using braid words as recursive data (cons-like via .):
+
+tangle
+
+def fib(0) = braid[]
+def fib(1) = braid[s1]
+def fib(n) =
+  let prev = fib(n-1) in
+  let prev2 = fib(n-2) in
+  prev . s1 . prev2
+
+    Note: This exploits the fact that braid words have sequential structure—isomorphic to lists—enabling induction.
+
+Pattern Matching on Braid Structure
+
+Match the internal form of a braid word (not up to isotopy):
+
+tangle
+
+match my_braid with
+| identity          => "empty"
+| s1 . rest         => "starts with sigma_1"
+| s2^-1 . s1 . tail => "specific pattern"
+| x                 => "something else: " + x
+end
+
+    ⚠️ Warning: Matching is syntactic (on normal form), not semantic (up to isotopy). Use with care.
+
+Compute Knot Invariants
+
+tangle
+
+compute jones( close( braid[s1, s1, s1] ) )
+// Returns polynomial representation of the trefoil
+
+compute linking( (a > b) | (c < d) )
+// Computes linking number between components
+
+Assertion Block
+
+Verify equality under isotopy or exact match:
+
+tangle
+
+assert (a > b) == mirror(b < a)
+assert compute writhe((~x)) == -2
+
+Execution Model
+
+Programs evaluate by simulating tangle evolution:
+
+    Parse into abstract syntax tree (AST).
+    Reduce using equational rules (Reidemeister moves when possible).
+    Evaluate compute blocks symbolically (e.g., expand Jones polynomial).
+    Match patterns structurally on normalized braid words.
+    Bind variables and recurse.
+
+Equivalence checking uses both syntactic reduction and invariant comparison.
+Why "Turing Complete"?
+
+Although based on finite braid groups, TANGLE achieves Turing completeness through:
+
+    ✅ Recursive function definitions
+    ✅ Pattern matching on braid-word structure (acting like list deconstruction)
+    ✅ Unbounded recursion depth
+
+This allows encoding of Peano arithmetic, μ-recursive functions, and simulation of register machines—all via braiding logic.
+
+In essence: braid words serve as linked lists, enabling induction and unbounded state.
+Applications & Research Directions
+
+    🧮 Formal verification of knot equivalences
+    🔗 Quantum computing analogies (via anyons, braid groups in topological QC)
+    🤖 Program synthesis from topological constraints
+    🎯 Education: visualizing abstract algebra and category theory
+    🌀 Exploring geometry as computation
+
+Getting Started
+
+To use TANGLE:
+
+    Clone this repo:
+
+Bash
+
+git clone https://github.com/yourname/tangle-lang.git
+cd tangle-lang
+
+    Run parser/type-checker (WIP toolchain):
+
+Bash
+
+# Assuming a compiler exists...
+./tanglec example.tgl --eval=jones
+
+    Try editing .tgl files with syntax-aware editor support (coming soon).
+
+License
+
+MIT License – see LICENSE.
+Contributing
+
+Contributions welcome! Especially interested in:
+
+    Implementing invariant calculators
+    Visualization tools (3D rendering of tangles)
+    Type system extensions (strand typing, linear logic)
+    Optimizations via braid simplification
+    Interpreter backend (OCaml/Haskell/Rust)
+
+Open issues or start discussions!
+Acknowledgments
+
+Inspired by:
+
+    Vaughan Jones (Jones Polynomial)
+    Joan Birman (Braid Groups)
+    Philip Wadler (Functional Programming)
+    Louis Kauffman (Diagrammatic Reasoning)
+
+"The tangle of thought becomes the thought of tangle."
+
+ifdef::backend-html5[]
+<script> document.addEventListener("DOMContentLoaded", function() { // Optional: Add interactive viewer hook here }); </script>
+
+endif::[]
