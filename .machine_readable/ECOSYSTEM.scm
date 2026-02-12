@@ -20,7 +20,11 @@
     (dependency "hypatia" "Neurosymbolic CI/CD intelligence and security scanning")
     (dependency "panic-attacker" "Security vulnerability scanning")
     (consumer "gitbot-fleet" "Quality enforcement via bot orchestration")
-    (inspiration "julia-the-viper" "Data and control grammar for injection blocks"))
+    (inspiration "julia-the-viper" "Data and control grammar for injection blocks")
+    (primary-interop "KnotTheory.jl" "Julia knot theory library with braid word conversion (from_braid_word/to_braid_word)")
+    (potential-consumer "SMTLib.jl" "SMT solver interface for type verification of tangle programs")
+    (potential-consumer "PolyglotFormalisms.jl" "Cross-language verification - TANGLE-JTV bridges topological + imperative paradigms")
+    (related "ZeroProb.jl" "Quantum topology connections via anyonic braiding and measure theory"))
 
   (what-this-is
     "TANGLE is a topological programming language where computation is braiding. "
