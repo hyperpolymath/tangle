@@ -1,0 +1,284 @@
+= TANGLE + with jtv Injection Blocks
+:toc:
+:source-highlighter: highlight.js
+:sectnums:
+
+== Introduction
+
+Computation is braiding. Data flows along strands. But sometimes, you need arithmetic.
+
+TANGLE reimagines programming as topology: programs are tangles, evaluation is isotopy, and equivalence is geometric. Yet pure topological computation lacks familiar data manipulation.
+
+Enter: Julia-the-Viper Injection Blocks — two syntactically isolated islands embedded within TANGLE to bridge geometry with practicality:
+
+    add{ ... }: A total, pure, data-only arithmetic island using the Julia-the-Viper Data Grammar
+    harvard{ ... }: A full Harvard Architecture block supporting control + data, enabling imperative logic alongside braids
+
+These blocks are delimited, unambiguous, and interoperable — they can be parsed independently from TANGLE’s core syntax, making them ideal for shared tooling across languages.
+
+    🌐 Vision: Create portable, verifiable, embeddable computational units that transcend any one host language.
+
+== Design Principles
+
+    ✅ Delimited Syntax: add{...} and harvard{...} cannot conflict with TANGLE operators like +, ., or |.
+    ✅ Semantic Separation:
+        + in TANGLE = connect sum (tangle union)
+        + in add{...} = arithmetic addition
+    ✅ Injectability Control: Only safe, total expressions allowed in add{...}
+    ✅ Interoperability: The same harvard{...} block can run in TANGLE, Viper, or future host languages
+
+This design enables grammar sharing: multiple languages can agree on what add{1 + 2} means — without agreeing on how to braid strands.
+
+== New Syntactic Islands
+
+=== 🔢 Addition Block: add{ ... }
+
+A lightweight expression island for arithmetic and data construction.
+[source,tangle]
+velocity = add{ speed_limit + buffer }
+area = add{ width * height } // if * were included (currently + only)
+offset = add{ -(x + y) / 2 }
+coords = add{ [x, y, z] }
+complex = add{ 3 + 4i }
+range = add{ start .. end }
+tuple = add{ (a, b + c, d) }
+
+Features:
+
+    Parses using hv_data_expr grammar
+    Supports: integers, floats, rationals, complex numbers, lists, tuples
+    No side effects, no control flow
+    Ideal for configuration, physics, indexing, numeric prelude
+
+    💡 Use add{...} when you just want math — not metaphysics.
+
+=== 🖥️ Harvard Block: harvard{ ... }
+
+A full imperative module embedded at the statement level.
+[source,tangle]
+
+harvard{
+fn factorial(n: Int) -> Int {
+if n == 0 {
+return 1
+} else {
+return n * factorial(n - 1)
+}
+}
+print(factorial(5))
+}
+[source,tangle]
+
+harvard{
+module Physics {
+fn kinetic_energy(mass: Float, velocity: Float) -> Float {
+return 0.5 * mass * velocity^2
+}
+}
+
+import Physics as P
+reverse {
+v += delta_v
+t += dt
+}
+}
+
+Features:
+
+    Full function definitions (fn)
+    Control flow: if, while, for, return
+    Variable assignment and mutation
+    Module system and imports
+    Reversible computing blocks (reverse { ... })
+    Type annotations with rich type language (List<Int>, Fn(...) -> Bool)
+    Interoperates with TANGLE via bindings (future)
+
+    ⚠️ Warning: harvard{...} is Turing-complete. Handle with care.
+
+== Extended TANGLE Grammar Highlights
+
+The following productions are now part of TANGLE:
+
+ebnf
+
+primary = ...
+        | add_block
+        ;
+
+statement = ...
+          | harvard_block
+          ;
+
+Addition Block
+
+ebnf
+
+add_block = "add", "{", hv_data_expr, "}" ;
+
+Parses a single total expression from the Julia-the-Viper data grammar.
+Harvard Block
+
+ebnf
+
+harvard_block = "harvard", "{", hv_program, "}" ;
+
+Embeds an entire program written in the Harvard subset of Julia-the-Viper.
+
+== Embedded Julia-the-Viper Grammar (Summary)
+
+All hv_* rules define the shared sublanguage. Designed for portability.
+
+=== Core Concepts
+Feature	Syntax Example
+Function	fn square(x) { return x * x }
+Assignment	y = x + 1
+If/Else	if cond { ... } else { ... }
+While Loop	while x > 0 { x -= 1 }
+For Loop	for i in 1..10 { ... }
+Return	return result
+Print	print("Hello", x)
+Reverse Block	reverse { x += dx }
+
+=== Data Types
+Type	Notation
+Integer	42, -7
+Float	3.14, 6.02e23
+Rational	22/7
+Complex	3 + 4i
+Hex	0xFF
+Binary	0b1010
+Boolean	used in comparisons
+String	not directly supported in hv_data_expr yet
+List	[1, 2, 3]
+Tuple	(x, y + 1)
+Range	start .. end
+
+=== Type System (Embedded)
+
+ebnf
+
+hv_type_annotation = "Int" | "Float" | "Bool" | "String"
+                   | "List<type>"
+                   | "(T1, T2, ...)"
+                   | "Fn(T1, T2) -> R"
+
+Example:
+
+tangle
+
+harvard{
+  fn map_list(f: Fn(Int) -> Int, xs: List<Int>): List<Int> @pure {
+    // implementation...
+  }
+}
+
+Purity Annotations
+
+    @pure: No observable side effects
+    @total: Terminates on all inputs; no recursion unless proven safe
+
+Useful for optimization and verification.
+
+== Why “Harvard”?
+
+Named after the Harvard Architecture, where code and data are separated.
+
+In this context:
+
+    TANGLE handles the structure (topology, code-as-braids)
+    harvard{...} handles the payload (data processing, imperative logic)
+
+They coexist but remain semantically distinct — each trusted in its domain.
+
+This mirrors real-world systems: firmware (control) + circuit layout (form).
+
+== Example: Mixed Topological and Arithmetic Logic
+
+tangle
+
+def twist_count(strand) =
+  add{ base_twists + compute writhe(strand) }
+
+weave strands a, b into
+  let crossing = (a > b) in
+  harvard{
+    if debug_mode {
+      print("Applying crossing:", 1)
+    }
+    reverse {
+      log_counter += 1
+    }
+  } >>
+  crossing
+yield strands b, a
+
+Here:
+
+    add{...} combines invariant output with constant
+    harvard{...} manages logging and conditional behavior
+    TANGLE orchestrates the braid
+
+== Implementation Notes
+Parser Strategy
+
+Use mode switching in lexer/parser:
+
+    On seeing add{ → enter HV_DATA_MODE
+    On seeing harvard{ → enter HV_CONTROL_MODE
+    Parse inner content with dedicated grammar
+    Exit on matching }
+
+This avoids ambiguity with TANGLE’s own +, {, etc.
+Tooling Interoperability
+
+Because add{...} and harvard{...} use a shared specification:
+
+    You can write a common analyzer for all harvard{...} blocks across languages
+    Linters, type checkers, optimizers can target the hv_* grammar universally
+    IDE support becomes reusable
+
+    🧩 Think of these blocks like WebAssembly: small, fast, portable.
+
+== Roadmap
+Feature	Status
+Parse add{...}	✅
+Parse harvard{...}	✅
+Evaluate add{...} numerically	◻️
+Execute harvard{...} imperatively	◻️
+Bind TANGLE variables into add{...}	◻️ (e.g., add{ x + 1 } where x from outer scope)
+Export values from harvard{...}	◻️
+Visualize mixed braid/control flow	◻️
+Compile harvard{...} to reversible circuits	◻️
+
+== License
+
+MIT License – see LICENSE.
+
+== Contributing
+
+We welcome contributions in:
+
+    Building reference parser (OCaml, Rust, Haskell)
+    Writing test suites for hv_data_expr and hv_program
+    Creating visualizers (ASCII art, SVG, 3D)
+    Proving properties of injection blocks
+    Exploring reversibility in reverse { ... }
+
+Let’s build a universe where geometry computes and numbers guide the braid.
+
+== Acknowledgments
+
+Inspired by:
+
+    Julia (the real one) — for dynamic power
+    The Viper security language — for strict domains
+    John Conway — for thinking in knots
+    Grace Hopper — for bridging worlds
+    The lambda calculus — for enduring elegance
+
+"Not all who wander are lost — some are just reversing their path."
+
+ifdef::backend-html5[]
+<script> document.addEventListener("DOMContentLoaded", function() { // Placeholder for interactive demo hook }); </script>
+
+endif::[]
