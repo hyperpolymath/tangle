@@ -1,13 +1,21 @@
-# ⚠️ STOP - CRITICAL READING REQUIRED
+# STOP - CRITICAL READING REQUIRED
 
 **THIS FILE MUST BE READ FIRST BY ALL AI AGENTS**
 
 ## WHAT IS THIS?
 
-This is the AI manifest for **[YOUR-REPO-NAME]**. It declares:
+This is the AI manifest for **tangle**. It declares:
 - Canonical file locations (where things MUST be, and nowhere else)
 - Critical invariants (rules that must NEVER be violated)
 - Repository structure and organization
+
+## PROJECT OVERVIEW
+
+TANGLE is a Turing-complete topological programming language where programs are
+isotopy classes of tangles. TANGLE-JTV extends it with Julia-the-Viper injection
+blocks (add{} for total arithmetic, harvard{} for imperative control).
+
+**Current phase**: Specification complete, implementation beginning.
 
 ## CANONICAL LOCATIONS (UNIVERSAL RULE)
 
@@ -23,15 +31,26 @@ These 6 SCM files MUST exist in `.machine_readable/` directory ONLY:
 
 **CRITICAL:** If ANY of these files exist in the root directory, this is an ERROR.
 
+### Source Files
+
+- `src/tangle.ebnf` - Base TANGLE grammar (ISO/IEC 14977 EBNF)
+- `src/tangle-jtv.ebnf` - TANGLE-JTV extended grammar
+- `src/abi/` - Idris2 ABI definitions
+
+### Specification Documents
+
+- `docs/spec/DECISIONS-LOCKED.md` - ALL 44 locked design decisions (DO NOT MODIFY)
+- `docs/spec/FORMAL-SEMANTICS.md` - Typing rules and operational semantics
+- `docs/spec/UNANSWERED-QUESTIONS.md` - All 21 questions resolved
+- `docs/spec/FEATURE-COVERAGE.md` - Feature → decision mapping
+
+### Implementation Plan
+
+- `SONNET-TASKS.md` - Detailed implementation tasks (11 tasks, prioritized)
+
 ### Bot Directives: `.bot_directives/` ONLY
 
-Bot-specific instructions for:
-- rhodibot - Git operations
-- echidnabot - Code quality
-- sustainabot - Dependency updates
-- glambot - Documentation
-- seambot - Integration
-- finishbot - Task completion
+Bot-specific instructions for rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot.
 
 ### Agent Instructions
 
@@ -42,75 +61,66 @@ Bot-specific instructions for:
 
 1. **No SCM duplication** - Root must NOT contain STATE.scm, META.scm, etc.
 2. **Single source of truth** - `.machine_readable/` is authoritative
-3. **No stale metadata** - If root SCMs exist, they are OUT OF DATE
-4. **License consistency** - All code PMPL-1.0-or-later unless platform requires MPL-2.0
-5. **Author attribution** - Always "Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>"
+3. **Specification is LOCKED** - Do NOT modify DECISIONS-LOCKED.md without explicit permission
+4. **Word[n] != Tangle[A,B]** - These are different types with implicit coercion (D1.1)
+5. **~ means isotopy** - Mathematical equality in FR(T), NOT AST comparison (D1.2)
+6. **add{} is TOTAL** - No loops, no recursion, no side effects (D2.1)
+7. **License consistency** - All code PMPL-1.0-or-later
+8. **Author attribution** - Always "Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>"
 
 ## REPOSITORY STRUCTURE
 
-<!-- CUSTOMIZE THIS SECTION FOR YOUR REPO -->
-
-This repo contains:
-
 ```
-[YOUR-REPO-NAME]/
+tangle/
 ├── 0-AI-MANIFEST.a2ml         # THIS FILE (start here)
-├── README.md                   # Project overview
-├── [your source files]         # Main code
-├── .machine_readable/          # SCM files (6 files)
-│   ├── STATE.scm
-│   ├── META.scm
-│   ├── ECOSYSTEM.scm
-│   ├── AGENTIC.scm
-│   ├── NEUROSYM.scm
-│   └── PLAYBOOK.scm
-└── .bot_directives/            # Bot instructions
+├── README.adoc                # Base TANGLE overview
+├── README-jtv.adoc            # TANGLE-JTV extension overview
+├── SONNET-TASKS.md            # Implementation plan
+├── ROADMAP.adoc               # Project roadmap
+├── src/
+│   ├── tangle.ebnf            # Base grammar
+│   ├── tangle-jtv.ebnf        # Extended grammar
+│   └── abi/                   # Idris2 ABI definitions
+├── ffi/zig/                   # Zig FFI bridge
+├── docs/spec/                 # Formal specification
+│   ├── DECISIONS-LOCKED.md
+│   ├── FORMAL-SEMANTICS.md
+│   ├── UNANSWERED-QUESTIONS.md
+│   └── FEATURE-COVERAGE.md
+├── .machine_readable/         # SCM files (6 files)
+├── .bot_directives/           # Bot instructions
+├── .github/workflows/         # 17 CI/CD workflows
+└── contractiles/              # Contractile system
 ```
 
 ## SESSION STARTUP CHECKLIST
 
-✅ Read THIS file (0-AI-MANIFEST.a2ml) first
-✅ Understand canonical locations (.machine_readable/, .bot_directives/)
-✅ Know the invariants (no SCM duplication, etc.)
-✅ Check for MCP enforcement (if applicable)
-✅ Read `.machine_readable/STATE.scm` for current status
-✅ Read `.machine_readable/AGENTIC.scm` for interaction patterns
+- Read THIS file (0-AI-MANIFEST.a2ml) first
+- Read SONNET-TASKS.md for implementation plan
+- Read `.machine_readable/STATE.scm` for current status
+- Read `docs/spec/DECISIONS-LOCKED.md` for all design decisions
+- Read `docs/spec/FORMAL-SEMANTICS.md` for typing and evaluation rules
+- Read `src/tangle.ebnf` and `src/tangle-jtv.ebnf` for grammar
 
 ## LIFECYCLE HOOKS
 
 ### on-enter (Session Start)
 
-When starting a new session:
-
 1. Read and acknowledge this manifest
-2. Log session start (optional but recommended)
-   - Format: `[YYYY-MM-DD HH:MM:SS] Session started: [agent-name]`
-   - Location: `.machine_readable/session-log.txt`
-3. Read `.machine_readable/STATE.scm`
-4. Check for blockers
-5. State understanding of canonical locations
+2. Read STATE.scm for current position
+3. Read SONNET-TASKS.md for next implementation task
+4. State understanding of type system (Word[n] vs Tangle[A,B])
 
 ### on-exit (Session End)
 
-When ending a session:
-
-1. Update `.machine_readable/STATE.scm` if changes made
-2. Log session end (optional but recommended)
-   - Format: `[YYYY-MM-DD HH:MM:SS] Session ended: [summary]`
-   - Location: `.machine_readable/session-log.txt`
-3. Document new blockers
-4. Summarize outcomes
-
-## ATTESTATION PROOF
-
-After reading this file, demonstrate understanding by stating:
-
-**"I have read the AI manifest. SCM files are located in `.machine_readable/` ONLY, bot directives in `.bot_directives/`, and I will not create duplicate files in the root directory."**
+1. Update STATE.scm if changes made
+2. Document new blockers
+3. Summarize implementation progress
 
 ## META
 
 - **Format Version:** 1.0.0
-- **Created:** [DATE]
-- **Maintained By:** [YOUR-NAME/ORG]
+- **Created:** 2026-02-12
+- **Maintained By:** Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>
 - **License:** PMPL-1.0-or-later
 - **Protocol:** https://github.com/hyperpolymath/0-ai-gatekeeper-protocol

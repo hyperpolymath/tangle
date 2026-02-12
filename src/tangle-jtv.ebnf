@@ -48,23 +48,16 @@ invariant = "jones" | "alexander" | "homfly"
 | "kauffman" | "writhe" | "linking"
 | identifier ;
 
-(* -------------------- Assertions ----------------------------- *)
+(* -------------------- Assertions ----------------------------- )
+( assert takes an expression that must evaluate to Bool. )
+( Typically: assert e1 ~ e2 or assert e1 == e2 *)
 
-assertion = "assert", predicate ;
-
-predicate = predicate_atom,
-{ predicate_join, predicate_atom } ;
-
-predicate_join = "AND" | "OR" ;
-
-predicate_atom = expr, "~", expr
-| expr, "==", expr
-| "NOT", predicate_atom
-| "(", predicate, ")" ;
+assertion = "assert", expr ;
 
 (* -------------------- Expressions ---------------------------- )
 ( Match and let at lowest precedence. )
-( Infix ops in ascending precedence: >>, +, ., | *)
+( Infix ops in ascending precedence: )
+( >> == ~ + - * / . | *)
 
 expr = match_expr
 | let_expr
@@ -78,8 +71,10 @@ match_arm = "|", pattern, "=>", expr ;
 
 let_expr = "let", identifier, "=", expr, "in", expr ;
 
-pipeline = sum, { ">>", sum } ;
-sum = vertical, { "+", vertical } ;
+pipeline = equality, { ">>", equality } ;
+equality = sum, [ ( "==" | "~" ), sum ] ;
+sum = product, { ( "+" | "-" ), product } ;
+product = vertical, { ( "*" | "/" ), vertical } ;
 vertical = horizontal, { ".", horizontal } ;
 horizontal = unary, { "|", unary } ;
 
@@ -98,10 +93,11 @@ unary = primary
 
 primary = braid_literal
 | "identity"
+| "true" | "false"
 | crossing
 | identifier, [ "(", arg_list, ")" ]
 | literal
-| add_block (* NEW: injected Addition Block *)
+| add_block (* injected Addition Block *)
 | "(", expr, ")" ;
 
 arg_list = expr, { ",", expr } ;
@@ -124,9 +120,11 @@ crossing = "(", identifier, crossing_op, identifier, ")" ;
 
 crossing_op = ">" | "<" ;
 
-(* -------------------- Twists --------------------------------- *)
+(* -------------------- Twists --------------------------------- )
+( In weave context: (~a) twists named strand a. )
+( Standalone: (~expr) composes with all-strand twist (D1.18). *)
 
-twist = "(", "~", identifier, ")" ;
+twist = "(", "~", ( identifier | "(", expr, ")" ), ")" ;
 
 (* -------------------- Patterns ------------------------------- *)
 
@@ -185,7 +183,7 @@ hv_control_stmt = hv_assignment
 | hv_reverse_block
 | hv_block ;
 
-hv_assignment = identifier, "=", ( hv_data_expr | hv_control_expr ) ;
+hv_assignment = identifier, "=", hv_data_expr ;
 
 hv_if_stmt = "if", hv_data_expr, "{", { hv_control_stmt }, "}",
 [ "else", "{", { hv_control_stmt }, "}" ] ;
@@ -209,39 +207,49 @@ hv_reversible_assignment
 = identifier, "+", "=", hv_data_expr
 | identifier, "-", "=", hv_data_expr ;
 
-(* ----- Data language (total, addition-only) ------------------------ *)
+(* ----- Data language (total, guaranteed terminating) --------------- )
+( The data grammar supports: arithmetic, comparisons, boolean ops, )
+( conditionals (total: both branches required), and function calls )
+( to @pure/@total functions in Π. NO loops, NO assignments. *)
 
-hv_data_expr = hv_additive_expr ;
+hv_data_expr = hv_conditional
+| hv_logical_or ;
 
-hv_additive_expr = hv_term, { "+", hv_term } ;
+hv_conditional = "if", hv_data_expr, "then", hv_data_expr,
+"else", hv_data_expr ;
 
-hv_term = hv_factor ;
+hv_logical_or = hv_logical_and, { "||", hv_logical_and } ;
+
+hv_logical_and = hv_comparison, { "&&", hv_comparison } ;
+
+hv_comparison = hv_additive, [ hv_comparator, hv_additive ] ;
+
+hv_comparator = "==" | "!=" | "<" | "<=" | ">" | ">=" ;
+
+hv_additive = hv_multiplicative, { ( "+" | "-" ), hv_multiplicative } ;
+
+hv_multiplicative = hv_unary, { ( "*" | "/" | "%" ), hv_unary } ;
+
+hv_unary = hv_factor
+| "-", hv_factor
+| "!", hv_factor ;
 
 hv_factor = hv_number
+| hv_string
+| "true" | "false"
 | identifier
 | hv_function_call
 | "(", hv_data_expr, ")"
 | hv_list_literal
-| hv_tuple_literal
-| hv_unary_op, hv_factor ;
+| hv_tuple_literal ;
 
-hv_unary_op = "-" | "!" ;
+hv_string = '"', { ? any printable character except unescaped double-quote ? }, '"' ;
 
-(* ----- Control expressions ---------------------------------------- *)
+(* ----- Control expressions ---------------------------------------- )
+( All comparison, logical, and arithmetic operations are handled by )
+( hv_data_expr (the Data grammar). Control statements use hv_data_expr )
+( for all value positions (conditions, RHS of assignments, etc.). *)
 
-hv_control_expr = hv_data_expr
-| hv_comparison_expr
-| hv_logical_expr
-| hv_function_call ;
-
-hv_comparison_expr = hv_data_expr, hv_comparator, hv_data_expr ;
-
-hv_comparator = "==" | "!=" | "<" | "<=" | ">" | ">=" ;
-
-hv_logical_expr = hv_control_expr, hv_logical_op, hv_control_expr
-| "!", hv_control_expr ;
-
-hv_logical_op = "&&" | "||" ;
 
 (* ----- Functions -------------------------------------------------- *)
 

@@ -24,8 +24,7 @@ stmt  ::=  def x = e                                              -- value defin
         |  def f(x₁, ..., xₖ) = e                                -- function definition
         |  weave strands S_in into e yield strands S_out          -- weave block
         |  compute inv(e)                                         -- invariant computation
-        |  assert e₁ ~ e₂                                        -- isotopy assertion
-        |  assert e₁ == e₂                                       -- equality assertion
+        |  assert e                                               -- assertion (e : Bool)
 ```
 
 ### 1.2 Expressions
@@ -560,16 +559,18 @@ If width cannot be inferred, compiler requests annotation.
 
 **Assert** (D1.15, D1.15.1):
 
-```
-Γ ⊢ e₁ : Tangle[A, B]       Γ ⊢ e₂ : Tangle[A, B]
-──────────────────────────────────────────────────── [T-Assert-Isotopy]
-Γ ⊢ assert e₁ ~ e₂  :  ok
+The grammar has `assertion = "assert", expr`. The expression must evaluate
+to Bool. Common patterns: `assert e₁ ~ e₂`, `assert e₁ == e₂`, `assert f(x)`.
 
-
-Γ ⊢ e₁ : τ       Γ ⊢ e₂ : τ       τ ∈ {Word[n], Num, Str}
-──────────────────────────────────────────────────────────── [T-Assert-Eq]
-Γ ⊢ assert e₁ == e₂  :  ok
 ```
+Γ ⊢ e : Bool
+────────────────────── [T-Assert]
+Γ ⊢ assert e  :  ok
+```
+
+This subsumes isotopy and equality assertions because `~` and `==` return Bool
+(see §3.6). For example, `assert e₁ ~ e₂` typechecks because T-Isotopy gives
+`e₁ ~ e₂ : Bool`, and T-Assert accepts any `Bool`.
 
 **Compute** (D1.12):
 
@@ -579,6 +580,22 @@ inv ∈ {jones, alexander, homfly, kauffman, writhe, linking}
 ──────────────────────────────────────────────────────────── [T-Compute]
 Γ ⊢ compute inv(e)  :  ok
 ```
+
+**Invariant Result Types**:
+
+Each built-in invariant produces a specific type:
+
+```
+result_type(jones)     = Num     -- Laurent polynomial in t^(1/2), evaluated numerically
+result_type(alexander) = Num     -- Laurent polynomial in t, evaluated numerically
+result_type(homfly)    = Num     -- two-variable polynomial P(a,z), evaluated numerically
+result_type(kauffman)  = Num     -- Kauffman bracket polynomial, evaluated numerically
+result_type(writhe)    = Num     -- integer (sum of crossing signs)
+result_type(linking)   = Num     -- integer or half-integer (linking number)
+```
+
+MVP note: Polynomials are evaluated at fixed values, returning Num. Future versions
+may return a Polynomial type for symbolic manipulation.
 
 ### 3.16 Program Typing (D1.13)
 
@@ -888,26 +905,22 @@ Note: f is in ρ (recursive calls resolve to the same closure), enabling recursi
 
 ### 4.13 Evaluation Rules — Assertions
 
+Assertions evaluate the expression and check for truth:
+
 ```
-ρ ⊢ e₁ ⇓ v₁       ρ ⊢ e₂ ⇓ v₂       isotopy(v₁, v₂) = true
-──────────────────────────────────────────────────────────────── [E-Assert-Iso-Pass]
-ρ ⊢ assert e₁ ~ e₂ ⇓ ok
+ρ ⊢ e ⇓ bool(true)
+────────────────────── [E-Assert-Pass]
+ρ ⊢ assert e ⇓ ok
 
 
-ρ ⊢ e₁ ⇓ v₁       ρ ⊢ e₂ ⇓ v₂       isotopy(v₁, v₂) = false
-──────────────────────────────────────────────────────────────── [E-Assert-Iso-Fail]
-ρ ⊢ assert e₁ ~ e₂ ⇓ halt("assertion failed: <e₁> ~ <e₂> at <span>")
-
-
-ρ ⊢ e₁ ⇓ v₁       ρ ⊢ e₂ ⇓ v₂       v₁ = v₂
-──────────────────────────────────────────────── [E-Assert-Eq-Pass]
-ρ ⊢ assert e₁ == e₂ ⇓ ok
-
-
-ρ ⊢ e₁ ⇓ v₁       ρ ⊢ e₂ ⇓ v₂       v₁ ≠ v₂
-──────────────────────────────────────────────────────────────── [E-Assert-Eq-Fail]
-ρ ⊢ assert e₁ == e₂ ⇓ halt("assertion failed: <e₁> == <e₂> at <span>")
+ρ ⊢ e ⇓ bool(false)
+──────────────────────────────────────────────── [E-Assert-Fail]
+ρ ⊢ assert e ⇓ halt("assertion failed: <e> at <span>")
 ```
+
+For `assert e₁ ~ e₂`, evaluation first reduces `e₁ ~ e₂` via [E-Isotopy]
+to `bool(b)`, then [E-Assert-Pass] or [E-Assert-Fail] applies.
+Similarly for `assert e₁ == e₂` via [E-Eq-*].
 
 ### 4.14 Evaluation Rules — Invariant Computation
 
@@ -1188,6 +1201,41 @@ Typing judgment for expressions inside `add{...}`:
 Π ⊢_hd he₁ : Bool       Π ⊢_hd he₂ : hτ       Π ⊢_hd he₃ : hτ
 ──────────────────────────────────────────────────────────────────── [HD-If]
 Π ⊢_hd if he₁ then he₂ else he₃ : hτ
+
+
+(x : hτ) ∈ Π
+────────────── [HD-Var]
+Π ⊢_hd x : hτ
+
+
+─────────────────── [HD-Str]
+Π ⊢_hd "s" : String
+
+
+Π ⊢_hd he₁ : hτ₁       Π ⊢_hd he₂ : hτ₂       hτ₁, hτ₂ comparable
+op ∈ {==, !=, <, <=, >, >=}
+──────────────────────────────────────────────────────────────────── [HD-Compare]
+Π ⊢_hd he₁ op he₂ : Bool
+
+
+Π ⊢_hd he₁ : Bool       Π ⊢_hd he₂ : Bool
+──────────────────────────────────────────── [HD-And]
+Π ⊢_hd he₁ && he₂ : Bool
+
+
+Π ⊢_hd he₁ : Bool       Π ⊢_hd he₂ : Bool
+──────────────────────────────────────────── [HD-Or]
+Π ⊢_hd he₁ || he₂ : Bool
+
+
+Π ⊢_hd he : Bool
+──────────────────── [HD-Not]
+Π ⊢_hd !he : Bool
+
+
+Π ⊢_hd he : numeric
+──────────────────── [HD-Neg]
+Π ⊢_hd -he : numeric
 ```
 
 ### 9.4 TANGLE Value Passing to Harvard (Unembed)
@@ -1222,11 +1270,21 @@ f may be recursive
 **Recursion check** (syntactic, conservative):
 
 ```
-is_recursive(def f(x₁,...,xₖ) = body) = f ∈ free_names(body)
+is_recursive(def f(x₁,...,xₖ) = body) = f ∈ reachable_names(body, Γ)
 ```
 
-If the function name appears anywhere in its own body (including indirectly
-through mutual recursion), it is considered recursive.
+Where `reachable_names(body, Γ)` is the transitive closure of free names:
+
+```
+reachable_names(body, Γ) =
+  let direct = free_names(body)
+  let indirect = ∪ { free_names(Γ(g).body) | g ∈ direct, g is a function in Γ }
+  direct ∪ reachable_names(indirect \ direct, Γ)    -- fixed-point iteration
+```
+
+This detects both direct recursion (`f` calls `f`) and mutual recursion
+(`f` calls `g` which calls `f`). The check is conservative: if the call
+graph cannot be statically determined, the function is marked recursive.
 
 ### 9.6 Module Imports (D2.6, D2.11)
 
@@ -1460,13 +1518,16 @@ Every rule in this document traces to a locked decision:
 | T-Add, E-Add | D2.1, D2.4 (three worlds, Embed) |
 | HC-Call-Tangle-* | D2.9 (Harvard calling TANGLE) |
 | T-Unembed, E-Unembed-* | D2.10 (reverse embedding) |
-| E-Match-Fail | D1.15 (halt/panic) |
+| T-Assert, E-Assert-* | D1.15, D1.15.1 (halt/panic, assert) |
 | E-Simplify | D1.16 Tier 1 (simplify is primitive) |
 | E-Pipeline | D1.20 (>> sugar for .) |
 | T-Self-Cross | D1.19 (self-crossing = twist) |
 | T-Program | D1.13 (two-pass) |
 | E-App | D1.13.5 (call-by-value) |
 | HD-*, EHD-* | D2.1, D2.3 (Harvard data, sequential Π) |
+| HD-Compare, HD-And, HD-Or, HD-Not | D2.1 (total data grammar) |
+| HD-Var, HD-Str, HD-Neg | D2.1 (data expression completeness) |
+| T-Compute + result_type | D1.12, D1.16 (invariant computation) |
 
 ---
 

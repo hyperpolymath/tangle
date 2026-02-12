@@ -52,25 +52,20 @@ invariant = "jones" | "alexander" | "homfly"
 | "kauffman" | "writhe" | "linking"
 | identifier ;
 
-(* -------------------- Assertions ----------------------------- *)
+(* -------------------- Assertions ----------------------------- )
+( assert takes an expression that must evaluate to Bool. )
+( Typically: assert e1 ~ e2 or assert e1 == e2 )
+( The ~ and == operators are in the expression grammar. *)
 
-assertion = "assert", predicate ;
-
-predicate = predicate_atom,
-{ predicate_join, predicate_atom } ;
-
-predicate_join = "AND" | "OR" ;
-
-predicate_atom = expr, "~", expr
-| expr, "==", expr
-| "NOT", predicate_atom
-| "(", predicate, ")" ;
+assertion = "assert", expr ;
 
 (* -------------------- Expressions ---------------------------- )
 ( Match and let sit at the lowest precedence. )
-( Composition operators in ascending precedence: )
+( Infix operators in ascending precedence: )
 ( >> pipeline (feed outputs into inputs) )
-( + connect sum (join two knots/tangles) )
+( == ~ equality / isotopy (non-associative) )
+( + - connect sum / arithmetic add-sub )
+( * / arithmetic mul-div )
 ( . vertical stack (compose top-to-bottom / cons) )
 ( | horizontal lay (place side by side) *)
 
@@ -78,7 +73,7 @@ expr = match_expr
 | let_expr
 | pipeline ;
 
-(* ---- NEW: Pattern Matching ---------------------------------- )
+(* ---- Pattern Matching --------------------------------------- )
 ( Structural match on braid-word form, NOT isotopy class. )
 ( This is the sole branching mechanism in the language. *)
 
@@ -88,15 +83,19 @@ match_arm, { match_arm },
 
 match_arm = "|", pattern, "=>", expr ;
 
-(* ---- NEW: Local Binding ------------------------------------- *)
+(* ---- Local Binding ------------------------------------------ *)
 
 let_expr = "let", identifier, "=", expr, "in", expr ;
 
 (* ---- Pipeline through Horizontal ---------------------------- *)
 
-pipeline = sum, { ">>", sum } ;
+pipeline = equality, { ">>", equality } ;
 
-sum = vertical, { "+", vertical } ;
+equality = sum, [ ( "==" | "~" ), sum ] ;
+
+sum = product, { ( "+" | "-" ), product } ;
+
+product = vertical, { ( "*" | "/" ), vertical } ;
 
 vertical = horizontal, { ".", horizontal } ;
 
@@ -117,6 +116,7 @@ unary = primary
 
 primary = braid_literal
 | "identity"
+| "true" | "false"
 | crossing
 | identifier, [ "(", arg_list, ")" ]
 | literal
@@ -145,9 +145,12 @@ crossing = "(", identifier, crossing_op, identifier, ")" ;
 
 crossing_op = ">" | "<" ;
 
-(* -------------------- Twists --------------------------------- *)
+(* -------------------- Twists --------------------------------- )
+( In weave context: (~a) twists named strand a. )
+( Standalone: (~expr) composes with all-strand twist. )
+( The parser distinguishes by context (D1.18). *)
 
-twist = "(", "~", identifier, ")" ;
+twist = "(", "~", ( identifier | "(", expr, ")" ), ")" ;
 
 (* -------------------- Patterns ------------------------------- )
 ( Structural patterns over braid words. )

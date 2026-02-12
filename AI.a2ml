@@ -1,15 +1,37 @@
-
-# AI Assistant Instructions
+# AI Assistant Instructions — TANGLE
 
 ## Repository Focus
-- `rsr-template-repo` is treated as a Rhodium Standard Repository; obey the Rhodium policies, maintain `.bot_directives`, and keep `.machines_readable/6scm/` authoritative.
-- Prefer to keep generated files out of source control, and regenerate them with the documented commands before committing.
+
+- `tangle` is a Turing-complete topological programming language
+- TANGLE-JTV extends it with Julia-the-Viper injection blocks
+- Specification is COMPLETE — implementation phase beginning
+- Treated as a Rhodium Standard Repository; obey RSR policies
+
+## Key Files
+
+- `SONNET-TASKS.md` — Implementation task list (start here for coding)
+- `docs/spec/DECISIONS-LOCKED.md` — 44 locked design decisions (do NOT modify)
+- `docs/spec/FORMAL-SEMANTICS.md` — Typing rules and operational semantics
+- `src/tangle.ebnf` — Base grammar
+- `src/tangle-jtv.ebnf` — Extended grammar with JTV blocks
+
+## Critical Invariants
+
+1. **Word[n] != Tangle[A,B]** — two different types with implicit coercion
+2. **~ means isotopy** — mathematical equality in FR(T), not AST comparison
+3. **add{} is TOTAL** — no loops, no recursion, no side effects
+4. **Three environments** — Γ (TANGLE), Δ (Harvard full), Π (pure subset)
+5. **Auto-widening is a homomorphism** — B_n embeds into B_{n+1} via stabilization
 
 ## Workflow
-1. Inspect `.machines_readable/6scm/STATE.scm` for blockers and next actions.
-2. Respect any constraints listed inside `.machines_readable/6scm/AGENTIC.scm` when tooling changes are requested.
-3. After finishing edits, update STATE with your outcomes and commit with a concise, imperative message.
+
+1. Read `SONNET-TASKS.md` for implementation priorities
+2. Read `.machine_readable/STATE.scm` for current status
+3. Consult `docs/spec/FORMAL-SEMANTICS.md` for typing/eval rules
+4. After edits, update STATE.scm and commit with concise imperative message
 
 ## Delivery Promises
-- Mention in summaries whether STATE, `contractiles/`, or `.bot_directives/` changed.
-- Keep this file in sync with the repository’s status; update it if the governance changes.
+
+- Mention in summaries whether STATE, `contractiles/`, or `.bot_directives/` changed
+- Keep this file in sync with the repository status
+- Run tests before committing implementation changes

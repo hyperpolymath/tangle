@@ -1,4 +1,4 @@
-# AI Assistant Specification
+# AI Assistant Specification — TANGLE
 
 ## Machine-Readable Artefacts
 
@@ -13,23 +13,38 @@ The `.machine_readable/` directory contains structured metadata required for aut
 
 Additional artefact:
 
-- `AI.djot`: AI Assistant behavioural and operational instructions.
+- `AI.djot`: AI Assistant behavioural and operational instructions (this file).
+
+## Project Context
+
+TANGLE is a Turing-complete topological programming language where:
+- Programs are isotopy classes of tangles (braided strands in 3D space)
+- Computation proceeds via braiding — strand crossings define operations
+- Two type sorts: Word[n] (matchable braid data) and Tangle[A,B] (morphisms)
+- TANGLE-JTV extends with add{} (total arithmetic) and harvard{} (imperative control)
+
+**Specification is COMPLETE.** Implementation phase beginning.
 
 ## Repository Roots
 
-- Local repository root: `/var/mnt/eclipse/repos`
-- Remote mapping: `https://github.com/hyperpolymath/<name>`
-- Repository names are lowercase; dots (`.`) are replaced with hyphens (`-`).
-- If a repository is missing locally, check the remote and synchronize before proceeding.
+- Local repository root: `/var/mnt/eclipse/repos/tangle`
+- Remote: `https://github.com/hyperpolymath/tangle`
+- Mirrors: GitLab (hyperpolymath/tangle)
+
+## Key Specification Files
+
+- `src/tangle.ebnf` — Base TANGLE grammar (ISO/IEC 14977 EBNF)
+- `src/tangle-jtv.ebnf` — Extended grammar with JTV injection blocks
+- `docs/spec/DECISIONS-LOCKED.md` — All 44 locked design decisions
+- `docs/spec/FORMAL-SEMANTICS.md` — 37+ typing rules, 26+ evaluation rules
+- `SONNET-TASKS.md` — 11 implementation tasks, prioritized
 
 ## AI CLI Standards
 
-- Include `ai-cli-crash-capture/` and `contractiles/` from this template in all new repositories.
-- Mirror all 6SCM files into `.machine_readable/6scm/`.
-- Before generating code, inspect `/var/mnt/eclipse/repos/proven` for the current Idris “unbreakable” library status.
-- If the project depends on the unbreakable Idris library, add an *Idris Inside* badge to the repository.
-- When new bindings are required, create them under `/var/mnt/eclipse/repos/proven` using the naming pattern `idris2-zig-<language>`.
-- If new code implies additional unbreakable Idris modules, add them to `/var/mnt/eclipse/repos/proven` and update binders across all supported languages.
+- Include `ai-cli-crash-capture/` and `contractiles/` from template in all work
+- Machine-readable files in `.machine_readable/` ONLY (never root)
+- Before generating implementation code, consult FORMAL-SEMANTICS.md for rules
+- Every typing rule and evaluation rule must have a corresponding test case
 
 ## Language Policy
 
@@ -37,59 +52,20 @@ Additional artefact:
 
 | Language/Tool | Use Case | Notes |
 |---------------|----------|-------|
-| ReScript | Application code | Type-safe, compiles to JS |
-| Deno | Runtime and package management | Replaces Node/npm/bun |
-| Rust | Systems, performance-critical, WASM | Preferred for CLI tools |
-| Tauri 2.0+ | Mobile apps (iOS/Android) | Rust backend + web UI |
-| Dioxus | Mobile apps (native UI) | Pure Rust, React-like |
-| Gleam | Backend services | BEAM or JS targets |
-| Bash/POSIX Shell | Automation scripts | Keep minimal |
-| JavaScript | Only where ReScript cannot | MCP glue, Deno APIs |
-| Nickel | Configuration | Complex config logic |
-| Guile Scheme | Metadata/state files | For all `.scm` artefacts |
-| Julia | Batch/data processing | Per RSR |
-| OCaml | AffineScript compiler | Language-specific |
-| Ada | Safety-critical systems | Where required |
+| Rust | Parser, type checker, evaluator, CLI | Primary implementation |
+| Idris2 | ABI definitions | In src/abi/ |
+| Zig | FFI bridge | In ffi/zig/ |
+| EBNF | Grammar specification | ISO/IEC 14977 |
+| Bash/POSIX Shell | Build scripts | Keep minimal |
 
 ### Banned Languages and Tools
 
 | Banned | Replacement |
 |--------|-------------|
-| TypeScript | ReScript |
-| Node.js | Deno |
-| npm | Deno |
-| Bun | Deno |
-| pnpm/yarn | Deno |
+| TypeScript | Rust |
+| Node.js | Deno (if JS needed) |
 | Go | Rust |
-| Python | Julia / Rust / ReScript |
-| Java/Kotlin | Rust / Tauri / Dioxus |
-| Swift | Tauri / Dioxus |
-| React Native | Tauri / Dioxus |
-| Flutter/Dart | Tauri / Dioxus |
-
-## Mobile Development Policy
-
-A strict Rust-first approach applies.
-
-- Use **Tauri 2.0+** for web UI (ReScript) + Rust backend.
-- Use **Dioxus** for pure Rust native UI.
-
-Both are FOSS with independent governance.
-
-## Enforcement Rules
-
-- Do not create new TypeScript files; convert existing TS to ReScript.
-- Do not use `package.json` for runtime dependencies; use `deno.json` imports.
-- Do not include `node_modules` in production; Deno handles dependency caching.
-- Do not use Go; use Rust.
-- Do not use Python; use Julia (data/batch), Rust (systems), or ReScript (apps).
-- Do not use Kotlin/Swift; use Tauri 2.0+ or Dioxus for mobile.
-
-## Package Management
-
-- Primary: Guix (`guix.scm`)
-- Fallback: Nix (`flake.nix`)
-- JavaScript dependencies: Deno (`deno.json` imports)
+| Python | Rust |
 
 ## Security Requirements
 
@@ -97,4 +73,4 @@ Both are FOSS with independent governance.
 - Use HTTPS only.
 - Do not hardcode secrets.
 - Pin all dependencies by SHA.
-- Include SPDX license headers in all files.
+- Include SPDX license headers in all files (`PMPL-1.0-or-later`).

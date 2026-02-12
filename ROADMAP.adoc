@@ -1,22 +1,78 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= YOUR Template Repo Roadmap
+= TANGLE & TANGLE-JTV Roadmap
 
 == Current Status
 
-Initial development phase.
+Specification phase complete. Implementation phase beginning.
 
 == Milestones
 
-=== v0.1.0 - Foundation
-* [ ] Core functionality
-* [ ] Basic documentation
-* [ ] CI/CD pipeline
+=== v0.1.0 — Specification (COMPLETE)
 
-=== v1.0.0 - Stable Release
-* [ ] Full feature set
-* [ ] Comprehensive tests
-* [ ] Production ready
+* [x] Lock all 21 design questions (DECISIONS-LOCKED.md)
+* [x] Write EBNF grammars (tangle.ebnf, tangle-jtv.ebnf)
+* [x] Write formal typing rules (37+ rules)
+* [x] Write operational semantics (26+ evaluation rules)
+* [x] Define precedence table
+* [x] Cross-verify grammar vs formal semantics
+* [x] Create implementation plan (SONNET-TASKS.md)
+* [x] Update all documentation
 
-== Future Directions
+=== v0.2.0 — Parser
 
-_To be determined based on community feedback._
+* [ ] Lexer with mode switching (TANGLE / HV_DATA / HV_CONTROL)
+* [ ] TANGLE recursive-descent parser
+* [ ] TANGLE-JTV parser extensions (add{}, harvard{})
+* [ ] AST pretty-printer
+* [ ] Parser error recovery with source spans
+* [ ] Parser test suite
+
+=== v0.3.0 — Type Checker
+
+* [ ] TANGLE core type checker (Word[n], Tangle[A,B], Num, Str, Bool)
+* [ ] Width inference (D1.21)
+* [ ] Auto-widening (D1.8.5)
+* [ ] Implicit Word → Tangle coercion (D1.1)
+* [ ] Exhaustiveness warnings (D1.4)
+* [ ] TANGLE-JTV type extensions (three environments: Γ, Δ, Π)
+* [ ] Embed/Unembed type bridges
+* [ ] Purity discipline enforcement (D2.9)
+
+=== v0.4.0 — Evaluator
+
+* [ ] Big-step evaluator (call-by-value)
+* [ ] Pattern matching (first-match, halt on failure)
+* [ ] Reidemeister simplification (R1, R2, R3)
+* [ ] Full twist computation
+* [ ] Closure (trace operation)
+* [ ] Harvard data evaluation (add{})
+* [ ] Harvard control evaluation (harvard{})
+* [ ] Error propagation (halt short-circuits)
+
+=== v0.5.0 — Invariant Backends
+
+* [ ] Jones polynomial (Kauffman bracket)
+* [ ] Alexander polynomial (Fox calculus)
+* [ ] HOMFLY-PT polynomial (skein relation)
+* [ ] Writhe computation
+* [ ] Linking number
+* [ ] Plugin architecture for custom invariants
+
+=== v1.0.0 — MVP Release
+
+* [ ] REPL and CLI tool
+* [ ] Standard library (length, width, components, named knots)
+* [ ] Comprehensive test suite
+* [ ] Documentation site
+* [ ] WASM compilation target
+
+== Future Directions (Post-MVP)
+
+* Richer error handling (exceptions, Result types) — D1.15 future review
+* `assert` vs `prove` split for static verification — D1.15.1 future review
+* Module re-exports (Rust-style `pub use`) — D2.11 future review
+* Polynomial return types for invariants
+* 3D visualization of tangles
+* Quantum topology applications (anyonic braiding)
+* IDE support (syntax highlighting, type hints)
+* Formal proof of type safety (Progress + Preservation)
