@@ -1,0 +1,345 @@
+(* ================================================================= )
+( TANGLE + Julia-the-Viper Injection Blocks )
+( Goal: add two syntactic islands that can be shared across langs: )
+( 1) add{ ... } — Addition Block (Total / data-only grammar) )
+( 2) harvard{ ... } — Harvard Block (Control+Data; interoperable) )
+( )
+( Design principle (effectiveness): )
+( - These blocks are DELIMITED ("add{", "harvard{") so they can be )
+( parsed in a separate mode with zero ambiguity with TANGLE ops. )
+( - add{...} uses the Julia-the-Viper Data grammar (no control flow) )
+( to preserve grammatical non-injectability in data contexts. )
+( ================================================================= *)
+
+(* -------------------- Top-Level Structure -------------------- *)
+
+program = { statement } ;
+
+statement = definition
+| weave_block
+| computation
+| assertion
+| harvard_block ; (* NEW: injected Harvard block *)
+
+(* -------------------- Definitions ---------------------------- *)
+
+definition = "def", identifier,
+[ "(", param_list, ")" ], "=", expr ;
+
+param_list = identifier, { ",", identifier } ;
+
+(* -------------------- Weave Block ---------------------------- *)
+
+weave_block = "weave", input_decl, "into", expr,
+"yield", output_decl ;
+
+input_decl = "strands", strand_list ;
+output_decl = "strands", strand_list ;
+
+strand_list = typed_strand, { ",", typed_strand } ;
+typed_strand = identifier, [ ":", type_id ] ;
+type_id = identifier ;
+
+(* -------------------- Invariant Computation ------------------ *)
+
+computation = "compute", invariant, "(", expr, ")" ;
+
+invariant = "jones" | "alexander" | "homfly"
+| "kauffman" | "writhe" | "linking"
+| identifier ;
+
+(* -------------------- Assertions ----------------------------- *)
+
+assertion = "assert", predicate ;
+
+predicate = predicate_atom,
+{ predicate_join, predicate_atom } ;
+
+predicate_join = "AND" | "OR" ;
+
+predicate_atom = expr, "~", expr
+| expr, "==", expr
+| "NOT", predicate_atom
+| "(", predicate, ")" ;
+
+(* -------------------- Expressions ---------------------------- )
+( Match and let at lowest precedence. )
+( Infix ops in ascending precedence: >>, +, ., | *)
+
+expr = match_expr
+| let_expr
+| pipeline ;
+
+match_expr = "match", expr, "with",
+match_arm, { match_arm },
+"end" ;
+
+match_arm = "|", pattern, "=>", expr ;
+
+let_expr = "let", identifier, "=", expr, "in", expr ;
+
+pipeline = sum, { ">>", sum } ;
+sum = vertical, { "+", vertical } ;
+vertical = horizontal, { ".", horizontal } ;
+horizontal = unary, { "|", unary } ;
+
+(* -------------------- Unary / Prefix Operations -------------- *)
+
+unary = primary
+| "close", "(", expr, ")"
+| "mirror", "(", expr, ")"
+| "reverse", "(", expr, ")"
+| "simplify", "(", expr, ")"
+| "cap", "(", expr, ",", expr, ")"
+| "cup", "(", expr, ",", expr, ")"
+| twist ;
+
+(* -------------------- Primary Terms -------------------------- *)
+
+primary = braid_literal
+| "identity"
+| crossing
+| identifier, [ "(", arg_list, ")" ]
+| literal
+| add_block (* NEW: injected Addition Block *)
+| "(", expr, ")" ;
+
+arg_list = expr, { ",", expr } ;
+
+(* -------------------- Braid Literals ------------------------- *)
+
+braid_literal = "braid", "[", [ generator_seq ], "]" ;
+
+generator_seq = generator, { ",", generator } ;
+
+generator = gen_symbol, [ "^", exponent ] ;
+
+gen_symbol = "s", nat ;
+
+exponent = "-1" | nat ;
+
+(* -------------------- Crossings ------------------------------ *)
+
+crossing = "(", identifier, crossing_op, identifier, ")" ;
+
+crossing_op = ">" | "<" ;
+
+(* -------------------- Twists --------------------------------- *)
+
+twist = "(", "~", identifier, ")" ;
+
+(* -------------------- Patterns ------------------------------- *)
+
+pattern = "identity"
+| gen_pat, ".", pattern
+| identifier
+| "_"
+| "(", pattern, ")" ;
+
+gen_pat = "s", nat, [ "^", exponent ] ;
+
+(* ================================================================= )
+( NEW INJECTION BLOCKS )
+( ================================================================= *)
+
+(* --- Addition Block (Julia-the-Viper Data Language) ---------------- )
+( A delimited island parsed with hv_data_expr grammar only. )
+( This avoids ambiguity with TANGLE '+' (disjoint union). )
+( add{1 + 2 + 3} is arithmetic; outside, '+' is tangle union. *)
+
+add_block = "add", "{", hv_data_expr, "}" ;
+
+(* --- Harvard Block (Julia-the-Viper Harvard Architecture) ---------- )
+( A statement-level island containing an embedded program. )
+( Intended for interoperability: other languages can embed the same )
+( harvard{...} block and share tooling/modules. *)
+
+harvard_block = "harvard", "{", hv_program, "}" ;
+
+(* ================================================================= )
+( Embedded Julia-the-Viper Grammar (prefixed hv_) )
+( ================================================================= *)
+
+hv_program = { hv_module_decl
+| hv_import_stmt
+| hv_function_decl
+| hv_control_stmt
+| hv_comment } ;
+
+hv_module_decl = "module", identifier, "{",
+{ hv_function_decl | hv_control_stmt },
+"}" ;
+
+hv_import_stmt = "import", hv_module_path, [ "as", identifier ] ;
+
+hv_module_path = identifier, { ".", identifier } ;
+
+(* ----- Control language (imperative, Turing-complete) -------------- *)
+
+hv_control_stmt = hv_assignment
+| hv_if_stmt
+| hv_while_stmt
+| hv_for_stmt
+| hv_return_stmt
+| hv_print_stmt
+| hv_reverse_block
+| hv_block ;
+
+hv_assignment = identifier, "=", ( hv_data_expr | hv_control_expr ) ;
+
+hv_if_stmt = "if", hv_data_expr, "{", { hv_control_stmt }, "}",
+[ "else", "{", { hv_control_stmt }, "}" ] ;
+
+hv_while_stmt = "while", hv_data_expr, "{", { hv_control_stmt }, "}" ;
+
+hv_for_stmt = "for", identifier, "in", hv_range_expr,
+"{", { hv_control_stmt }, "}" ;
+
+hv_return_stmt = "return", [ hv_data_expr ] ;
+
+hv_print_stmt = "print", "(", hv_data_expr, { ",", hv_data_expr }, ")" ;
+
+hv_block = "{", { hv_control_stmt }, "}" ;
+
+hv_reverse_block = "reverse", "{", { hv_reversible_stmt }, "}" ;
+
+hv_reversible_stmt = hv_reversible_assignment | hv_if_stmt ;
+
+hv_reversible_assignment
+= identifier, "+", "=", hv_data_expr
+| identifier, "-", "=", hv_data_expr ;
+
+(* ----- Data language (total, addition-only) ------------------------ *)
+
+hv_data_expr = hv_additive_expr ;
+
+hv_additive_expr = hv_term, { "+", hv_term } ;
+
+hv_term = hv_factor ;
+
+hv_factor = hv_number
+| identifier
+| hv_function_call
+| "(", hv_data_expr, ")"
+| hv_list_literal
+| hv_tuple_literal
+| hv_unary_op, hv_factor ;
+
+hv_unary_op = "-" | "!" ;
+
+(* ----- Control expressions ---------------------------------------- *)
+
+hv_control_expr = hv_data_expr
+| hv_comparison_expr
+| hv_logical_expr
+| hv_function_call ;
+
+hv_comparison_expr = hv_data_expr, hv_comparator, hv_data_expr ;
+
+hv_comparator = "==" | "!=" | "<" | "<=" | ">" | ">=" ;
+
+hv_logical_expr = hv_control_expr, hv_logical_op, hv_control_expr
+| "!", hv_control_expr ;
+
+hv_logical_op = "&&" | "||" ;
+
+(* ----- Functions -------------------------------------------------- *)
+
+hv_function_decl = "fn", identifier, "(", [ hv_param_list ], ")",
+[ ":", hv_return_type ],
+[ hv_purity_marker ],
+"{", { hv_control_stmt }, "}" ;
+
+hv_purity_marker = "@pure" | "@total" ;
+
+hv_param_list = hv_param, { ",", hv_param } ;
+
+hv_param = identifier, [ ":", hv_type_annotation ] ;
+
+hv_function_call = identifier, "(", [ hv_arg_list ], ")" ;
+
+hv_arg_list = hv_data_expr, { ",", hv_data_expr } ;
+
+(* ----- Types (embedded) ------------------------------------------ *)
+
+hv_type_annotation = hv_basic_type
+| hv_list_type
+| hv_tuple_type
+| hv_function_type ;
+
+hv_basic_type = "Int" | "Float" | "Rational" | "Complex"
+| "Hex" | "Binary" | "Symbolic" | "Bool" | "String" ;
+
+hv_list_type = "List", "<", hv_type_annotation, ">" ;
+
+hv_tuple_type = "(", hv_type_annotation, { ",", hv_type_annotation }, ")" ;
+
+hv_function_type = "Fn", "(", [ hv_type_annotation, { ",", hv_type_annotation } ], ")",
+"->", hv_type_annotation ;
+
+hv_return_type = hv_type_annotation ;
+
+(* ----- Literals --------------------------------------------------- *)
+
+hv_number = hv_integer | hv_float | hv_rational | hv_complex | hv_hex | hv_binary ;
+
+hv_integer = [ "-" ], digit, { digit } ;
+
+hv_float = [ "-" ], digit, { digit }, ".", digit, { digit }, [ hv_exponent ] ;
+
+hv_exponent = ("e" | "E"), [ "+" | "-" ], digit, { digit } ;
+
+hv_rational = hv_integer, "/", hv_integer ;
+
+hv_complex = hv_number, "+", hv_number, "i"
+| hv_number, "i" ;
+
+hv_hex = "0x", hv_hex_digit, { hv_hex_digit } ;
+
+hv_binary = "0b", ("0" | "1"), { "0" | "1" } ;
+
+hv_list_literal = "[", [ hv_data_expr, { ",", hv_data_expr } ], "]" ;
+
+hv_tuple_literal = "(", hv_data_expr, ",", hv_data_expr, { ",", hv_data_expr }, ")" ;
+
+hv_range_expr = hv_data_expr, "..", hv_data_expr, [ "..", hv_data_expr ] ;
+
+hv_hex_digit = digit | "a" | "b" | "c" | "d" | "e" | "f"
+| "A" | "B" | "C" | "D" | "E" | "F" ;
+
+(* ----- Embedded comments (lexical in practice) -------------------- )
+( In an implementation: treat harvard{...} and add{...} as lexer+parser
+mode switches; hv_comment here is documentary. *)
+
+hv_comment = hv_line_comment | hv_block_comment ;
+
+hv_line_comment = "//", { ? any character except newline ? }, newline ;
+
+hv_block_comment = "/", { ? any character ? }, "/" ;
+
+(* -------------------- TANGLE Terminals -------------------------- *)
+
+literal = number | string ;
+
+identifier = letter, { letter | digit | "_" } ;
+
+number = nat, [ ".", nat ] ;
+
+nat = nonzero_digit, { digit }
+| "0" ;
+
+string = '"', { character }, '"' ;
+
+letter = ? ASCII letter A-Z or a-z ? ;
+
+digit = "0" | "1" | "2" | "3" | "4"
+| "5" | "6" | "7" | "8" | "9" ;
+
+nonzero_digit = "1" | "2" | "3" | "4"
+| "5" | "6" | "7" | "8" | "9" ;
+
+character = ? any printable character except unescaped double-quote ? ;
+
+(* Comments are lexical, not grammatical (TANGLE-level):
+Line: # ... end-of-line
+Block: (* ... *) (nestable) *)
