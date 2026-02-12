@@ -1,0 +1,195 @@
+(* ================================================================ )
+( TANGLE — A Turing-Complete Topological Programming Language )
+( ISO/IEC 14977 EBNF )
+( )
+( Computation is braiding. Data flows along strands. )
+( Strands interact only at crossings. )
+( Programs are isotopy classes of tangles. )
+( )
+( NEW: Recursive definitions, pattern matching, and let-binding )
+( make the language Turing complete. Braid words double as )
+( algebraic data: their sequential structure supports )
+( cons/nil pattern matching identical to list recursion. )
+( ================================================================ *)
+
+(* -------------------- Top-Level Structure -------------------- *)
+
+program = { statement } ;
+
+statement = definition
+| weave_block
+| computation
+| assertion ;
+
+(* -------------------- Definitions ---------------------------- )
+( Bodies may reference the name being defined (recursion). *)
+
+definition = "def", identifier,
+[ "(", param_list, ")" ], "=", expr ;
+
+param_list = identifier, { ",", identifier } ;
+
+(* -------------------- Weave Block ---------------------------- *)
+
+weave_block = "weave", input_decl, "into", expr,
+"yield", output_decl ;
+
+input_decl = "strands", strand_list ;
+
+output_decl = "strands", strand_list ;
+
+strand_list = typed_strand, { ",", typed_strand } ;
+
+typed_strand = identifier, [ ":", type_id ] ;
+
+type_id = identifier ;
+
+(* -------------------- Invariant Computation ------------------ *)
+
+computation = "compute", invariant, "(", expr, ")" ;
+
+invariant = "jones" | "alexander" | "homfly"
+| "kauffman" | "writhe" | "linking"
+| identifier ;
+
+(* -------------------- Assertions ----------------------------- *)
+
+assertion = "assert", predicate ;
+
+predicate = predicate_atom,
+{ predicate_join, predicate_atom } ;
+
+predicate_join = "AND" | "OR" ;
+
+predicate_atom = expr, "~", expr
+| expr, "==", expr
+| "NOT", predicate_atom
+| "(", predicate, ")" ;
+
+(* -------------------- Expressions ---------------------------- )
+( Match and let sit at the lowest precedence. )
+( Composition operators in ascending precedence: )
+( >> pipeline (feed outputs into inputs) )
+( + connect sum (join two knots/tangles) )
+( . vertical stack (compose top-to-bottom / cons) )
+( | horizontal lay (place side by side) *)
+
+expr = match_expr
+| let_expr
+| pipeline ;
+
+(* ---- NEW: Pattern Matching ---------------------------------- )
+( Structural match on braid-word form, NOT isotopy class. )
+( This is the sole branching mechanism in the language. *)
+
+match_expr = "match", expr, "with",
+match_arm, { match_arm },
+"end" ;
+
+match_arm = "|", pattern, "=>", expr ;
+
+(* ---- NEW: Local Binding ------------------------------------- *)
+
+let_expr = "let", identifier, "=", expr, "in", expr ;
+
+(* ---- Pipeline through Horizontal ---------------------------- *)
+
+pipeline = sum, { ">>", sum } ;
+
+sum = vertical, { "+", vertical } ;
+
+vertical = horizontal, { ".", horizontal } ;
+
+horizontal = unary, { "|", unary } ;
+
+(* -------------------- Unary / Prefix Operations -------------- *)
+
+unary = primary
+| "close", "(", expr, ")"
+| "mirror", "(", expr, ")"
+| "reverse", "(", expr, ")"
+| "simplify", "(", expr, ")"
+| "cap", "(", expr, ",", expr, ")"
+| "cup", "(", expr, ",", expr, ")"
+| twist ;
+
+(* -------------------- Primary Terms -------------------------- *)
+
+primary = braid_literal
+| "identity"
+| crossing
+| identifier, [ "(", arg_list, ")" ]
+| literal
+| "(", expr, ")" ;
+
+arg_list = expr, { ",", expr } ;
+
+(* -------------------- Braid Literals ------------------------- )
+( braid[] is the empty word (identity element). )
+( braid[s1, s2^-1, s1] is sigma_1 sigma_2^-1 sigma_1. *)
+
+braid_literal = "braid", "[", [ generator_seq ], "]" ;
+
+generator_seq = generator, { ",", generator } ;
+
+generator = gen_symbol, [ "^", exponent ] ;
+
+gen_symbol = "s", nat ;
+
+exponent = "-1" | nat ;
+
+(* -------------------- Crossings ------------------------------ )
+( The sole interaction between named strands. *)
+
+crossing = "(", identifier, crossing_op, identifier, ")" ;
+
+crossing_op = ">" | "<" ;
+
+(* -------------------- Twists --------------------------------- *)
+
+twist = "(", "~", identifier, ")" ;
+
+(* -------------------- Patterns ------------------------------- )
+( Structural patterns over braid words. )
+( )
+( identity empty braid word (zero / nil) )
+( s1 . rest cons: generator sigma_1, then rest )
+( s2^-1 . rest cons: generator sigma_2 inverse )
+( x variable (binds matched sub-tangle) )
+( _ wildcard (matches anything, no binding) *)
+
+pattern = "identity"
+| gen_pat, ".", pattern
+| identifier
+| "_"
+| "(", pattern, ")" ;
+
+gen_pat = "s", nat, [ "^", exponent ] ;
+
+(* -------------------- Terminals ------------------------------ *)
+
+literal = number | string ;
+
+identifier = letter, { letter | digit | "_" } ;
+
+number = nat, [ ".", nat ] ;
+
+nat = nonzero_digit, { digit }
+| "0" ;
+
+string = '"', { character }, '"' ;
+
+letter = ? ASCII letter A-Z or a-z ? ;
+
+digit = "0" | "1" | "2" | "3" | "4"
+| "5" | "6" | "7" | "8" | "9" ;
+
+nonzero_digit = "1" | "2" | "3" | "4"
+| "5" | "6" | "7" | "8" | "9" ;
+
+character = ? any printable character except
+unescaped double-quote ? ;
+
+(* Comments are lexical, not grammatical: )
+( Line: # through end of line )
+( Block: these delimiters, nestable *)
