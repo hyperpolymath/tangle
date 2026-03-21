@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Conformance: compute jones polynomial
+
+def trefoil = braid[s1, s1, s1]
+compute jones(trefoil)

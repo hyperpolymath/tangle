@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Conformance: let binding with 'in' clause
+
+def f(y) =
+  let x = braid[s1] in
+  let z = x . y in
+  z

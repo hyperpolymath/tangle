@@ -1,0 +1,213 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= TANGLE-JTV: Julia-the-Viper Injection Blocks
+:toc:
+:source-highlighter: highlight.js
+:sectnums:
+
+== Introduction
+
+Computation is braiding. Data flows along strands. But sometimes, you need arithmetic.
+
+TANGLE reimagines programming as topology: programs are tangles, evaluation is isotopy, and equivalence is geometric. Yet pure topological computation lacks familiar data manipulation.
+
+Enter *Julia-the-Viper Injection Blocks* — two syntactically isolated islands embedded within TANGLE to bridge geometry with practicality:
+
+* `add{ ... }`: A total, pure, data-only arithmetic island using the Julia-the-Viper Data Grammar
+* `harvard{ ... }`: A full Harvard Architecture block supporting control + data, enabling imperative logic alongside braids
+
+These blocks are delimited, unambiguous, and interoperable — they can be parsed independently from TANGLE's core syntax, making them ideal for shared tooling across languages.
+
+== Design Principles
+
+* *Delimited Syntax*: `add{...}` and `harvard{...}` cannot conflict with TANGLE operators like `+`, `.`, or `|`
+* *Semantic Separation*: `+` in TANGLE = connect sum (tangle union); `+` in `add{...}` = arithmetic addition
+* *Injectability Control*: Only safe, total expressions allowed in `add{...}` (D2.1)
+* *Interoperability*: The same `harvard{...}` block can run in TANGLE, Viper, or future host languages
+* *Three Environments*: Γ (TANGLE), Δ (Harvard full), Π ⊆ Δ (pure/total subset) (D2.2)
+
+== Syntactic Islands
+
+=== Addition Block: `add{ ... }`
+
+A lightweight expression island for arithmetic and data construction.
+
+[source]
+----
+velocity = add{ speed_limit + buffer }
+area = add{ width * height }
+offset = add{ -(x + y) / 2 }
+check = add{ if x > 0 then x else -x }
+flag = add{ a && (b || !c) }
+----
+
+Features:
+
+* Parses using `hv_data_expr` grammar (full operator hierarchy)
+* Operators: arithmetic (`+`, `-`, `*`, `/`, `%`), comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`), logical (`&&`, `||`, `!`), conditional (`if/then/else`)
+* Supports: integers, floats, rationals, complex numbers, strings, booleans, lists, tuples
+* *No side effects, no control flow, no loops* — guaranteed terminating (D2.1)
+* Variables resolve in Π (pure functions only)
+* Result type: Embed(hτ) → TANGLE type (Num, Str, Bool) (D2.4)
+
+=== Harvard Block: `harvard{ ... }`
+
+A full imperative module embedded at the statement level.
+
+[source]
+----
+harvard{
+  fn factorial(n: Int): Int @pure {
+    if n == 0 {
+      return 1
+    } else {
+      return n * factorial(n - 1)
+    }
+  }
+}
+
+# Now use it in add{} blocks:
+assert add{ factorial(5) } == 120
+----
+
+[source]
+----
+harvard{
+  module Physics {
+    fn kinetic_energy(mass: Float, velocity: Float): Float @pure {
+      return 0.5 * mass * velocity * velocity
+    }
+  }
+
+  import Physics as P
+}
+----
+
+Features:
+
+* Full function definitions (`fn`) with type annotations
+* Purity markers: `@pure` (no side effects), `@total` (always terminates)
+* Control flow: `if`, `while`, `for`, `return`
+* Variable assignment and mutation
+* Module system and imports (private, D2.11)
+* Reversible computing blocks (`reverse { ... }`)
+* Type system: `Int`, `Float`, `Rational`, `Bool`, `String`, `Complex`, `Hex`, `Binary`, `List<T>`, `(T1, T2)`, `Fn(T1) -> R`
+
+== Three-World Architecture (D2.2)
+
+[cols="1,2,2,1"]
+|===
+| World | Environment | Accessible from | Turing-complete?
+
+| TANGLE
+| Γ (definitions, weaves)
+| TANGLE expressions
+| Yes (recursion + matching)
+
+| Harvard DATA
+| Π (pure/total functions)
+| `add{...}` blocks
+| No (total, terminating)
+
+| Harvard CONTROL
+| Δ (all Harvard definitions)
+| `harvard{...}` blocks
+| Yes (loops, recursion)
+|===
+
+== Embed and Unembed (D2.4, D2.10)
+
+Values cross world boundaries through type bridges:
+
+*Embed* (Harvard → TANGLE): `add{1 + 2}` returns `Num(3)` in TANGLE context.
+[cols="1,1"]
+|===
+| Harvard Type | TANGLE Type
+
+| Int, Float, Rational, Hex, Binary | Num
+| Bool | Bool
+| String, Symbolic | Str
+|===
+
+*Unembed* (TANGLE → Harvard): TANGLE scalars pass into Harvard functions.
+[cols="1,1"]
+|===
+| TANGLE Type | Harvard Type
+
+| Num | Int or Float
+| Str | String
+| Bool | Bool
+| Word[n], Tangle[A,B] | ERROR (braids cannot cross into Harvard)
+|===
+
+== Purity Discipline (D2.9)
+
+Harvard functions marked `@pure` or `@total` can call TANGLE functions, but only non-recursive ones (syntactic check via transitive call graph analysis). This preserves termination guarantees.
+
+[source]
+----
+harvard{
+  fn safe_call(): Int @pure {
+    # Can call non-recursive TANGLE functions
+    return tangle_helper(42)
+  }
+
+  fn unsafe_call(): Int {
+    # Can call recursive TANGLE functions (no purity marker)
+    return tangle_recursive_fn(100)
+  }
+}
+----
+
+== Grammar Summary
+
+The full grammar is in `src/tangle-jtv.ebnf`. Key productions:
+
+[source,ebnf]
+----
+add_block = "add", "{", hv_data_expr, "}" ;
+harvard_block = "harvard", "{", hv_program, "}" ;
+
+hv_data_expr = hv_conditional | hv_logical_or ;
+hv_conditional = "if", hv_data_expr, "then", hv_data_expr, "else", hv_data_expr ;
+hv_logical_or = hv_logical_and, { "||", hv_logical_and } ;
+hv_logical_and = hv_comparison, { "&&", hv_comparison } ;
+hv_comparison = hv_additive, [ hv_comparator, hv_additive ] ;
+hv_additive = hv_multiplicative, { ( "+" | "-" ), hv_multiplicative } ;
+hv_multiplicative = hv_unary, { ( "*" | "/" | "%" ), hv_unary } ;
+----
+
+== Implementation Status
+
+[cols="3,1"]
+|===
+| Feature | Status
+
+| EBNF grammar (tangle-jtv.ebnf) | Complete
+| Formal typing rules (FORMAL-SEMANTICS.md §9) | Complete
+| Operational semantics (FORMAL-SEMANTICS.md §10) | Complete
+| Design decisions locked (D2.1-D2.11) | Complete
+| Lexer with mode switching | Not started
+| Parser | Not started
+| Type checker (three environments) | Not started
+| Evaluator (embed/unembed) | Not started
+|===
+
+See `SONNET-TASKS.md` for detailed implementation plan.
+
+== License
+
+PMPL-1.0-or-later — see `LICENSE`.
+
+== Author
+
+Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+
+== Acknowledgments
+
+Inspired by:
+
+* Julia — for dynamic expressiveness
+* The Viper verification language — for strict domain separation
+* John Conway — for thinking in knots
+* Grace Hopper — for bridging worlds
+* The lambda calculus — for enduring elegance

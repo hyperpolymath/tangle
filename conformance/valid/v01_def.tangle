@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Conformance: basic definition
+
+def trefoil = braid[s1, s1, s1]

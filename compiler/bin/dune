@@ -1,0 +1,5 @@
+; SPDX-License-Identifier: PMPL-1.0-or-later
+
+(executable
+ (name main)
+ (libraries tangle))

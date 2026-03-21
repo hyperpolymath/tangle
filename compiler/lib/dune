@@ -1,0 +1,11 @@
+; SPDX-License-Identifier: PMPL-1.0-or-later
+
+(library
+ (name tangle)
+ (libraries str))
+
+(ocamllex lexer)
+
+(menhir
+ (modules parser)
+ (flags --explain))

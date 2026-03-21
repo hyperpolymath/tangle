@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Conformance: assertion (runtime check)
+
+def trefoil = braid[s1, s1, s1]
+assert trefoil ~ trefoil
+assert braid[s1] == braid[s1]

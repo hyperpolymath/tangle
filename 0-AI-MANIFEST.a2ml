@@ -1,0 +1,140 @@
+# STOP - CRITICAL READING REQUIRED
+
+**THIS FILE MUST BE READ FIRST BY ALL AI AGENTS**
+
+## WHAT IS THIS?
+
+This is the AI manifest for **tangle**. It declares:
+- Canonical file locations (where things MUST be, and nowhere else)
+- Critical invariants (rules that must NEVER be violated)
+- Repository structure and organization
+
+## PROJECT OVERVIEW
+
+TANGLE is a Turing-complete topological programming language where programs are
+isotopy classes of tangles. TANGLE-JTV extends it with Julia-the-Viper injection
+blocks (add{} for total arithmetic, harvard{} for imperative control).
+
+**Current phase**: Specification complete, implementation beginning.
+
+## CANONICAL LOCATIONS (UNIVERSAL RULE)
+
+### Machine-Readable Metadata: `.machine_readable/` ONLY
+
+These 6 SCM files MUST exist in `.machine_readable/` directory ONLY:
+1. **STATE.scm** - Project state, progress, blockers
+2. **META.scm** - Architecture decisions, governance
+3. **ECOSYSTEM.scm** - Position in ecosystem, relationships
+4. **AGENTIC.scm** - AI agent interaction patterns
+5. **NEUROSYM.scm** - Neurosymbolic integration config
+6. **PLAYBOOK.scm** - Operational runbook
+
+**CRITICAL:** If ANY of these files exist in the root directory, this is an ERROR.
+
+### Source Files
+
+- `src/tangle.ebnf` - Base TANGLE grammar (ISO/IEC 14977 EBNF)
+- `src/tangle-jtv.ebnf` - TANGLE-JTV extended grammar
+- `src/abi/` - Idris2 ABI definitions
+
+### Specification Documents
+
+- `docs/spec/DECISIONS-LOCKED.md` - ALL 44 locked design decisions (DO NOT MODIFY)
+- `docs/spec/FORMAL-SEMANTICS.md` - Typing rules and operational semantics
+- `docs/spec/UNANSWERED-QUESTIONS.md` - All 21 questions resolved
+- `docs/spec/FEATURE-COVERAGE.md` - Feature → decision mapping
+
+### Implementation Plan
+
+- `SONNET-TASKS.md` - Detailed implementation tasks (11 tasks, prioritized)
+
+### Bot Directives: `.bot_directives/` ONLY
+
+Bot-specific instructions for rhodibot, echidnabot, sustainabot, glambot, seambot, finishbot.
+
+### Agent Instructions
+
+- `.claude/CLAUDE.md` - Claude-specific patterns (if exists)
+- `0-AI-MANIFEST.a2ml` - THIS FILE (universal entry point)
+
+## CORE INVARIANTS
+
+1. **No SCM duplication** - Root must NOT contain STATE.scm, META.scm, etc.
+2. **Single source of truth** - `.machine_readable/` is authoritative
+3. **Specification is LOCKED** - Do NOT modify DECISIONS-LOCKED.md without explicit permission
+4. **Word[n] != Tangle[A,B]** - These are different types with implicit coercion (D1.1)
+5. **~ means isotopy** - Mathematical equality in FR(T), NOT AST comparison (D1.2)
+6. **add{} is TOTAL** - No loops, no recursion, no side effects (D2.1)
+7. **License consistency** - All code PMPL-1.0-or-later
+8. **Author attribution** - Always "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
+
+## REPOSITORY STRUCTURE
+
+```
+tangle/
+├── 0-AI-MANIFEST.a2ml         # THIS FILE (start here)
+├── README.adoc                # Base TANGLE overview
+├── README-jtv.adoc            # TANGLE-JTV extension overview
+├── SONNET-TASKS.md            # Implementation plan
+├── ROADMAP.adoc               # Project roadmap
+├── src/
+│   ├── tangle.ebnf            # Base grammar
+│   ├── tangle-jtv.ebnf        # Extended grammar
+│   └── abi/                   # Idris2 ABI definitions
+├── ffi/zig/                   # Zig FFI bridge
+├── docs/spec/                 # Formal specification
+│   ├── DECISIONS-LOCKED.md
+│   ├── FORMAL-SEMANTICS.md
+│   ├── UNANSWERED-QUESTIONS.md
+│   └── FEATURE-COVERAGE.md
+├── .machine_readable/         # SCM files (6 files)
+├── .bot_directives/           # Bot instructions
+├── .github/workflows/         # 17 CI/CD workflows
+└── contractiles/              # Contractile system
+```
+
+## SESSION STARTUP CHECKLIST
+
+- Read THIS file (0-AI-MANIFEST.a2ml) first
+- Read SONNET-TASKS.md for implementation plan
+- Read `.machine_readable/STATE.scm` for current status
+- Read `docs/spec/DECISIONS-LOCKED.md` for all design decisions
+- Read `docs/spec/FORMAL-SEMANTICS.md` for typing and evaluation rules
+- Read `src/tangle.ebnf` and `src/tangle-jtv.ebnf` for grammar
+
+## LIFECYCLE HOOKS
+
+### on-enter (Session Start)
+
+1. Read and acknowledge this manifest
+2. Read STATE.scm for current position
+3. Read SONNET-TASKS.md for next implementation task
+4. State understanding of type system (Word[n] vs Tangle[A,B])
+
+### on-exit (Session End)
+
+1. Update STATE.scm if changes made
+2. Document new blockers
+3. Summarize implementation progress
+
+## META
+
+- **Format Version:** 1.0.0
+- **Created:** 2026-02-12
+- **Maintained By:** Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+- **License:** PMPL-1.0-or-later
+- **Protocol:** https://github.com/hyperpolymath/0-ai-gatekeeper-protocol
+
+## Taxonomy Index
+
+- `spec/grammar.ebnf` — @taxonomy: spec/grammar
+- `spec/README.adoc` — @taxonomy: spec/index
+- `verification/README.adoc` — @taxonomy: verification/index
+- `compiler/lib/lexer.mll` — @taxonomy: compiler/lexer
+- `compiler/lib/parser.mly` — @taxonomy: compiler/parser
+- `editors/tangle.tmLanguage.json` — @taxonomy: editors/textmate-grammar
+
+### New RSR Standard Directories
+
+- `spec/` — Canonical specification files
+- `verification/` — Unified verification gateway (symlinks to proofs, tests, conformance, benchmarks, fuzzing)

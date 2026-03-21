@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Conformance: braid literal constructing Word[n]
+
+def w2 = braid[s1]
+def w3 = braid[s1, s2]
+def w4 = braid[s1, s2, s3]
+def empty = braid[]

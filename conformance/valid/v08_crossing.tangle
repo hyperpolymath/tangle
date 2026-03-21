@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Conformance: crossing operators (over and under)
+
+def over_crossing =
+  weave strands a:Q, b:Q into
+    (a > b)
+  yield strands b:Q, a:Q
+
+def under_crossing =
+  weave strands a:Q, b:Q into
+    (a < b)
+  yield strands b:Q, a:Q

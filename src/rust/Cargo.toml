@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# tanglec — TANGLE language compiler
+
+[package]
+name = "tanglec"
+version = "0.1.0"
+edition = "2024"
+authors = ["Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"]
+description = "Compiler for TANGLE, a Turing-complete topological programming language"
+license = "LicenseRef-PMPL-1.0-or-later"
+repository = "https://github.com/hyperpolymath/tangle"
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+
+[features]
+default = []
+serde = ["dep:serde"]
+
+[dev-dependencies]

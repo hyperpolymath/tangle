@@ -1,0 +1,294 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= TANGLE: A Turing-Complete Topological Programming Language
+:toc:
+:source-highlighter: highlight.js
+:sectnums:
+
+== Introduction
+
+Computation is braiding. Data flows along strands. Strands interact only at crossings.
+
+TANGLE is an experimental, Turing-complete, topologically inspired programming language where programs are represented as tangles — isotopy classes of braided strands in 3D space. Instead of traditional control flow, computation proceeds via the braiding of data-carrying strands, with interactions occurring strictly at crossings.
+
+Unlike conventional functional or imperative models, TANGLE treats code as physical structures: knots, links, and braids. The language leverages deep connections between topology, algebra, and computation, enabling novel reasoning about program equivalence through knot invariants like the Jones polynomial.
+
+Despite its geometric foundation, TANGLE supports full recursion, pattern matching, and local binding — making it surprisingly expressive and computationally universal.
+
+This project explores the frontier of spatial computing, where syntax mirrors structure, and evaluation reflects deformation.
+
+== Key Features
+
+* *Topological Semantics*: Programs are tangles; equivalence is isotopy
+* *Braiding as Computation*: Strand crossings define operations
+* *Knot Invariant Evaluation*: Compute Jones, Alexander, HOMFLY, Kauffman polynomials
+* *Recursive Definitions & Pattern Matching*: Enables general recursion → Turing completeness
+* *Algebraic Data via Braid Words*: Braid sequences act like cons-lists over generators
+* *Let Binding & Local Scope*
+* *Weave Blocks*: Define transformations on named strand configurations
+* *Two Type Sorts*: `Word[n]` (matchable data) and `Tangle[A,B]` (morphisms) with implicit coercion
+
+== Type System
+
+TANGLE has a two-level type system (see `docs/spec/FORMAL-SEMANTICS.md`):
+
+[cols="1,3"]
+|===
+| Type | Description
+
+| `Word[n]`
+| Braid word on n strands. Intensional (matchable via patterns). Auto-widens.
+
+| `Tangle[A, B]`
+| Tangle morphism from boundary A to boundary B. Extensional (isotopy equivalence).
+
+| `Num`
+| Numbers (integers and floats)
+
+| `Str`
+| Strings
+
+| `Bool`
+| Booleans (`true` / `false`)
+|===
+
+Words implicitly coerce to Tangles when needed (D1.1). `identity` has type `Word[0]` (D1.14).
+
+== Operator Precedence (Lowest to Highest)
+
+[cols="1,2,1,2"]
+|===
+| Precedence | Operator | Associativity | Meaning
+
+| 1 (lowest)
+| `>>`
+| left
+| Pipeline (sugar for `.`)
+
+| 2
+| `==` `~`
+| none
+| Structural equality / Isotopy equivalence
+
+| 3
+| `+` `-`
+| left
+| Connect sum (tangles) or arithmetic; subtraction
+
+| 4
+| `*` `/`
+| left
+| Multiplication / division (Num only)
+
+| 5
+| `.`
+| left
+| Vertical composition / word cons
+
+| 6 (highest)
+| `\|`
+| left
+| Horizontal tensor (side by side)
+|===
+
+Unary prefix operators: `~e` (twist), `-e` (negation).
+
+== Syntax Overview
+
+The full grammar is specified in ISO/IEC 14977 EBNF format in `src/tangle.ebnf`.
+
+[source]
+----
+program = { statement } ;
+statement = definition | weave_block | computation | assertion ;
+
+definition = "def", identifier, [ "(", param_list, ")" ], "=", expr ;
+weave_block = "weave", input_decl, "into", expr, "yield", output_decl ;
+computation = "compute", invariant, "(", expr, ")" ;
+assertion = "assert", expr ;
+expr = match_expr | let_expr | pipeline ;
+----
+
+=== Primary Constructs
+
+==== Braid Literals
+
+Represent braid group elements directly:
+
+[source]
+----
+braid[s1, s2^-1, s1]   # σ₁σ₂⁻¹σ₁ — a trefoil precursor
+braid[]                 # identity braid (Word[0])
+----
+
+==== Crossings
+
+Explicit interaction between named strands (in weave context):
+
+[source]
+----
+(a > b)  # a crosses over b (positive crossing)
+(b < a)  # b crosses under a (negative crossing)
+----
+
+==== Twists
+
+Apply framing or self-writhe (D1.18, context-dependent):
+
+[source]
+----
+(~x)       # In weave: twist on strand x
+(~expr)    # Standalone: compose with full twist Δ²
+----
+
+==== Unary Operations
+
+[cols="1,3"]
+|===
+| Operation | Effect
+
+| `close(e)` | Close braid/tangle into a link (no permutation check, D1.17)
+| `mirror(e)` | Reflect spatial orientation (invert all generators)
+| `reverse(e)` | Reverse temporal direction (reverse and invert word)
+| `simplify(e)` | Apply Reidemeister moves to canonical form
+| `cap(e, f)` | Attach cap (∩-shaped connection)
+| `cup(e, f)` | Attach cup (∪-shaped connection)
+|===
+
+== Example Programs
+
+=== Identity Twist (Trivial Knot)
+
+[source]
+----
+weave strands a into identity yield strands a
+----
+
+=== Simple Crossing → Hopf Link
+
+[source]
+----
+weave strands a, b into (a > b) yield strands b, a
+----
+
+=== Recursive Length on Braid Words
+
+Using braid words as recursive data (cons-like via `.`):
+
+[source]
+----
+def length(w) = match w with
+  | identity => 0
+  | s1 . rest => 1 + length(rest)
+end
+----
+
+=== Pattern Matching on Braid Structure
+
+Match the internal form of a braid word (structural, NOT up to isotopy):
+
+[source]
+----
+match my_braid with
+| identity          => "empty"
+| s1 . rest         => "starts with sigma_1"
+| s2^-1 . s1 . tail => "specific pattern"
+| x                 => "something else"
+end
+----
+
+=== Compute Knot Invariants
+
+[source]
+----
+compute jones( close( braid[s1, s1, s1] ) )
+compute writhe( close( braid[s1, s2^-1] ) )
+----
+
+=== Assertions
+
+Verify equality under isotopy or exact match:
+
+[source]
+----
+assert close(braid[s1, s1, s1]) ~ close(braid[s2, s2, s2])
+assert braid[s1] == braid[s1]
+----
+
+== Execution Model
+
+Programs evaluate by simulating tangle evolution:
+
+1. Parse into abstract syntax tree (AST)
+2. Two-pass type checking: collect definitions, then check all statements (D1.13)
+3. Call-by-value evaluation (D1.13.5)
+4. Pattern matching on braid word structure (structural, not isotopic)
+5. Reidemeister simplification on demand
+6. Invariant computation via pluggable backends (D1.12)
+7. Halts on assertion failure or match exhaustion (D1.15)
+
+== Why Turing Complete?
+
+Although based on finite braid groups, TANGLE achieves Turing completeness through (D1.24):
+
+* Recursive function definitions (D1.3)
+* Pattern matching on braid-word structure (identity = nil, g.w = cons)
+* Unbounded recursion depth
+
+Braid words serve as inductively defined data, enabling encoding of Peano arithmetic, μ-recursive functions, and register machines — all via braiding logic.
+
+== Mathematical Foundation
+
+TANGLE implements computation in the *free strict ribbon category FR(T)*:
+
+* Objects = ordered lists of strand types (boundaries)
+* Morphisms = isotopy classes of tangles
+* Composition = vertical stacking (`.`)
+* Tensor product = horizontal juxtaposition (`|`)
+* Braiding = crossings (`>`, `<`)
+* Twist = framing (θ_A)
+* Duality = cap/cup (evaluation/coevaluation)
+
+Alexander's theorem guarantees every link is the closure of some braid.
+
+== Specification
+
+All design decisions are locked in `docs/spec/DECISIONS-LOCKED.md` (44 decisions).
+Formal typing rules and operational semantics in `docs/spec/FORMAL-SEMANTICS.md`.
+Implementation tasks in `SONNET-TASKS.md`.
+
+== Getting Started
+
+[source,bash]
+----
+git clone https://github.com/hyperpolymath/tangle.git
+cd tangle
+# Implementation in progress — see SONNET-TASKS.md for build instructions
+----
+
+== License
+
+PMPL-1.0-or-later — see `LICENSE`.
+
+== Contributing
+
+Contributions welcome. See `CONTRIBUTING.md`. Especially interested in:
+
+* Implementing invariant calculators (Jones, Alexander, HOMFLY)
+* Visualization tools (3D rendering of tangles)
+* Type system extensions
+* Reidemeister simplification optimizations
+* Parser and evaluator implementation
+
+== Author
+
+Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+
+== Acknowledgments
+
+Inspired by:
+
+* Vaughan Jones (Jones Polynomial)
+* Joan Birman (Braid Groups)
+* Louis Kauffman (Diagrammatic Reasoning)
+* Philip Wadler (Functional Programming and Category Theory)
+* Shigeo Kobayashi & Katsumi Nomizu (Differential Geometry)

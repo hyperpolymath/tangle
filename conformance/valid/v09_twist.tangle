@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Conformance: twist operator
+
+def twisted =
+  weave strands a:Q into
+    (~a)
+  yield strands a:Q

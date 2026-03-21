@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Conformance: pattern matching on Word
+
+def length(w) = match w with
+  | identity => 0
+  | s1 . rest => 1 + length(rest)
+  | _ => 0
+end

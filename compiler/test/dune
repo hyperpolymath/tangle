@@ -1,0 +1,5 @@
+; SPDX-License-Identifier: PMPL-1.0-or-later
+
+(tests
+ (names test_parser test_typecheck test_eval)
+ (libraries tangle))

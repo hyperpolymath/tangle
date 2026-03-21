@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Conformance: weave block with typed strands
+
+def simple_crossing =
+  weave strands a:Q, b:Q into
+    (a > b)
+  yield strands b:Q, a:Q

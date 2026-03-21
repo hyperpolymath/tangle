@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Conformance (INVALID): match without 'end'
+
+def broken(w) = match w with
+  | identity => 0
+  | s1 . rest => 1
+
