@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# stdlib.tangle — TANGLE Standard Library (Tier 3)
+#
+# Pure TANGLE definitions shipped with the language (D1.16, D1.23).
+# All functions are defined via pattern matching + recursion.
+# These serve as both utility functions and idiomatic examples.
+
+# --- Word Analysis ---
+
+# length : Word[n] -> Num
+# Count the number of generators in a braid word.
+def length(w) = match w with
+  | identity => 0
+  | s1 . rest => 1 + length(rest)
+  | s2 . rest => 1 + length(rest)
+  | s3 . rest => 1 + length(rest)
+  | _ => 0
+end
+
+# --- Named Knots and Links ---
+
+# The simplest non-trivial knot (D1.24 example).
+def trefoil = braid[s1, s1, s1]
+
+# The figure-eight knot (alternating, amphichiral).
+def figure_eight = braid[s1, s2^-1, s1, s2^-1]
+
+# The Hopf link (simplest non-trivial link).
+def hopf_link = braid[s1, s1]
+
+# The unknot (trivially, the identity braid).
+def unknot = identity
+
+# --- Assertions verifying the standard library ---
+
+assert length(trefoil) == 3
+assert length(unknot) == 0
+assert length(hopf_link) == 2
+
+assert simplify(braid[s1, s1^-1]) == identity
+assert trefoil == braid[s1, s1, s1]
+assert mirror(trefoil) == braid[s1^-1, s1^-1, s1^-1]
+
+compute writhe(trefoil)
+compute writhe(figure_eight)

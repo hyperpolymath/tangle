@@ -155,6 +155,15 @@ pub enum ExprKind {
         body: Expr,
     },
 
+    // --- Weave as expression ---
+    /// `weave strands S_in into e yield strands S_out`
+    /// When used as an expression (e.g., in a def body), evaluates to a Tangle.
+    WeaveExpr {
+        input_strands: Vec<TypedStrand>,
+        body: Expr,
+        output_strands: Vec<TypedStrand>,
+    },
+
     // --- JTV injection ---
     /// `add{ hv_data_expr }` — embedded total arithmetic
     AddBlock {

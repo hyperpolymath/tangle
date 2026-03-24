@@ -332,13 +332,38 @@ impl Parser {
 
     // ---- Expression parsing (precedence climbing) ----
 
-    /// Top-level expression: match, let, or pipeline.
+    /// Top-level expression: match, let, weave (as expression), or pipeline.
     fn parse_expr(&mut self) -> Result<Expr> {
         match self.peek() {
             TokenKind::Match => self.parse_match(),
             TokenKind::Let => self.parse_let(),
+            TokenKind::Weave => self.parse_weave_expr(),
             _ => self.parse_pipeline(),
         }
+    }
+
+    /// Parse a weave block as an expression (D1.9).
+    /// `weave strands S_in into expr yield strands S_out`
+    /// This allows weave blocks in def bodies: `def x = weave ... yield ...`
+    fn parse_weave_expr(&mut self) -> Result<Expr> {
+        let span = self.span();
+        self.expect(&TokenKind::Weave)?;
+        self.expect(&TokenKind::Strands)?;
+        let input_strands = self.parse_strand_list()?;
+        self.expect(&TokenKind::Into)?;
+        let body = self.parse_expr()?;
+        self.expect(&TokenKind::Yield)?;
+        self.expect(&TokenKind::Strands)?;
+        let output_strands = self.parse_strand_list()?;
+
+        Ok(Expr::new(
+            ExprKind::WeaveExpr {
+                input_strands,
+                body,
+                output_strands,
+            },
+            span,
+        ))
     }
 
     /// `match e with | p => e | ... end`

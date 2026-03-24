@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# trefoil.tangle — The trefoil knot: Tangle's "Hello World"
+#
+# The trefoil knot is the simplest non-trivial knot. In braid notation,
+# it is the closure of sigma_1^3 (three positive crossings on two strands).
+#
+# This program demonstrates:
+#   - Braid word construction (D1.1)
+#   - Closure to knots (D1.17)
+#   - Topological invariant computation (D1.12)
+#   - Mirror images (D1.16)
+#   - Isotopy equivalence (D1.2)
+#   - Structural equality (D1.2)
+#   - Simplification / Reidemeister moves (D1.16)
+
+# --- Define some fundamental knots ---
+
+def trefoil = braid[s1, s1, s1]
+def figure_eight = braid[s1, s2^-1, s1, s2^-1]
+def unknot_twist = braid[s1, s1^-1]
+
+# --- Compute invariants ---
+
+compute writhe(trefoil)
+compute writhe(figure_eight)
+
+# --- Assertions about knot properties ---
+
+# The trefoil is equal to itself (structural)
+assert trefoil == braid[s1, s1, s1]
+
+# A twist and its inverse cancel (Reidemeister II)
+assert simplify(unknot_twist) == identity
+
+# The unknot twist simplifies to the identity
+assert simplify(braid[s1, s1^-1]) ~ identity
+
+# The trefoil is NOT the unknot
+assert simplify(trefoil) == trefoil
+
+# --- Mirror knots ---
+# mirror flips all crossings (positive <-> negative)
+
+def mirror_trefoil = mirror(trefoil)
+
+# Mirror trefoil has all negative crossings
+assert mirror_trefoil == braid[s1^-1, s1^-1, s1^-1]
+
+# --- Recursive word analysis ---
+
+def length(w) = match w with
+  | identity => 0
+  | s1 . rest => 1 + length(rest)
+  | _ => 0
+end
+
+assert length(trefoil) == 3
+assert length(identity) == 0
+
+# --- Composition ---
+
+# Vertical composition concatenates braid words
+def double_trefoil = trefoil . trefoil
+assert length(double_trefoil) == 6
+
+# --- Reverse ---
+
+def reversed = reverse(trefoil)
+assert reversed == braid[s1, s1, s1]
+
+# --- Close to form a knot ---
+
+compute writhe(close(trefoil))

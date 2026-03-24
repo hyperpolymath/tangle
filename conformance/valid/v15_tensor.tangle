@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Conformance: horizontal tensor (|) with index shifting
+
+assert (braid[s1] | braid[s1]) == braid[s1, s3]

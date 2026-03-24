@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# braids_as_data.tangle — Braid words as an algebraic data structure
+#
+# Tangle's most distinctive feature: braid words ARE the data structure.
+# identity = nil, s_i = constructor, `.` = cons, pattern matching = destruct.
+#
+# This means recursive algorithms over braids look like list algorithms,
+# but the data they process has intrinsic topological meaning.
+#
+# Demonstrates:
+#   - Pattern matching on braid structure (D1.3)
+#   - Recursion on Words (D1.3)
+#   - Turing completeness via pattern matching + recursion (D1.24)
+#   - Multiple generator matching
+#   - The Word/Tangle distinction (D1.1)
+
+# --- Count the total number of generators ---
+
+def length(w) = match w with
+  | identity => 0
+  | s1 . rest => 1 + length(rest)
+  | s2 . rest => 1 + length(rest)
+  | s3 . rest => 1 + length(rest)
+  | _ => 0
+end
+
+# --- Count only positive crossings (writhe contribution) ---
+
+def positive_count(w) = match w with
+  | identity => 0
+  | s1 . rest => 1 + positive_count(rest)
+  | s2 . rest => 1 + positive_count(rest)
+  | _ => positive_count(identity)
+end
+
+# --- Check if a word starts with a specific generator ---
+
+def starts_with_s1(w) = match w with
+  | s1 . rest => true
+  | _ => false
+end
+
+# --- Test the recursive functions ---
+
+def three_strand = braid[s1, s2, s1, s2]
+
+assert length(three_strand) == 4
+assert starts_with_s1(three_strand) == true
+assert starts_with_s1(braid[s2]) == false
+assert starts_with_s1(identity) == false
+
+# --- Composition is concatenation ---
+
+def a = braid[s1, s1]
+def b = braid[s2, s2]
+def ab = a . b
+
+assert ab == braid[s1, s1, s2, s2]
+assert length(ab) == 4
+
+# --- Identity is the unit ---
+
+assert identity . a == a
+assert a . identity == a
+
+# --- Simplification cancels adjacent inverses ---
+
+def redundant = braid[s1, s2, s2^-1, s1]
+assert simplify(redundant) == braid[s1, s1]

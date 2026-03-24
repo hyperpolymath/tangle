@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# tensor_product.tangle — Horizontal tensor and multi-strand braids
+#
+# The tensor product (|) places two braids side by side, shifting
+# the second braid's strand indices by the width of the first.
+# This is the monoidal structure of the braid category.
+#
+# Demonstrates:
+#   - Horizontal tensor operator (D1.8)
+#   - Auto-widening on composition (D1.8.5)
+#   - Multi-strand braid construction
+#   - The categorical structure of Tangle
+
+# --- Basic tensor ---
+# braid[s1] acts on strands 1,2 (width 2)
+# Tensoring with another braid[s1] shifts the second to strands 3,4
+
+def crossing_12 = braid[s1]
+def crossing_34 = crossing_12 | crossing_12
+
+# The tensor should produce s1 followed by s3
+# (s1 on strands 1-2, then s1 shifted by 2 = s3 on strands 3-4)
+assert crossing_34 == braid[s1, s3]
+
+# --- Building complex braids via tensor ---
+
+def left = braid[s1, s1]
+def right = braid[s1]
+
+# Left on strands 1-2, right on strands 3-4
+def both = left | right
+assert both == braid[s1, s1, s3]
+
+# --- Composition after tensor ---
+# After tensoring, we can compose vertically to interleave
+
+def interleaved = both . braid[s2]
+assert interleaved == braid[s1, s1, s3, s2]
+
+# --- Tensor width tracking ---
+
+def w2 = braid[s1]
+def w3 = braid[s2]
+
+# w2 has width 2, w3 has width 3
+# Tensor: w3 shifts by width(w2) = 2, so s2 becomes s4
+def tensored = w2 | w3
+assert tensored == braid[s1, s4]
+
+# --- Identity tensor ---
+# identity has width 0, so tensoring with it changes nothing
+
+assert (identity | braid[s1]) == braid[s1]
+assert (braid[s1] | identity) == braid[s1]
+
+# --- Writhe of tensor products ---
+
+compute writhe(crossing_34)
+compute writhe(both)

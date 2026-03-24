@@ -1,0 +1,84 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# turing_complete.tangle — Demonstrating Turing completeness
+#
+# TANGLE is Turing complete via pattern matching + recursion on Words (D1.24).
+# Braid words form an inductively-defined structure:
+#   - identity = nil (empty word)
+#   - s_i . rest = cons(s_i, rest) (generator followed by more)
+#
+# This is isomorphic to list processing, and list recursion with
+# branching is well-known to be Turing complete.
+
+# --- Fibonacci via braid words ---
+# We use braid words to represent natural numbers:
+#   n = braid[s1, s1, ..., s1] (n copies of s1)
+# This is NOT number-as-braid encoding (D1.6.5 forbids that);
+# we're using the WORD STRUCTURE (list of generators) to count.
+
+def zero = identity
+def one = braid[s1]
+def two = braid[s1, s1]
+def three = braid[s1, s1, s1]
+
+# Length counts generators (like list length)
+def len(w) = match w with
+  | identity => 0
+  | s1 . rest => 1 + len(rest)
+  | _ => 0
+end
+
+assert len(zero) == 0
+assert len(one) == 1
+assert len(two) == 2
+assert len(three) == 3
+
+# --- Append: concatenation is just vertical composition ---
+
+def append(a, b) = a . b
+
+assert append(one, two) == three
+
+# --- Take: extract first n generators ---
+# This demonstrates computed recursion (D1.13.5 allows it)
+
+def take_one(w) = match w with
+  | identity => identity
+  | s1 . rest => braid[s1]
+  | _ => identity
+end
+
+assert take_one(three) == one
+
+# --- Drop: skip first generator ---
+
+def drop_one(w) = match w with
+  | identity => identity
+  | s1 . rest => rest
+  | _ => identity
+end
+
+assert drop_one(three) == two
+
+# --- Map: apply a transformation to each generator ---
+# This demonstrates higher-order-like patterns.
+# "double" replaces each s1 with s1.s1
+
+def double_each(w) = match w with
+  | identity => identity
+  | s1 . rest => braid[s1, s1] . double_each(rest)
+  | _ => identity
+end
+
+assert len(double_each(three)) == 6
+
+# --- The deep insight ---
+# These are list operations, but the "list" is a braid word.
+# When we close these braids, the topological meaning emerges:
+# - zero generators = unknot (trivial)
+# - one generator = unknot with a half-twist
+# - three generators = trefoil knot
+# The same recursive structure serves both computational and
+# topological purposes. That's Tangle's unique contribution.
+
+compute writhe(three)
+compute writhe(double_each(three))

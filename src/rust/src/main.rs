@@ -20,6 +20,13 @@ fn main() {
     }
 
     match args[1].as_str() {
+        "run" | "eval" => {
+            if args.len() < 3 {
+                eprintln!("Usage: tanglec run <file.tgl>");
+                process::exit(1);
+            }
+            cmd_run(&args[2]);
+        }
         "parse" => {
             if args.len() < 3 {
                 eprintln!("Usage: tanglec parse <file.tgl> [--output pretty|sexpr|json]");
@@ -55,16 +62,59 @@ fn main() {
 
 /// Print usage information.
 fn print_usage() {
-    println!("tanglec — TANGLE language compiler");
+    println!("tanglec — TANGLE language compiler & interpreter");
     println!();
     println!("USAGE:");
     println!("  tanglec <command> [options]");
     println!();
     println!("COMMANDS:");
-    println!("  parse <file> [--output pretty|sexpr|json]   Parse and dump AST");
+    println!("  run <file>                                   Execute a TANGLE program");
+    println!("  parse <file> [--output pretty|sexpr|json]    Parse and dump AST");
     println!("  tokenize <file>                              Show lexer tokens");
     println!("  version                                      Show version info");
     println!("  help                                         Show this help");
+}
+
+/// Run (interpret) a TANGLE program.
+///
+/// Executes the program using the tree-walking interpreter.
+/// Outputs are produced by `compute` statements.
+/// Assertions halt on failure with a diagnostic.
+fn cmd_run(path: &str) {
+    let source = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error reading {}: {}", path, e);
+            process::exit(1);
+        }
+    };
+
+    let mut parser = tanglec::parser::Parser::new(&source);
+    let program = match parser.parse_program() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Parse error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    let mut interp = tanglec::eval::Interpreter::new();
+    match interp.exec_program(&program) {
+        Ok(()) => {
+            // Print compute output
+            for line in &interp.output {
+                println!("{}", line);
+            }
+            // Print warnings to stderr
+            for warn in &interp.warnings {
+                eprintln!("Warning: {}", warn);
+            }
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            process::exit(1);
+        }
+    }
 }
 
 /// Parse a file and output the AST in the chosen format.

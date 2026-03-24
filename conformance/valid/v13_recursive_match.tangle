@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Conformance: recursive function with pattern matching (Turing completeness)
+
+def length(w) = match w with
+  | identity => 0
+  | s1 . rest => 1 + length(rest)
+  | s2 . rest => 1 + length(rest)
+  | _ => 0
+end
+
+assert length(braid[s1, s1, s1]) == 3
+assert length(identity) == 0

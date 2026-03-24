@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Conformance: close, mirror, reverse operations
+
+def trefoil = braid[s1, s1, s1]
+
+assert mirror(trefoil) == braid[s1^-1, s1^-1, s1^-1]
+assert reverse(braid[s1, s2]) == braid[s2, s1]
+
+compute writhe(close(trefoil))

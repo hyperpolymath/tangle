@@ -279,6 +279,31 @@ fn expr_to_sexpr(expr: &Expr, out: &mut String, indent: usize) {
             expr_to_sexpr(body, out, indent + 2);
             out.push(')');
         }
+        ExprKind::WeaveExpr {
+            input_strands,
+            body,
+            output_strands,
+        } => {
+            out.push_str("(weave-expr");
+            out.push_str(" (input");
+            for s in input_strands {
+                out.push_str(&format!(" \"{}\"", s.name));
+                if let Some(ref ty) = s.type_ann {
+                    out.push_str(&format!(":{}", ty));
+                }
+            }
+            out.push(')');
+            nl(out, indent + 2);
+            expr_to_sexpr(body, out, indent + 2);
+            out.push_str(" (output");
+            for s in output_strands {
+                out.push_str(&format!(" \"{}\"", s.name));
+                if let Some(ref ty) = s.type_ann {
+                    out.push_str(&format!(":{}", ty));
+                }
+            }
+            out.push_str("))");
+        }
         ExprKind::AddBlock { expr } => {
             out.push_str("(add-block ");
             hv_data_expr_to_sexpr(expr, out, indent + 2);

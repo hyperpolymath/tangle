@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Conformance: add{} block (JTV data injection)
+
+def x = add{ 1 + 2 + 3 }
+assert x == 6

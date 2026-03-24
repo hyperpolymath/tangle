@@ -1,10 +1,12 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "_comment": "SPDX-License-Identifier: PMPL-1.0-or-later",
+  "_description": "TextMate grammar for TANGLE — Turing-complete topological programming language",
   "name": "Tangle",
   "scopeName": "source.tangle",
   "fileTypes": [
-    "tangle"
+    "tangle",
+    "tgl"
   ],
   "patterns": [
     {
@@ -18,6 +20,9 @@
     },
     {
       "include": "#constants"
+    },
+    {
+      "include": "#jtv-blocks"
     },
     {
       "include": "#keywords"
@@ -42,13 +47,13 @@
     "comments": {
       "patterns": [
         {
-          "name": "comment.line.double-dash.tangle",
-          "match": "--.*$"
+          "name": "comment.line.hash.tangle",
+          "match": "#.*$"
         },
         {
           "name": "comment.block.tangle",
-          "begin": "\\{-",
-          "end": "-\\}",
+          "begin": "\\(\\*",
+          "end": "\\*\\)",
           "patterns": [
             {
               "include": "#comments"
@@ -75,8 +80,16 @@
     "numbers": {
       "patterns": [
         {
+          "name": "constant.numeric.hex.tangle",
+          "match": "\\b0x[0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.tangle",
+          "match": "\\b0b[01]+\\b"
+        },
+        {
           "name": "constant.numeric.float.tangle",
-          "match": "\\b[0-9]+\\.[0-9]+\\b"
+          "match": "\\b[0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?\\b"
         },
         {
           "name": "constant.numeric.integer.tangle",
@@ -89,6 +102,68 @@
         {
           "name": "constant.language.boolean.tangle",
           "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.identity.tangle",
+          "match": "\\bidentity\\b"
+        }
+      ]
+    },
+    "jtv-blocks": {
+      "patterns": [
+        {
+          "name": "meta.block.add.tangle",
+          "begin": "\\b(add)\\s*(\\{)",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.jtv.tangle" },
+            "2": { "name": "punctuation.definition.block.begin.tangle" }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.block.end.tangle" }
+          },
+          "patterns": [
+            { "include": "#strings" },
+            { "include": "#numbers" },
+            { "include": "#constants" },
+            { "include": "#identifiers" }
+          ]
+        },
+        {
+          "name": "meta.block.harvard.tangle",
+          "begin": "\\b(harvard)\\s*(\\{)",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.jtv.tangle" },
+            "2": { "name": "punctuation.definition.block.begin.tangle" }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.block.end.tangle" }
+          },
+          "patterns": [
+            { "include": "#jtv-keywords" },
+            { "include": "#jtv-purity" },
+            { "include": "#strings" },
+            { "include": "#numbers" },
+            { "include": "#constants" },
+            { "include": "#identifiers" }
+          ]
+        }
+      ]
+    },
+    "jtv-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.jtv.tangle",
+          "match": "\\b(fn|if|else|while|for|return|print|module|import|as|then|reverse)\\b"
+        }
+      ]
+    },
+    "jtv-purity": {
+      "patterns": [
+        {
+          "name": "storage.modifier.purity.tangle",
+          "match": "@(pure|total)\\b"
         }
       ]
     },
@@ -100,7 +175,7 @@
         },
         {
           "name": "keyword.declaration.tangle",
-          "match": "\\b(def|weave|into|strands|compute|assert|identity)\\b"
+          "match": "\\b(def|weave|into|strands|compute|assert)\\b"
         },
         {
           "name": "keyword.other.topology.tangle",
@@ -135,10 +210,6 @@
           "match": ">>"
         },
         {
-          "name": "keyword.operator.crossing.tangle",
-          "match": ">|<"
-        },
-        {
           "name": "keyword.operator.isotopy.tangle",
           "match": "~"
         },
@@ -149,6 +220,10 @@
         {
           "name": "keyword.operator.assignment.tangle",
           "match": "="
+        },
+        {
+          "name": "keyword.operator.crossing.tangle",
+          "match": "[><]"
         },
         {
           "name": "keyword.operator.tensor.tangle",
