@@ -1,27 +1,50 @@
-= Tangle — EXPLAINME
-:toc: preamble
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
-This document backs up the claims made in README with evidence and rationale.
+= EXPLAINME: Tangle
 
-== What Is This?
+== "A Turing-Complete Topological Programming Language"
 
-Tangle is a hyperpolymath project. See README.adoc for usage.
+[quote, README.adoc]
+____
+TANGLE is an experimental, Turing-complete, topologically inspired programming
+language where programs are represented as tangles -- isotopy classes of braided
+strands in 3D space.
+____
 
-== Why These Choices?
+Programs are braids; equivalence is isotopy; crossings define operations.
+The type system separates matchable braid words (`Word[n]`) from extensional
+tangle morphisms (`Tangle[A,B]`), with implicit coercion between them.
+See link:docs/spec/FORMAL-SEMANTICS.md[Formal Semantics] for the full
+denotational model.
 
-=== Language
+**Caveat:** This is an experimental research language. The compiler is
+early-stage and the formal semantics are still being refined. Turing
+completeness is established via recursive definitions and pattern matching,
+not via a traditional proof.
 
-The language(s) used in this project were chosen per the hyperpolymath
-language policy (see CLAUDE.md for the full list of allowed/banned languages).
+[cols="2,3", options="header"]
+|===
+| Path | Proves
 
-=== Architecture
+| `src/tangle.ebnf`
+| Core grammar exists and is specified in EBNF
 
-Architecture decisions are documented in `.machine_readable/` checkpoint files.
+| `docs/spec/FORMAL-SEMANTICS.md`
+| Formal denotational semantics are documented
 
-== Alternatives Considered
+| `src/abi/`
+| Idris2 ABI definitions for type-level guarantees
 
-(To be filled in as the project matures.)
+| `src/rust/`
+| Rust implementation of the compiler pipeline
 
-== Proof of Claims
+| `ffi/`
+| Zig FFI layer per hyperpolymath ABI/FFI standard
 
-(Link formal verification results from the `proven` repo where applicable.)
+| `conformance/`
+| Conformance test suite for language behaviour
+
+| `examples/`
+| Worked examples demonstrating language features
+|===
