@@ -3,7 +3,7 @@
 
 = EXPLAINME: Tangle
 
-== "A Turing-Complete Topological Programming Language"
+== A Turing-Complete Topological Programming Language
 
 [quote, README.adoc]
 ____
