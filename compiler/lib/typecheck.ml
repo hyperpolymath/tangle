@@ -413,8 +413,7 @@ and infer_binop (op : binop) (t1 : ty) (t2 : ty) : ty =
                     word is wider than tangle output boundary"
           (pp_boundary a) (pp_boundary b) m;
       let c = apply_perm_default m b in
-      ignore c;
-      TTangle (a, b)
+      TTangle (a, c)
     | _ ->
       type_error "Cannot compose %s with %s" (pp_ty t1) (pp_ty t2)
     end
