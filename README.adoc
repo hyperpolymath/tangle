@@ -1,332 +1,178 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
-= TANGLE: A Turing-Complete Topological Programming Language
-:toc:
-:source-highlighter: highlight.js
-:sectnums:
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
-== Introduction
+= KRL — Knot Resolution Language
+Jonathan Jewell (hyperpolymath)
+:toc: left
+:toc-title: Contents
+:doctype: article
+:icons: font
 
-Computation is braiding. Data flows along strands. Strands interact only at crossings.
+link:docs/krl_map.html[→ KRL architecture map (HTML)]
 
-TANGLE is an experimental, Turing-complete, topologically inspired programming language where programs are represented as tangles — isotopy classes of braided strands in 3D space. Instead of traditional control flow, computation proceeds via the braiding of data-carrying strands, with interactions occurring strictly at crossings.
+== What it is
 
-Unlike conventional functional or imperative models, TANGLE treats code as physical structures: knots, links, and braids. The language leverages deep connections between topology, algebra, and computation, enabling novel reasoning about program equivalence through knot invariants like the Jones polynomial.
+KRL (Knot Resolution Language) is a compositional language for constructing,
+transforming, resolving, and retrieving topological objects: tangles, knots,
+and links.
 
-Despite its geometric foundation, TANGLE supports full recursion, pattern matching, and local binding — making it surprisingly expressive and computationally universal.
+The name reflects the central operation: _resolution_.
+In knot theory, resolution is how crossings are resolved in the skein relation —
+the algebraic heart of invariant computation. KRL extends this to cover
+every interaction with the system: resolving structure, resolving equivalence,
+resolving queries.
 
-This project explores the frontier of spatial computing, where syntax mirrors structure, and evaluation reflects deformation.
+"Query" would name only one of four operations. "Resolution" names the mathematical
+act that runs through all of them.
 
-== Key Features
+== Architecture position
 
-* *Topological Semantics*: Programs are tangles; equivalence is isotopy
-* *Braiding as Computation*: Strand crossings define operations
-* *Knot Invariant Evaluation*: Compute Jones, Alexander, HOMFLY, Kauffman polynomials
-* *Recursive Definitions & Pattern Matching*: Enables general recursion → Turing completeness
-* *Algebraic Data via Braid Words*: Braid sequences act like cons-lists over generators
-* *Let Binding & Local Scope*
-* *Weave Blocks*: Define transformations on named strand configurations
-* *Two Type Sorts*: `Word[n]` (matchable data) and `Tangle[A,B]` (morphisms) with implicit coercion
+KRL is the surface language of a four-layer stack:
 
-== Type System
+----
+KRL surface syntax       ← this repository (TanglePL compiler module)
+TangleIR                 ← canonical interchange object
+VerisimMorphism          ← abstract categorical view (VerisimCore)
+Skein.jl + QuandleDB     ← persistence and semantic indexing
+----
 
-TANGLE has a two-level type system (see `docs/spec/FORMAL-SEMANTICS.md`):
+The TanglePL module (this repo) is responsible for:
 
-[cols="1,3"]
-|===
-| Type | Description
+* Parsing KRL source text
+* Building and typechecking the AST
+* Compiling AST to `TangleIR`
+* Reconstructing source from IR (lossy but readable)
 
-| `Word[n]`
-| Braid word on n strands. Intensional (matchable via patterns). Auto-widens.
+It is *not* responsible for:
 
-| `Tangle[A, B]`
-| Tangle morphism from boundary A to boundary B. Extensional (isotopy equivalence).
+* Invariant computation (→ JuliaKnot.jl)
+* Persistence (→ Skein.jl)
+* Equivalence reasoning (→ QuandleDB)
 
-| `Num`
-| Numbers (integers and floats)
-
-| `Str`
-| Strings
-
-| `Bool`
-| Booleans (`true` / `false`)
-|===
-
-Words implicitly coerce to Tangles when needed (D1.1). `identity` has type `Word[0]` (D1.14).
-
-== Operator Precedence (Lowest to Highest)
+== The four KRL operations
 
 [cols="1,2,1,2"]
 |===
-| Precedence | Operator | Associativity | Meaning
+|Operation |Knot concept |Repo |Example syntax
 
-| 1 (lowest)
-| `>>`
-| left
-| Pipeline (sugar for `.`)
+|*Construct* |Tangles, ports, composition, tensor |TanglePL
+|`compose sigma1 sigma1` +
+`tensor a b` +
+`close t`
 
-| 2
-| `==` `~`
-| none
-| Structural equality / Isotopy equivalence
+|*Transform* |PD code, Reidemeister moves |JuliaKnot.jl
+|`simplify t` +
+`normalise t` +
+`mirror t`
 
-| 3
-| `+` `-`
-| left
-| Connect sum (tangles) or arithmetic; subtraction
+|*Resolve* |Isotopy, quandle, equivalence class |QuandleDB
+|`equivalent? a b` +
+`classify t` +
+`near t`
 
-| 4
-| `*` `/`
-| left
-| Multiplication / division (Num only)
-
-| 5
-| `.`
-| left
-| Vertical composition / word cons
-
-| 6 (highest)
-| `\|`
-| left
-| Horizontal tensor (side by side)
+|*Retrieve* |Jones/Alexander invariants, indexed store |Skein.jl
+|`find where jones = p` +
+`where crossing < 8`
 |===
 
-Unary prefix operators: `~e` (twist), `-e` (negation).
+== Grammar (sketch)
 
-== Syntax Overview
-
-The full grammar is specified in ISO/IEC 14977 EBNF format in `src/tangle.ebnf`.
-
-[source]
 ----
-program = { statement } ;
-statement = definition | weave_block | computation | assertion ;
+expr     ::= atom
+           | expr ';' expr          (* sequential composition *)
+           | expr '|' expr          (* tensor product *)
+           | 'close' expr           (* closure / trace *)
+           | 'mirror' expr
+           | 'simplify' expr
+           | 'let' IDENT '=' expr
 
-definition = "def", identifier, [ "(", param_list, ")" ], "=", expr ;
-weave_block = "weave", input_decl, "into", expr, "yield", output_decl ;
-computation = "compute", invariant, "(", expr, ")" ;
-assertion = "assert", expr ;
-expr = match_expr | let_expr | pipeline ;
-----
+atom     ::= IDENT                  (* named tangle *)
+           | generator
 
-=== Primary Constructs
+generator ::= 'sigma' INT           (* positive crossing *)
+           | 'sigma_inv' INT        (* negative crossing *)
+           | 'cup' INT              (* cup on strands i,i+1 *)
+           | 'cap' INT              (* cap on strands i,i+1 *)
 
-==== Braid Literals
-
-Represent braid group elements directly:
-
-[source]
-----
-braid[s1, s2^-1, s1]   # σ₁σ₂⁻¹σ₁ — a trefoil precursor
-braid[]                 # identity braid (Word[0])
+query    ::= 'find' 'where' filter ('and' filter)*
+filter   ::= IDENT '=' value
+           | IDENT '<' INT
+           | IDENT '>' INT
 ----
 
-==== Crossings
+== TangleIR — the canonical interchange
 
-Explicit interaction between named strands (in weave context):
+All KRL expressions compile to `TangleIR`. This is the object that flows
+between all layers of the stack:
 
-[source]
+[source,julia]
 ----
-(a > b)  # a crosses over b (positive crossing)
-(b < a)  # b crosses under a (negative crossing)
-----
+struct Port
+    id::Symbol
+    side::Symbol        # :top | :bottom | :left | :right
+    index::Int
+    orientation::Symbol # :in | :out | :unknown
+end
 
-==== Twists
+struct CrossingIR
+    id::Symbol
+    sign::Int           # +1 (positive) | -1 (negative)
+    arcs::NTuple{4,Int} # PD-style: (a, b, c, d) arc indices
+end
 
-Apply framing or self-writhe (D1.18, context-dependent):
+struct TangleMetadata
+    name::Union{String,Nothing}
+    source_text::Union{String,Nothing}
+    tags::Vector{String}
+    provenance::Symbol  # :user | :derived | :rewritten | :imported
+    extra::Dict{Symbol,Any}
+end
 
-[source]
-----
-(~x)       # In weave: twist on strand x
-(~expr)    # Standalone: compose with full twist Δ²
-----
-
-==== Unary Operations
-
-[cols="1,3"]
-|===
-| Operation | Effect
-
-| `close(e)` | Close braid/tangle into a link (no permutation check, D1.17)
-| `mirror(e)` | Reflect spatial orientation (invert all generators)
-| `reverse(e)` | Reverse temporal direction (reverse and invert word)
-| `simplify(e)` | Apply Reidemeister moves to canonical form
-| `cap(e, f)` | Attach cap (∩-shaped connection)
-| `cup(e, f)` | Attach cup (∪-shaped connection)
-|===
-
-== Compositional PD Compiler API
-
-The compiler library includes `Tangle.Compositional`, a focused API for:
-
-* compositional AST nodes (generators, compose, tensor, close)
-* parser adapter from language expressions into the compositional subset
-* compilation to a PlanarDiagram-equivalent IR
-* pure Skein hook payload generation (`pdv1` + PD tuple entries)
-
-This API intentionally excludes invariant computation and persistence.
-
-[source,ocaml]
-----
-open Tangle.Compositional
-
-let trefoil_expr = close (braid [
-  { index = 1; exponent = 1 };
-  { index = 1; exponent = 1 };
-  { index = 1; exponent = 1 };
-])
-
-let trefoil_compiled = compile trefoil_expr
-(* => ClosedDiagram pd, with 3 crossings *)
-
-let figure_eight_compiled =
-  compile_source_expr "close(braid[s1, s2^-1, s1, s2^-1])"
-(* => ClosedDiagram pd, with 4 crossings *)
-----
-
-[source,ocaml]
-----
-let sink payload =
-  Printf.printf "name=%s pd=%s\n" payload.name payload.pd_blob
-
-let _ =
-  compile_and_send_to_skein sink ~name:"trefoil" trefoil_expr
-----
-
-== Example Programs
-
-=== Identity Twist (Trivial Knot)
-
-[source]
-----
-weave strands a into identity yield strands a
-----
-
-=== Simple Crossing → Hopf Link
-
-[source]
-----
-weave strands a, b into (a > b) yield strands b, a
-----
-
-=== Recursive Length on Braid Words
-
-Using braid words as recursive data (cons-like via `.`):
-
-[source]
-----
-def length(w) = match w with
-  | identity => 0
-  | s1 . rest => 1 + length(rest)
+struct TangleIR
+    id::UUID
+    ports_in::Vector{Port}
+    ports_out::Vector{Port}
+    crossings::Vector{CrossingIR}
+    components::Vector{Vector{Int}}  # arc index groups per component
+    metadata::TangleMetadata
 end
 ----
 
-=== Pattern Matching on Braid Structure
+`TangleIR` is the single hardest-designed artifact in the stack.
+Every other interface is a view over it, a service to it, or a transformation of it.
 
-Match the internal form of a braid word (structural, NOT up to isotopy):
+== Usage
 
-[source]
+[source,julia]
 ----
-match my_braid with
-| identity          => "empty"
-| s1 . rest         => "starts with sigma_1"
-| s2^-1 . s1 . tail => "specific pattern"
-| x                 => "something else"
-end
-----
+using TanglePL, Skein
 
-=== Compute Knot Invariants
+# parse and compile
+ir = compile_tangle("sigma1 ; sigma1 ; sigma1")
 
-[source]
-----
-compute jones( close( braid[s1, s1, s1] ) )
-compute writhe( close( braid[s1, s2^-1] ) )
-----
+# store
+db = SkeinDB("knots.db")
+id = store!(db, ir; name="trefoil")
 
-=== Assertions
+# query
+candidates = find_equivalence_candidates(db, ir)
 
-Verify equality under isotopy or exact match:
-
-[source]
-----
-assert close(braid[s1, s1, s1]) ~ close(braid[s2, s2, s2])
-assert braid[s1] == braid[s1]
+# retrieve source
+src = reconstruct_source(ir)   # generates valid KRL; not necessarily original
 ----
 
-== Execution Model
+== Status
 
-Programs evaluate by simulating tangle evolution:
+* Grammar: defined (sketch above, formal PEG in progress)
+* AST: defined
+* Typechecker: boundary arity checking implemented
+* Compiler (AST → TangleIR): in development
+* Decompiler (IR → source): stub, in progress
+* Skein integration: planned
 
-1. Parse into abstract syntax tree (AST)
-2. Two-pass type checking: collect definitions, then check all statements (D1.13)
-3. Call-by-value evaluation (D1.13.5)
-4. Pattern matching on braid word structure (structural, not isotopic)
-5. Reidemeister simplification on demand
-6. Invariant computation via pluggable backends (D1.12)
-7. Halts on assertion failure or match exhaustion (D1.15)
+== Related
 
-== Why Turing Complete?
-
-Although based on finite braid groups, TANGLE achieves Turing completeness through (D1.24):
-
-* Recursive function definitions (D1.3)
-* Pattern matching on braid-word structure (identity = nil, g.w = cons)
-* Unbounded recursion depth
-
-Braid words serve as inductively defined data, enabling encoding of Peano arithmetic, μ-recursive functions, and register machines — all via braiding logic.
-
-== Mathematical Foundation
-
-TANGLE implements computation in the *free strict ribbon category FR(T)*:
-
-* Objects = ordered lists of strand types (boundaries)
-* Morphisms = isotopy classes of tangles
-* Composition = vertical stacking (`.`)
-* Tensor product = horizontal juxtaposition (`|`)
-* Braiding = crossings (`>`, `<`)
-* Twist = framing (θ_A)
-* Duality = cap/cup (evaluation/coevaluation)
-
-Alexander's theorem guarantees every link is the closure of some braid.
-
-== Specification
-
-All design decisions are locked in `docs/spec/DECISIONS-LOCKED.md` (44 decisions).
-Formal typing rules and operational semantics in `docs/spec/FORMAL-SEMANTICS.md`.
-Implementation tasks in `SONNET-TASKS.md`.
-
-== Getting Started
-
-[source,bash]
-----
-git clone https://github.com/hyperpolymath/tangle.git
-cd tangle
-# Implementation in progress — see SONNET-TASKS.md for build instructions
-----
-
-== License
-
-PMPL-1.0-or-later — see `LICENSE`.
-
-== Contributing
-
-Contributions welcome. See `CONTRIBUTING.md`. Especially interested in:
-
-* Implementing invariant calculators (Jones, Alexander, HOMFLY)
-* Visualization tools (3D rendering of tangles)
-* Type system extensions
-* Reidemeister simplification optimizations
-* Parser and evaluator implementation
-
-== Author
-
-Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-
-== Acknowledgments
-
-Inspired by:
-
-* Vaughan Jones (Jones Polynomial)
-* Joan Birman (Braid Groups)
-* Louis Kauffman (Diagrammatic Reasoning)
-* Philip Wadler (Functional Programming and Category Theory)
-* Shigeo Kobayashi & Katsumi Nomizu (Differential Geometry)
+* link:../skein-jl/README.adoc[Skein.jl] — persistence and query
+* link:../quandle-db/README.adoc[QuandleDB] — semantic fingerprinting
+* link:../julia-knot/README.adoc[JuliaKnot.jl] — invariant engine
+* link:../nextgen-languages/README.adoc[Next-generation languages]
