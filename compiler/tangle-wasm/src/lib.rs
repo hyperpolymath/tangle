@@ -154,11 +154,13 @@ impl WasmModule {
 }
 
 /// Bump allocator for WASM linear memory.
+#[allow(dead_code)]
 struct BumpAllocator {
     next_offset: u32,
     capacity: u32,
 }
 
+#[allow(dead_code)]
 impl BumpAllocator {
     fn new(initial_offset: u32, initial_pages: u32) -> Self {
         Self {
@@ -346,7 +348,8 @@ impl WasmBackend {
 
         // Compile composed braids: sequential calls to generators
         for braid in &program.braids {
-            let mut func_body = WasmFunc::new(vec![]);
+            // local 0 stores the allocated strand pointer
+            let mut func_body = WasmFunc::new(vec![(1, ValType::I32)]);
 
             // Allocate strands first
             func_body.instruction(&Instruction::I32Const(braid.strand_count as i32));
@@ -848,17 +851,25 @@ mod tests {
         assert_eq!(&bytes[0..4], b"\0asm");
         // WASM version 1
         assert_eq!(bytes[4], 1);
-        assert_eq!(module.functions.is_empty(), true);
+        // Runtime helper exports are always emitted.
+        assert_eq!(module.functions.len(), 3);
+        assert_eq!(module.functions[0].name, "markov_type_i");
+        assert_eq!(module.functions[1].name, "markov_type_ii");
+        assert_eq!(module.functions[2].name, "braid_inverse");
     }
 
     #[test]
     fn test_simple_generator_compiles() {
         let mut backend = WasmBackend::new();
         let module = backend.generate(&simple_program()).unwrap();
-        assert_eq!(module.functions.len(), 1);
+        // 1 generator + 3 runtime helpers
+        assert_eq!(module.functions.len(), 4);
         assert_eq!(module.functions[0].name, "sigma1");
         assert_eq!(module.functions[0].params, vec![WasmType::I32]);
         assert_eq!(module.functions[0].result, None);
+        assert_eq!(module.functions[1].name, "markov_type_i");
+        assert_eq!(module.functions[2].name, "markov_type_ii");
+        assert_eq!(module.functions[3].name, "braid_inverse");
         let bytes = module.to_bytes();
         assert_eq!(&bytes[0..4], b"\0asm");
     }
@@ -890,10 +901,13 @@ mod tests {
 
         let mut backend = WasmBackend::new();
         let module = backend.generate(&program).unwrap();
-        // 2 generators + 1 composed braid = 3 functions
-        assert_eq!(module.functions.len(), 3);
+        // 2 generators + 1 composed braid + 3 runtime helpers
+        assert_eq!(module.functions.len(), 6);
         assert_eq!(module.functions[2].name, "trefoil");
         assert_eq!(module.functions[2].result, Some(WasmType::I32));
+        assert_eq!(module.functions[3].name, "markov_type_i");
+        assert_eq!(module.functions[4].name, "markov_type_ii");
+        assert_eq!(module.functions[5].name, "braid_inverse");
     }
 
     #[test]
