@@ -1,34 +1,22 @@
-// {{PROJECT}} FFI Implementation
-//
-// This module implements the C-compatible FFI declared in src/abi/Foreign.idr
-// All types and layouts must match the Idris2 ABI definitions.
-//
+// TANGLE FFI Implementation
 // SPDX-License-Identifier: PMPL-1.0-or-later
 
 const std = @import("std");
+const builtin = @import("builtin");
 
-// Version information (keep in sync with project)
-const VERSION = "0.1.0";
-const BUILD_INFO = "{{PROJECT}} built with Zig " ++ @import("builtin").zig_version_string;
+const VERSION: [:0]const u8 = "0.1.0";
+const BUILD_INFO: [:0]const u8 = "TANGLE built with Zig " ++ builtin.zig_version_string;
 
-/// Thread-local error storage
-threadlocal var last_error: ?[]const u8 = null;
+threadlocal var last_error: ?[:0]const u8 = null;
 
-/// Set the last error message
-fn setError(msg: []const u8) void {
+fn setError(msg: [:0]const u8) void {
     last_error = msg;
 }
 
-/// Clear the last error
 fn clearError() void {
     last_error = null;
 }
 
-//==============================================================================
-// Core Types (must match src/abi/Types.idr)
-//==============================================================================
-
-/// Result codes (must match Idris2 Result type)
 pub const Result = enum(c_int) {
     ok = 0,
     @"error" = 1,
@@ -37,115 +25,133 @@ pub const Result = enum(c_int) {
     null_pointer = 4,
 };
 
-/// Library handle (opaque to prevent direct access)
-pub const Handle = opaque {
-    // Internal state hidden from C
-    allocator: std.mem.Allocator,
+pub const Callback = *const fn (u64, u32) callconv(.c) u32;
+
+const HandleData = struct {
     initialized: bool,
-    // Add your fields here
+    callback: ?Callback,
 };
 
-//==============================================================================
-// Library Lifecycle
-//==============================================================================
+pub const Handle = opaque {};
 
-/// Initialize the library
-/// Returns a handle, or null on failure
-export fn {{project}}_init() ?*Handle {
-    const allocator = std.heap.c_allocator;
+var handles_mutex: std.Thread.Mutex = .{};
+var active_handles: std.AutoHashMapUnmanaged(usize, void) = .{};
 
-    const handle = allocator.create(Handle) catch {
+fn toHandle(data: *HandleData) *Handle {
+    return @as(*Handle, @ptrCast(data));
+}
+
+fn toData(handle: *Handle) *HandleData {
+    return @as(*HandleData, @ptrCast(@alignCast(handle)));
+}
+
+fn addHandle(data: *HandleData) !void {
+    handles_mutex.lock();
+    defer handles_mutex.unlock();
+    try active_handles.put(std.heap.page_allocator, @intFromPtr(data), {});
+}
+
+fn removeHandle(handle: *Handle) bool {
+    handles_mutex.lock();
+    defer handles_mutex.unlock();
+    return active_handles.remove(@intFromPtr(handle));
+}
+
+fn isLiveHandle(handle: *Handle) bool {
+    handles_mutex.lock();
+    defer handles_mutex.unlock();
+    return active_handles.contains(@intFromPtr(handle));
+}
+
+pub export fn tangle_init() ?*Handle {
+    const allocator = std.heap.page_allocator;
+
+    const data = allocator.create(HandleData) catch {
         setError("Failed to allocate handle");
         return null;
     };
 
-    // Initialize handle
-    handle.* = .{
-        .allocator = allocator,
+    data.* = .{
         .initialized = true,
+        .callback = null,
+    };
+
+    addHandle(data) catch {
+        allocator.destroy(data);
+        setError("Failed to register handle");
+        return null;
     };
 
     clearError();
-    return handle;
+    return toHandle(data);
 }
 
-/// Free the library handle
-export fn {{project}}_free(handle: ?*Handle) void {
+pub export fn tangle_free(handle: ?*Handle) void {
     const h = handle orelse return;
-    const allocator = h.allocator;
 
-    // Clean up resources
-    h.initialized = false;
+    if (!removeHandle(h)) {
+        // Unknown/stale handle: treat as no-op for FFI robustness.
+        return;
+    }
 
-    allocator.destroy(h);
+    const data = toData(h);
+    data.initialized = false;
+    data.callback = null;
+
+    std.heap.page_allocator.destroy(data);
     clearError();
 }
 
-//==============================================================================
-// Core Operations
-//==============================================================================
-
-/// Process data (example operation)
-export fn {{project}}_process(handle: ?*Handle, input: u32) Result {
+pub export fn tangle_process(handle: ?*Handle, input: u32) Result {
     const h = handle orelse {
         setError("Null handle");
         return .null_pointer;
     };
 
-    if (!h.initialized) {
+    if (!isLiveHandle(h)) {
         setError("Handle not initialized");
         return .@"error";
     }
 
-    // Example processing logic
+    const data = toData(h);
+    if (!data.initialized) {
+        setError("Handle not initialized");
+        return .@"error";
+    }
+
     _ = input;
 
     clearError();
     return .ok;
 }
 
-//==============================================================================
-// String Operations
-//==============================================================================
-
-/// Get a string result (example)
-/// Caller must free the returned string
-export fn {{project}}_get_string(handle: ?*Handle) ?[*:0]const u8 {
+pub export fn tangle_get_string(handle: ?*Handle) ?[*:0]const u8 {
     const h = handle orelse {
         setError("Null handle");
         return null;
     };
 
-    if (!h.initialized) {
+    if (!isLiveHandle(h)) {
         setError("Handle not initialized");
         return null;
     }
 
-    // Example: allocate and return a string
-    const result = h.allocator.dupeZ(u8, "Example result") catch {
-        setError("Failed to allocate string");
+    const data = toData(h);
+    if (!data.initialized) {
+        setError("Handle not initialized");
         return null;
-    };
+    }
 
     clearError();
-    return result.ptr;
+    return "Example result";
 }
 
-/// Free a string allocated by the library
-export fn {{project}}_free_string(str: ?[*:0]const u8) void {
-    const s = str orelse return;
-    const allocator = std.heap.c_allocator;
-
-    const slice = std.mem.span(s);
-    allocator.free(slice);
+pub export fn tangle_free_string(str: ?[*:0]const u8) void {
+    _ = str;
+    // Returned strings are static right now.
 }
 
-//==============================================================================
-// Array/Buffer Operations
-//==============================================================================
-
-/// Process an array of data
-export fn {{project}}_process_array(
+pub export fn tangle_process_array(
     handle: ?*Handle,
     buffer: ?[*]const u8,
     len: u32,
@@ -155,67 +161,35 @@ export fn {{project}}_process_array(
         return .null_pointer;
     };
 
+    if (!isLiveHandle(h)) {
+        setError("Handle not initialized");
+        return .@"error";
+    }
+
     const buf = buffer orelse {
         setError("Null buffer");
         return .null_pointer;
     };
 
-    if (!h.initialized) {
-        setError("Handle not initialized");
-        return .@"error";
-    }
-
-    // Access the buffer
-    const data = buf[0..len];
-    _ = data;
-
-    // Process data here
+    _ = buf[0..len];
 
     clearError();
     return .ok;
 }
 
-//==============================================================================
-// Error Handling
-//==============================================================================
-
-/// Get the last error message
-/// Returns null if no error
-export fn {{project}}_last_error() ?[*:0]const u8 {
-    const err = last_error orelse return null;
-
-    // Return C string (static storage, no need to free)
-    const allocator = std.heap.c_allocator;
-    const c_str = allocator.dupeZ(u8, err) catch return null;
-    return c_str.ptr;
+pub export fn tangle_last_error() ?[*:0]const u8 {
+    return if (last_error) |err| err else null;
 }
 
-//==============================================================================
-// Version Information
-//==============================================================================
-
-/// Get the library version
-export fn {{project}}_version() [*:0]const u8 {
-    return VERSION.ptr;
+pub export fn tangle_version() [*:0]const u8 {
+    return VERSION;
 }
 
-/// Get build information
-export fn {{project}}_build_info() [*:0]const u8 {
-    return BUILD_INFO.ptr;
+pub export fn tangle_build_info() [*:0]const u8 {
+    return BUILD_INFO;
 }
 
-//==============================================================================
-// Callback Support
-//==============================================================================
-
-/// Callback function type (C ABI)
-pub const Callback = *const fn (u64, u32) callconv(.C) u32;
-
-/// Register a callback
-export fn {{project}}_register_callback(
-    handle: ?*Handle,
-    callback: ?Callback,
-) Result {
+pub export fn tangle_register_callback(handle: ?*Handle, callback: ?Callback) Result {
     const h = handle orelse {
         setError("Null handle");
         return .null_pointer;
@@ -226,49 +200,47 @@ export fn {{project}}_register_callback(
         return .null_pointer;
     };
 
-    if (!h.initialized) {
+    if (!isLiveHandle(h)) {
         setError("Handle not initialized");
         return .@"error";
     }
 
-    // Store callback for later use
-    _ = cb;
+    const data = toData(h);
+    if (!data.initialized) {
+        setError("Handle not initialized");
+        return .@"error";
+    }
 
+    data.callback = cb;
     clearError();
     return .ok;
 }
 
-//==============================================================================
-// Utility Functions
-//==============================================================================
-
-/// Check if handle is initialized
-export fn {{project}}_is_initialized(handle: ?*Handle) u32 {
+pub export fn tangle_is_initialized(handle: ?*Handle) u32 {
     const h = handle orelse return 0;
-    return if (h.initialized) 1 else 0;
+    if (!isLiveHandle(h)) return 0;
+
+    const data = toData(h);
+    return if (data.initialized) 1 else 0;
 }
 
-//==============================================================================
-// Tests
-//==============================================================================
-
 test "lifecycle" {
-    const handle = {{project}}_init() orelse return error.InitFailed;
-    defer {{project}}_free(handle);
+    const handle = tangle_init() orelse return error.InitFailed;
+    defer tangle_free(handle);
 
-    try std.testing.expect({{project}}_is_initialized(handle) == 1);
+    try std.testing.expect(tangle_is_initialized(handle) == 1);
 }
 
 test "error handling" {
-    const result = {{project}}_process(null, 0);
+    const result = tangle_process(null, 0);
     try std.testing.expectEqual(Result.null_pointer, result);
 
-    const err = {{project}}_last_error();
+    const err = tangle_last_error();
     try std.testing.expect(err != null);
 }
 
 test "version" {
-    const ver = {{project}}_version();
+    const ver = tangle_version();
     const ver_str = std.mem.span(ver);
     try std.testing.expectEqualStrings(VERSION, ver_str);
 }

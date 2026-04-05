@@ -13,6 +13,9 @@ Thumbs.db
 # Build
 /target/
 /_build/
+/compiler/_build/
+/ffi/zig/.zig-cache/
+/ffi/zig/zig-out/
 /build/
 /dist/
 /out/
@@ -25,6 +28,7 @@ Thumbs.db
 
 # Rust
 # Cargo.lock  # Keep for binaries
+/compiler/tangle-lsp/Cargo.lock
 
 # Elixir
 /cover/

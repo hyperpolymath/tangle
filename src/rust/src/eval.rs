@@ -1394,21 +1394,11 @@ mod tests {
         interp.exec_program(&program).unwrap_err()
     }
 
-    /// Helper: evaluate a definition and return its value.
-    fn eval_def(source: &str, name: &str) -> Value {
-        let interp = run(source);
-        match interp.env.get(name) {
-            Some(val) => val.clone(),
-            None => panic!("Definition '{}' not found", name),
-        }
-    }
-
     // ---- Literal evaluation ----
 
     #[test]
     fn test_identity() {
-        let interp = run("def x = identity");
-        let val = interp.env.get("x").unwrap();
+        let _interp = run("def x = identity");
         // x is a thunk (zero-arg closure); force it
         let mut interp2 = run("def x = identity");
         let program = parser::parse("assert x == braid[]").unwrap();

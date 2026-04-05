@@ -1,4 +1,4 @@
-// {{PROJECT}} FFI Build Configuration
+// TANGLE FFI Build Configuration
 // SPDX-License-Identifier: PMPL-1.0-or-later
 
 const std = @import("std");
@@ -7,88 +7,60 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Shared library (.so, .dylib, .dll)
-    const lib = b.addSharedLibrary(.{
-        .name = "{{project}}",
+    const root_module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
 
-    // Set version
-    lib.version = .{ .major = 0, .minor = 1, .patch = 0 };
-
-    // Static library (.a)
-    const lib_static = b.addStaticLibrary(.{
-        .name = "{{project}}",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+    const lib = b.addLibrary(.{
+        .name = "tangle",
+        .root_module = root_module,
+        .linkage = .dynamic,
+        .version = .{ .major = 0, .minor = 1, .patch = 0 },
     });
-
-    // Install artifacts
     b.installArtifact(lib);
+
+    const lib_static = b.addLibrary(.{
+        .name = "tangle",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
+        .linkage = .static,
+    });
     b.installArtifact(lib_static);
 
-    // Generate header file for C compatibility
-    const header = b.addInstallHeader(
-        b.path("include/{{project}}.h"),
-        "{{project}}.h",
-    );
-    b.getInstallStep().dependOn(&header.step);
-
-    // Unit tests
-    const lib_tests = b.addTest(.{
+    const unit_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
+    const unit_tests = b.addTest(.{ .root_module = unit_mod });
+    const run_unit_tests = b.addRunArtifact(unit_tests);
 
-    const run_lib_tests = b.addRunArtifact(lib_tests);
-
-    const test_step = b.step("test", "Run library tests");
-    test_step.dependOn(&run_lib_tests.step);
-
-    // Integration tests
-    const integration_tests = b.addTest(.{
+    const integration_mod = b.createModule(.{
         .root_source_file = b.path("test/integration_test.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
+    integration_mod.addImport("tangle", root_module);
 
-    integration_tests.linkLibrary(lib);
-
+    const integration_tests = b.addTest(.{ .root_module = integration_mod });
     const run_integration_tests = b.addRunArtifact(integration_tests);
 
-    const integration_test_step = b.step("test-integration", "Run integration tests");
-    integration_test_step.dependOn(&run_integration_tests.step);
+    const unit_step = b.step("test", "Run Zig unit tests");
+    unit_step.dependOn(&run_unit_tests.step);
 
-    // Documentation
-    const docs = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = .Debug,
-    });
+    const integration_step = b.step("test-integration", "Run Zig integration tests");
+    integration_step.dependOn(&run_integration_tests.step);
 
-    const docs_step = b.step("docs", "Generate documentation");
-    docs_step.dependOn(&b.addInstallDirectory(.{
-        .source_dir = docs.getEmittedDocs(),
-        .install_dir = .prefix,
-        .install_subdir = "docs",
-    }).step);
-
-    // Benchmark (if needed)
-    const bench = b.addExecutable(.{
-        .name = "{{project}}-bench",
-        .root_source_file = b.path("bench/bench.zig"),
-        .target = target,
-        .optimize = .ReleaseFast,
-    });
-
-    bench.linkLibrary(lib);
-
-    const run_bench = b.addRunArtifact(bench);
-
-    const bench_step = b.step("bench", "Run benchmarks");
-    bench_step.dependOn(&run_bench.step);
+    const all_step = b.step("test-all", "Run all Zig tests");
+    all_step.dependOn(&run_unit_tests.step);
+    all_step.dependOn(&run_integration_tests.step);
 }
