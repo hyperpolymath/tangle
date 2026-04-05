@@ -154,6 +154,44 @@ Apply framing or self-writhe (D1.18, context-dependent):
 | `cup(e, f)` | Attach cup (∪-shaped connection)
 |===
 
+== Compositional PD Compiler API
+
+The compiler library includes `Tangle.Compositional`, a focused API for:
+
+* compositional AST nodes (generators, compose, tensor, close)
+* parser adapter from language expressions into the compositional subset
+* compilation to a PlanarDiagram-equivalent IR
+* pure Skein hook payload generation (`pdv1` + PD tuple entries)
+
+This API intentionally excludes invariant computation and persistence.
+
+[source,ocaml]
+----
+open Tangle.Compositional
+
+let trefoil_expr = close (braid [
+  { index = 1; exponent = 1 };
+  { index = 1; exponent = 1 };
+  { index = 1; exponent = 1 };
+])
+
+let trefoil_compiled = compile trefoil_expr
+(* => ClosedDiagram pd, with 3 crossings *)
+
+let figure_eight_compiled =
+  compile_source_expr "close(braid[s1, s2^-1, s1, s2^-1])"
+(* => ClosedDiagram pd, with 4 crossings *)
+----
+
+[source,ocaml]
+----
+let sink payload =
+  Printf.printf "name=%s pd=%s\n" payload.name payload.pd_blob
+
+let _ =
+  compile_and_send_to_skein sink ~name:"trefoil" trefoil_expr
+----
+
 == Example Programs
 
 === Identity Twist (Trivial Knot)

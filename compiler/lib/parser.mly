@@ -63,7 +63,12 @@
 (* ================================================================== *)
 
 program:
-  | ss = list(statement) EOF { ss }
+  | ss = list(statement_item) EOF { ss }
+  ;
+
+statement_item:
+  | s = statement SEMI { s }
+  | s = statement      { s }
   ;
 
 statement:
@@ -71,11 +76,6 @@ statement:
   | w = weave_block  { WeaveBlock w }
   | c = computation  { Computation c }
   | a = assertion    { Assertion a }
-  (* Error recovery: skip a bad statement. Menhir's error token
-     consumes tokens until the parser can shift a valid token.
-     We synchronize on SEMI (optional statement separator) or
-     on DEF/WEAVE/COMPUTE/ASSERT (next statement start). *)
-  | error { StmtError }
   ;
 
 (* ================================================================== *)
@@ -303,6 +303,8 @@ primary_expr:
   | s = STRING
     { StringLit s }
   | LPAREN e = expr RPAREN
+    { e }
+  | LBRACE e = expr RBRACE
     { e }
   ;
 

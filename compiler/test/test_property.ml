@@ -57,6 +57,7 @@ let parse (source : string) : program option =
   with
   | Tangle.Lexer.Lexer_error _ -> None
   | Tangle.Parser.Error          -> None
+  | Assert_failure _             -> None
 
 let parse_ok (source : string) : program =
   match parse source with

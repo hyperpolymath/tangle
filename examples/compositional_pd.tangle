@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# compositional_pd.tangle — core compositional constructions
+
+# Generators and composition: sigma_1^3
+def trefoil_word = braid[s1] . braid[s1] . braid[s1]
+def trefoil = close(trefoil_word)
+
+# Tensor + composition form of figure-eight word
+def left = braid[s1]
+def right = braid[s2^-1]
+def fig8_word = left . right . left . right
+def figure_eight = close(fig8_word)
+
+assert trefoil_word == braid[s1, s1, s1]
+assert fig8_word == braid[s1, s2^-1, s1, s2^-1]
