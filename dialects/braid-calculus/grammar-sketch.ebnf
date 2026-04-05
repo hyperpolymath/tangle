@@ -1,0 +1,23 @@
+(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* Braid Calculus — Tangle DSL sketch *)
+
+program       = { statement } ;
+statement     = binding | expression_stmt ;
+
+binding       = "let" , identifier , "=" , expression , ";" ;
+expression_stmt = expression , ";" ;
+
+expression    = mult_expr ;
+mult_expr     = unary_expr , { "*" , unary_expr } ;    (* braid multiplication *)
+unary_expr    = "inverse" , unary_expr
+              | atom ;
+
+atom          = generator
+              | identifier
+              | "(" , expression , ")" ;
+
+generator     = "sigma" , integer , [ "^" , integer ] ;  (* σᵢ^k *)
+
+predicate     = "is_markov_equivalent" , "(" , expression , "," , expression , ")" ;
+
+(* Reserved: let sigma inverse is_markov_equivalent *)

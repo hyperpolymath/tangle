@@ -1,0 +1,29 @@
+(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* String Diagram Calculus — Tangle DSL sketch *)
+
+program     = { declaration } ;
+declaration = object_decl | morphism_decl | binding | expression_stmt ;
+
+object_decl    = "object" , identifier_list , ";" ;
+morphism_decl  = "morphism" , identifier , ":" , type_expr , "->" , type_expr , ";" ;
+binding        = "let" , identifier , "=" , expression , ";" ;
+expression_stmt = expression , ";" ;
+
+type_expr   = identifier
+            | type_expr , "tensor" , type_expr
+            | "unit" ;
+
+expression  = compose_expr ;
+compose_expr = tensor_expr , { "then" , tensor_expr } ;   (* ∘ *)
+tensor_expr  = atom , { "tensor" , atom } ;                (* ⊗ *)
+
+atom        = "id" , type_expr
+            | "braiding" , type_expr , type_expr
+            | "associator" , type_expr , type_expr , type_expr
+            | "unitor" , type_expr
+            | identifier
+            | "(" , expression , ")" ;
+
+identifier_list = identifier , { "," , identifier } ;
+
+(* Reserved: object morphism let id tensor then braiding associator unitor unit *)

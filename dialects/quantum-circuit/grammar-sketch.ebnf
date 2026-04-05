@@ -1,0 +1,29 @@
+(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* Quantum Circuit Calculus — Tangle DSL sketch *)
+
+program     = { statement } ;
+statement   = binding | expression_stmt ;
+
+binding     = "let" , identifier , "=" , expression , ";" ;
+expression_stmt = expression , ";" ;
+
+expression  = seq_expr ;
+seq_expr    = par_expr , { ";" , par_expr } ;          (* time composition *)
+par_expr    = atom , { "⊗" , atom } ;                    (* space / tensor *)
+
+atom        = gate_app
+            | identifier
+            | "(" , expression , ")" ;
+
+gate_app    = fixed_gate , "on" , qubit_spec
+            | param_gate , "(" , param_list , ")" , "on" , qubit_spec
+            | "CNOT" , "(" , qubit_spec , "," , qubit_spec , ")"
+            | "Swap" , "(" , qubit_spec , "," , qubit_spec , ")" ;
+
+fixed_gate  = "H" | "X" | "Y" | "Z" | "S" | "T" ;
+param_gate  = "Rx" | "Ry" | "Rz" | "U3" ;
+
+qubit_spec  = integer ;
+param_list  = expression , { "," , expression } ;
+
+(* Reserved: let H X Y Z S T Rx Ry Rz U3 CNOT Swap on *)
