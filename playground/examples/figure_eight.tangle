@@ -1,0 +1,4 @@
+-- SPDX-License-Identifier: PMPL-1.0-or-later
+-- Example: figure-eight knot — alternating crossings on two strands
+
+let fig8 = sigma_1 ; sigma_2_inv ; sigma_1 ; sigma_2_inv

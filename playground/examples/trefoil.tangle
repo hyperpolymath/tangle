@@ -1,0 +1,4 @@
+-- SPDX-License-Identifier: PMPL-1.0-or-later
+-- Example: trefoil knot as three positive crossings in sequence
+
+let trefoil = sigma_1 ; sigma_1 ; sigma_1
