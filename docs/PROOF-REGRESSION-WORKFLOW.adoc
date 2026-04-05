@@ -1,0 +1,125 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+
+= Proof-Regression Workflow (Tangle's Lean 4 Integration)
+Jonathan Jewell (hyperpolymath)
+:toc:
+
+== Purpose
+
+Tangle is the only repo in the KRL stack with formal proofs integrated
+(Lean 4). This document records the workflow so it can be adopted by
+sibling repos (KnotTheory.jl, Skein.jl, KRLAdapter.jl, quandledb) that
+would benefit from proof-regression testing.
+
+== What "proof-regression" means (per CRG v2)
+
+A test category in the 16-category taxonomy. Definition: tests that verify
+formal proofs *still discharge* after code changes. Not code tests —
+proof tests. If a change breaks a previously-discharged proof, the change
+is blocked.
+
+Estate-wide gap from 2026-04-05 blitz: only tangle has this category.
+The other 4 KRL-stack repos score ✗ or ○.
+
+== Tangle's Lean 4 proof structure
+
+Location: `proofs/` at repo root.
+
+[cols="1,3",options="header"]
+|===
+|File | Obligations
+
+|`proofs/Progress.lean` | Progress: well-typed terms reduce or are values
+|`proofs/Preservation.lean` | Preservation: reduction preserves type
+|`proofs/Determinism.lean` | Determinism: reduction relation is deterministic
+|===
+
+(Exact file layout may vary — see `proofs/` directory for current state.)
+
+== The regression mechanism
+
+1. Proofs live as .lean files under `proofs/`.
+2. `lean --build` (or `lake build` if a `lakefile.lean` exists) checks all
+   proofs.
+3. CI runs the Lean checker on every PR.
+4. If any proof fails to check, CI fails → PR blocked.
+
+The proof bodies *are* the regression tests. No separate assertions needed.
+
+== Workflow for adopting this in sibling repos
+
+=== Step 1 — Identify a proof candidate
+
+Look for a claim in the codebase that:
+- is stated in a natural-language doc (e.g. an invariant in EXPLAINME.adoc)
+- can be mechanised: expressible in some proof system's type theory
+- would catch a real bug if the proof breaks
+
+Examples for the KRL stack:
+
+- **KRLAdapter.jl**: `mirror` is an involution (sign-wise) — candidate for Idris2 or Lean 4 formalisation.
+- **Skein.jl**: schema migration v3→v4 preserves records (harder; needs a model of SQLite).
+- **KnotTheory.jl**: `simplify_pd` output is isotopic to input — complex, would
+  benefit the whole field.
+
+=== Step 2 — Choose proof system
+
+Per hyperpolymath standard: Idris2 (preferred for dependently-typed ABI/FFI
+layer) or Lean 4 (if following tangle's pattern). ATS2 rejected.
+
+For the KRL stack specifically, Idris2 is the main choice given the
+standard Idris2 ABI + Zig FFI architecture.
+
+=== Step 3 — Write the proof
+
+- Translate the claim to a formal statement.
+- Build up lemmas as needed.
+- Discharge using tactics.
+
+=== Step 4 — Wire to CI
+
+Add a CI job that runs `idris2 --check-only` or `lake build` on your proofs
+directory. Fail the build if any proof fails.
+
+=== Step 5 — Document
+
+Update PROOF-NEEDS.md: move the claim from "Would benefit from formal proof"
+to "Currently verified (by Idris2/Lean 4)".
+
+== Current adoption status (2026-04-05)
+
+[cols="2,2,3",options="header"]
+|===
+|Repo | Proof-regression | Notes
+
+|tangle | ✓ Lean 4 | Progress, preservation, determinism proved
+|KRLAdapter.jl | ✗ | Property tests stand in — see PROOF-NEEDS.md
+|KnotTheory.jl | ○ | PROOF-NEEDS.md exists, no discharged proofs
+|Skein.jl | ✗ | PROOF-NEEDS.md added 2026-04-05
+|quandledb | ✗ | Has Idris2 ABI Types.idr but no proofs
+|===
+
+== Why bother
+
+1. **Specification-by-construction.** The proof is the spec. No drift between
+   documentation and behaviour.
+2. **Regression-blocker with zero false positives.** If the proof fails, the
+   claim fails. No flaky tests.
+3. **Standard-raising for the estate.** CRG v2 taxonomy has proof-regression
+   as a distinct test category; adopting it moves repos closer to grade A.
+
+== When not to bother
+
+- The claim is too narrow to justify proof infrastructure (e.g. trivially-
+  checked by a 3-line property test).
+- The proof system doesn't have the libraries you need.
+- The cost of writing the proof exceeds the value of catching regressions
+  (common for storage/IO layers).
+
+== See also
+
+- Tangle's `proofs/` directory
+- `https://leanprover-community.github.io/` (Lean 4 resources)
+- `https://www.idris-lang.org/` (Idris2 resources)
+- PROOF-NEEDS.md in sibling repos
