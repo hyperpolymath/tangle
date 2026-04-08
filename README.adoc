@@ -1,178 +1,191 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Tangle / KRL — Topological Programming Language
 
-= KRL — Knot Resolution Language
-Jonathan Jewell (hyperpolymath)
-:toc: left
-:toc-title: Contents
-:doctype: article
-:icons: font
+A research language exploring *computation as topology*, where programs are structured objects and equivalence is defined by transformation.
 
-link:docs/krl_map.html[→ KRL architecture map (HTML)]
+License: PMPL-1.0-or-later
 
-== What it is
+---
 
-KRL (Knot Resolution Language) is a compositional language for constructing,
-transforming, resolving, and retrieving topological objects: tangles, knots,
-and links.
+== Overview
 
-The name reflects the central operation: _resolution_.
-In knot theory, resolution is how crossings are resolved in the skein relation —
-the algebraic heart of invariant computation. KRL extends this to cover
-every interaction with the system: resolving structure, resolving equivalence,
-resolving queries.
+Tangle (via KRL — Knot Resolution Language) is an experimental programming language in which:
 
-"Query" would name only one of four operations. "Resolution" names the mathematical
-act that runs through all of them.
+> *programs are structured as tangles (braids), and program equivalence is defined by isotopy.*
 
-== Architecture position
+Rather than treating programs as sequences of instructions, Tangle treats them as *composable topological objects*.
 
-KRL is the surface language of a four-layer stack:
+This allows reasoning about programs in terms of:
 
-----
-KRL surface syntax       ← this repository (TanglePL compiler module)
-TangleIR                 ← canonical interchange object
-VerisimMorphism          ← abstract categorical view (VerisimCore)
-Skein.jl + QuandleDB     ← persistence and semantic indexing
-----
+* structure
+* equivalence under transformation
+* invariants of representation
 
-The TanglePL module (this repo) is responsible for:
+---
 
-* Parsing KRL source text
-* Building and typechecking the AST
-* Compiling AST to `TangleIR`
-* Reconstructing source from IR (lossy but readable)
+== Core Idea
 
-It is *not* responsible for:
+The central idea of Tangle is:
 
-* Invariant computation (→ JuliaKnot.jl)
-* Persistence (→ Skein.jl)
-* Equivalence reasoning (→ QuandleDB)
+> *computation is construction of structured objects, and meaning is preserved under valid transformations.*
 
-== The four KRL operations
+In this setting:
 
-[cols="1,2,1,2"]
+* programs are graphs/braids
+* execution corresponds to transformation
+* equivalence is not syntactic equality, but *structural equivalence*
+
+This aligns with concepts from:
+
+* knot theory (Reidemeister moves)
+* category theory (morphisms and composition)
+* algebraic invariants (classification via structure)
+
+---
+
+== KRL — Knot Resolution Language
+
+KRL is the surface language used to interact with the system.
+
+It is organised around four fundamental operations:
+
+[cols="1,3"]
 |===
-|Operation |Knot concept |Repo |Example syntax
+|Operation |Role
 
-|*Construct* |Tangles, ports, composition, tensor |TanglePL
-|`compose sigma1 sigma1` +
-`tensor a b` +
-`close t`
+|Construct
+|Build structured objects (tangles, compositions)
 
-|*Transform* |PD code, Reidemeister moves |JuliaKnot.jl
-|`simplify t` +
-`normalise t` +
-`mirror t`
+|Transform
+|Rewrite structures (e.g. simplification, normalisation)
 
-|*Resolve* |Isotopy, quandle, equivalence class |QuandleDB
-|`equivalent? a b` +
-`classify t` +
-`near t`
+|Resolve
+|Determine equivalence classes
 
-|*Retrieve* |Jones/Alexander invariants, indexed store |Skein.jl
-|`find where jones = p` +
-`where crossing < 8`
+|Retrieve
+|Query objects by invariants or structure
 |===
 
-== Grammar (sketch)
+KRL is not a general-purpose language; it is a *domain language for structured objects and their equivalence*.
 
-----
-expr     ::= atom
-           | expr ';' expr          (* sequential composition *)
-           | expr '|' expr          (* tensor product *)
-           | 'close' expr           (* closure / trace *)
-           | 'mirror' expr
-           | 'simplify' expr
-           | 'let' IDENT '=' expr
+---
 
-atom     ::= IDENT                  (* named tangle *)
-           | generator
+== Architecture
 
-generator ::= 'sigma' INT           (* positive crossing *)
-           | 'sigma_inv' INT        (* negative crossing *)
-           | 'cup' INT              (* cup on strands i,i+1 *)
-           | 'cap' INT              (* cap on strands i,i+1 *)
+Tangle is part of a layered system:
 
-query    ::= 'find' 'where' filter ('and' filter)*
-filter   ::= IDENT '=' value
-           | IDENT '<' INT
-           | IDENT '>' INT
-----
+---
 
-== TangleIR — the canonical interchange
+KRL (surface language)
+↓
+TangleIR (canonical representation)
+↓
+VerisimCore (categorical abstraction)
+↓
+Skein / QuandleDB (storage and equivalence)
+-------------------------------------------
 
-All KRL expressions compile to `TangleIR`. This is the object that flows
-between all layers of the stack:
+* *TangleIR* is the central representation shared across layers
+* other components provide views, transformations, or storage
 
-[source,julia]
-----
-struct Port
-    id::Symbol
-    side::Symbol        # :top | :bottom | :left | :right
-    index::Int
-    orientation::Symbol # :in | :out | :unknown
-end
+---
 
-struct CrossingIR
-    id::Symbol
-    sign::Int           # +1 (positive) | -1 (negative)
-    arcs::NTuple{4,Int} # PD-style: (a, b, c, d) arc indices
-end
+== Formal Core
 
-struct TangleMetadata
-    name::Union{String,Nothing}
-    source_text::Union{String,Nothing}
-    tags::Vector{String}
-    provenance::Symbol  # :user | :derived | :rewritten | :imported
-    extra::Dict{Symbol,Any}
-end
+A core fragment of the language has been formalised and mechanised.
 
-struct TangleIR
-    id::UUID
-    ports_in::Vector{Port}
-    ports_out::Vector{Port}
-    crossings::Vector{CrossingIR}
-    components::Vector{Vector{Int}}  # arc index groups per component
-    metadata::TangleMetadata
-end
-----
+This includes:
 
-`TangleIR` is the single hardest-designed artifact in the stack.
-Every other interface is a view over it, a service to it, or a transformation of it.
+* a typed core language (braid words, composition, tensor)
+* small-step operational semantics
+* mechanised proofs in Lean 4:
 
-== Usage
+  * progress
+  * preservation
+  * determinism
+  * type safety
 
-[source,julia]
-----
-using TanglePL, Skein
+See:
 
-# parse and compile
-ir = compile_tangle("sigma1 ; sigma1 ; sigma1")
+* `Tangle.lean`
+* `docs/spec/FORMAL-SEMANTICS.md`
 
-# store
-db = SkeinDB("knots.db")
-id = store!(db, ir; name="trefoil")
+This formal core covers the *structural heart of the language*, though not all surface features.
 
-# query
-candidates = find_equivalence_candidates(db, ir)
+---
 
-# retrieve source
-src = reconstruct_source(ir)   # generates valid KRL; not necessarily original
-----
+== Current Status
 
-== Status
+Tangle/KRL is an *active research system*.
 
-* Grammar: defined (sketch above, formal PEG in progress)
-* AST: defined
-* Typechecker: boundary arity checking implemented
-* Compiler (AST → TangleIR): in development
-* Decompiler (IR → source): stub, in progress
-* Skein integration: planned
+At present:
 
-== Related
+* grammar is defined (EBNF / PEG in progress)
+* AST and type system are partially implemented
+* compiler pipeline (AST → TangleIR) is in development
+* decompilation (IR → source) is incomplete
+* database integration (Skein / QuandleDB) is planned or partial
 
-* link:../skein-jl/README.adoc[Skein.jl] — persistence and query
-* link:../quandle-db/README.adoc[QuandleDB] — semantic fingerprinting
-* link:../julia-knot/README.adoc[JuliaKnot.jl] — invariant engine
-* link:../nextgen-languages/README.adoc[Next-generation languages]
+It should be read as:
+
+> a formally grounded core with an evolving implementation and surrounding research system.
+
+---
+
+== Scope
+
+=== Implemented / Grounded
+
+* core grammar (defined)
+* AST and type structure
+* Lean formalisation of core fragment
+* partial compiler pipeline
+* example programs
+
+---
+
+=== In Progress
+
+* parser and full compiler
+* IR integration across components
+* equivalence resolution via QuandleDB
+* invariant-based querying
+
+---
+
+=== Research Directions
+
+* richer categorical abstractions
+* deeper integration with algebraic databases
+* optimisation via equivalence classes
+* alternative evaluation models based on rewriting
+
+These are not yet stable features.
+
+---
+
+== Relationship to Other Projects
+
+Tangle is closely connected to:
+
+* *QuandleDB* — equivalence and classification via algebraic invariants
+* *Skein.jl* — persistence and indexing of structured objects
+* *Nextgen Languages* — broader research context
+
+---
+
+== How to Read This Repository
+
+Recommended entry points:
+
+* `Tangle.lean` — mechanised type safety proof
+* `docs/spec/FORMAL-SEMANTICS.md` — formal model
+* grammar files (`src/tangle.ebnf` or equivalent)
+* examples demonstrating composition and transformation
+
+---
+
+== Summary
+
+Tangle/KRL is best understood as:
+
+> a research language that treats programs as structured objects, with meaning defined by transformation and equivalence, supported by a partially mechanised formal core and an evolving implementation.
