@@ -6,7 +6,8 @@
 # Then hands off to `just setup` for project-specific configuration.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/hyperpolymath/tangle/main/setup.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/hyperpolymath/tangle/main/setup.sh -o setup.sh
+#   sh setup.sh
 #   # or after cloning:
 #   ./setup.sh
 #
@@ -140,8 +141,8 @@ install_just() {
     case "$PKG_MGR" in
         dnf)        sudo dnf install -y just ;;
         apt)        sudo apt-get install -y just 2>/dev/null || {
-                        # just not in older apt repos — use installer
-                        curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+                        fail "just is unavailable in this apt repository. Install just manually: https://just.systems/"
+                        return 1
                     } ;;
         pacman)     sudo pacman -S --noconfirm just ;;
         apk)        sudo apk add just ;;
@@ -152,8 +153,9 @@ install_just() {
         guix)       guix install just ;;
         nix)        nix-env -iA nixpkgs.just ;;
         *)
-            info "Using just installer script..."
-            curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+            fail "No trusted package-manager install path for just on this platform."
+            info "Install just manually: https://just.systems/"
+            return 1
             ;;
     esac
 
