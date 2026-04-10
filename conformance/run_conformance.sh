@@ -10,7 +10,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PARSER="${1:-dune exec --root "${SCRIPT_DIR}/../compiler" -- tangle --parse-only}"
+# Build PARSER_CMD as an array so we never need `eval`. If the caller
+# passes a parser command as $1, split it on whitespace; otherwise use
+# the default command directly.
+if [[ -n "${1:-}" ]]; then
+    # shellcheck disable=SC2206 # deliberate word-splitting of caller's string
+    PARSER_CMD=(${1})
+else
+    PARSER_CMD=(dune exec --root "${SCRIPT_DIR}/../compiler" -- tangle --parse-only)
+fi
 
 PASS=0
 FAIL=0
@@ -20,7 +28,7 @@ TOTAL=0
 for f in "${SCRIPT_DIR}"/valid/*.tangle; do
     TOTAL=$((TOTAL + 1))
     name="$(basename "$f")"
-    if eval "${PARSER}" "$f" >/dev/null 2>&1; then
+    if "${PARSER_CMD[@]}" "$f" >/dev/null 2>&1; then
         echo "  PASS  valid/${name}"
         PASS=$((PASS + 1))
     else
@@ -33,7 +41,7 @@ done
 for f in "${SCRIPT_DIR}"/invalid/*.tangle; do
     TOTAL=$((TOTAL + 1))
     name="$(basename "$f")"
-    if eval "${PARSER}" "$f" >/dev/null 2>&1; then
+    if "${PARSER_CMD[@]}" "$f" >/dev/null 2>&1; then
         echo "  FAIL  invalid/${name}  (expected failure, got success)"
         FAIL=$((FAIL + 1))
     else
