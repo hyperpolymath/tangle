@@ -881,7 +881,7 @@ mod tests {
                 assert!(params.is_empty());
                 assert_eq!(*body.kind, ExprKind::Identity);
             }
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -893,7 +893,7 @@ mod tests {
                 assert_eq!(name, "f");
                 assert_eq!(params, &["x", "y"]);
             }
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -907,9 +907,9 @@ mod tests {
                     assert_eq!(gens[0].index, 1);
                     assert!(!gens[0].inverse);
                 }
-                _ => panic!("expected BraidLit"),
+                other => panic!("expected BraidLit, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -923,9 +923,9 @@ mod tests {
                     assert_eq!(gens[0].index, 2);
                     assert!(gens[0].inverse);
                 }
-                _ => panic!("expected BraidLit"),
+                other => panic!("expected BraidLit, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -935,9 +935,9 @@ mod tests {
         match &prog.stmts[0].kind {
             StmtKind::Def { body, .. } => match body.kind.as_ref() {
                 ExprKind::BraidLit(gens) => assert!(gens.is_empty()),
-                _ => panic!("expected BraidLit"),
+                other => panic!("expected BraidLit, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -950,7 +950,7 @@ mod tests {
             StmtKind::Assert { expr } => {
                 assert!(matches!(expr.kind.as_ref(), ExprKind::Eq(..)));
             }
-            _ => panic!("expected Assert"),
+            other => panic!("expected Assert, got {other:?}"),
         }
     }
 
@@ -961,7 +961,7 @@ mod tests {
             StmtKind::Assert { expr } => {
                 assert!(matches!(expr.kind.as_ref(), ExprKind::Isotopy(..)));
             }
-            _ => panic!("expected Assert"),
+            other => panic!("expected Assert, got {other:?}"),
         }
     }
 
@@ -975,7 +975,7 @@ mod tests {
                 assert_eq!(invariant, "jones");
                 assert!(matches!(expr.kind.as_ref(), ExprKind::Close(..)));
             }
-            _ => panic!("expected Compute"),
+            other => panic!("expected Compute, got {other:?}"),
         }
     }
 
@@ -997,7 +997,7 @@ mod tests {
                 assert_eq!(output_strands[0].name, "b");
                 assert_eq!(output_strands[1].name, "a");
             }
-            _ => panic!("expected Weave"),
+            other => panic!("expected Weave, got {other:?}"),
         }
     }
 
@@ -1009,7 +1009,7 @@ mod tests {
                 assert_eq!(input_strands[0].type_ann.as_deref(), Some("Q"));
                 assert_eq!(input_strands[1].type_ann.as_deref(), Some("R"));
             }
-            _ => panic!("expected Weave"),
+            other => panic!("expected Weave, got {other:?}"),
         }
     }
 
@@ -1023,7 +1023,7 @@ mod tests {
             StmtKind::Def { body, .. } => {
                 assert!(matches!(body.kind.as_ref(), ExprKind::Add(..)));
             }
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1036,9 +1036,9 @@ mod tests {
                 ExprKind::Eq(lhs, _) => {
                     assert!(matches!(lhs.kind.as_ref(), ExprKind::Add(..)));
                 }
-                _ => panic!("expected Eq"),
+                other => panic!("expected Eq, got {other:?}"),
             },
-            _ => panic!("expected Assert"),
+            other => panic!("expected Assert, got {other:?}"),
         }
     }
 
@@ -1051,9 +1051,9 @@ mod tests {
                 ExprKind::Add(_, rhs) => {
                     assert!(matches!(rhs.kind.as_ref(), ExprKind::Mul(..)));
                 }
-                _ => panic!("expected Add"),
+                other => panic!("expected Add, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1075,9 +1075,9 @@ mod tests {
                 ExprKind::Compose(_, rhs) => {
                     assert!(matches!(rhs.kind.as_ref(), ExprKind::Tensor(..)));
                 }
-                _ => panic!("expected Compose at top level"),
+                other => panic!("expected Compose at top level, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1089,9 +1089,9 @@ mod tests {
                 ExprKind::Pipeline(lhs, _) => {
                     assert!(matches!(lhs.kind.as_ref(), ExprKind::Pipeline(..)));
                 }
-                _ => panic!("expected Pipeline"),
+                other => panic!("expected Pipeline, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1112,9 +1112,9 @@ mod tests {
                     assert!(matches!(arms[0].pattern.kind, PatternKind::Identity));
                     assert!(matches!(arms[1].pattern.kind, PatternKind::Cons { .. }));
                 }
-                _ => panic!("expected Match"),
+                other => panic!("expected Match, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1126,9 +1126,9 @@ mod tests {
                 ExprKind::Match { arms, .. } => {
                     assert!(matches!(arms[0].pattern.kind, PatternKind::Wildcard));
                 }
-                _ => panic!("expected Match"),
+                other => panic!("expected Match, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1140,9 +1140,9 @@ mod tests {
                 ExprKind::Match { arms, .. } => {
                     assert!(matches!(&arms[0].pattern.kind, PatternKind::Var(n) if n == "y"));
                 }
-                _ => panic!("expected Match"),
+                other => panic!("expected Match, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1156,11 +1156,11 @@ mod tests {
                         assert_eq!(generator.index, 2);
                         assert!(generator.inverse);
                     }
-                    _ => panic!("expected Cons pattern"),
+                    other => panic!("expected Cons pattern, got {other:?}"),
                 },
-                _ => panic!("expected Match"),
+                other => panic!("expected Match, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1174,9 +1174,9 @@ mod tests {
                 ExprKind::Let { name, .. } => {
                     assert_eq!(name, "y");
                 }
-                _ => panic!("expected Let"),
+                other => panic!("expected Let, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1191,9 +1191,9 @@ mod tests {
                     assert_eq!(a, "a");
                     assert_eq!(b, "b");
                 }
-                _ => panic!("expected CrossOver"),
+                other => panic!("expected CrossOver, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1204,7 +1204,7 @@ mod tests {
             StmtKind::Def { body, .. } => {
                 assert!(matches!(body.kind.as_ref(), ExprKind::CrossUnder { .. }));
             }
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1216,9 +1216,9 @@ mod tests {
                 ExprKind::Twist(inner) => {
                     assert!(matches!(inner.kind.as_ref(), ExprKind::Var(n) if n == "a"));
                 }
-                _ => panic!("expected Twist"),
+                other => panic!("expected Twist, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1230,9 +1230,9 @@ mod tests {
                 ExprKind::Twist(inner) => {
                     assert!(matches!(inner.kind.as_ref(), ExprKind::BraidLit(_)));
                 }
-                _ => panic!("expected Twist"),
+                other => panic!("expected Twist, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1247,9 +1247,9 @@ mod tests {
                     assert!(matches!(lhs.kind.as_ref(), ExprKind::Simplify(..)));
                     assert!(matches!(rhs.kind.as_ref(), ExprKind::Identity));
                 }
-                _ => panic!("expected Eq"),
+                other => panic!("expected Eq, got {other:?}"),
             },
-            _ => panic!("expected Assert"),
+            other => panic!("expected Assert, got {other:?}"),
         }
     }
 
@@ -1260,7 +1260,7 @@ mod tests {
             StmtKind::Compute { expr, .. } => {
                 assert!(matches!(expr.kind.as_ref(), ExprKind::Close(..)));
             }
-            _ => panic!("expected Compute"),
+            other => panic!("expected Compute, got {other:?}"),
         }
     }
 
@@ -1271,7 +1271,7 @@ mod tests {
             StmtKind::Def { body, .. } => {
                 assert!(matches!(body.kind.as_ref(), ExprKind::Mirror(..)));
             }
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
 
         let prog = parse_ok("def y = reverse(braid[s1])");
@@ -1279,7 +1279,7 @@ mod tests {
             StmtKind::Def { body, .. } => {
                 assert!(matches!(body.kind.as_ref(), ExprKind::Reverse(..)));
             }
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1290,7 +1290,7 @@ mod tests {
             StmtKind::Def { body, .. } => {
                 assert!(matches!(body.kind.as_ref(), ExprKind::Cap(..)));
             }
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
 
         let prog = parse_ok("def y = cup(a, b)");
@@ -1298,7 +1298,7 @@ mod tests {
             StmtKind::Def { body, .. } => {
                 assert!(matches!(body.kind.as_ref(), ExprKind::Cup(..)));
             }
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1313,9 +1313,9 @@ mod tests {
                     assert_eq!(func, "f");
                     assert_eq!(args.len(), 2);
                 }
-                _ => panic!("expected App"),
+                other => panic!("expected App, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1327,9 +1327,9 @@ mod tests {
                 ExprKind::Add(_, rhs) => {
                     assert!(matches!(rhs.kind.as_ref(), ExprKind::App { .. }));
                 }
-                _ => panic!("expected Add"),
+                other => panic!("expected Add, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1358,9 +1358,9 @@ mod tests {
                 ExprKind::Mul(lhs, _) => {
                     assert!(matches!(lhs.kind.as_ref(), ExprKind::Add(..)));
                 }
-                _ => panic!("expected Mul"),
+                other => panic!("expected Mul, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 

@@ -879,11 +879,11 @@ mod tests {
                         // (1 + 2) + 3 — left-assoc
                         assert!(matches!(lhs.kind.as_ref(), HvDataExprKind::BinOp { .. }));
                     }
-                    _ => panic!("expected BinOp Add"),
+                    other => panic!("expected BinOp Add, got {other:?}"),
                 },
-                _ => panic!("expected AddBlock"),
+                other => panic!("expected AddBlock, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -907,11 +907,11 @@ mod tests {
                             }
                         ));
                     }
-                    _ => panic!("expected BinOp Add"),
+                    other => panic!("expected BinOp Add, got {other:?}"),
                 },
-                _ => panic!("expected AddBlock"),
+                other => panic!("expected AddBlock, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -929,9 +929,9 @@ mod tests {
                         }
                     ));
                 }
-                _ => panic!("expected AddBlock"),
+                other => panic!("expected AddBlock, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -950,9 +950,9 @@ mod tests {
                         }
                     ));
                 }
-                _ => panic!("expected AddBlock"),
+                other => panic!("expected AddBlock, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -967,9 +967,9 @@ mod tests {
                         HvDataExprKind::Conditional { .. }
                     ));
                 }
-                _ => panic!("expected AddBlock"),
+                other => panic!("expected AddBlock, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -987,9 +987,9 @@ mod tests {
                         }
                     ));
                 }
-                _ => panic!("expected AddBlock"),
+                other => panic!("expected AddBlock, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1003,11 +1003,11 @@ mod tests {
                         assert_eq!(func, "max");
                         assert_eq!(args.len(), 2);
                     }
-                    _ => panic!("expected Call"),
+                    other => panic!("expected Call, got {other:?}"),
                 },
-                _ => panic!("expected AddBlock"),
+                other => panic!("expected AddBlock, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1018,11 +1018,11 @@ mod tests {
             StmtKind::Def { body, .. } => match body.kind.as_ref() {
                 ExprKind::AddBlock { expr } => match expr.kind.as_ref() {
                     HvDataExprKind::ListLit(elems) => assert_eq!(elems.len(), 3),
-                    _ => panic!("expected ListLit"),
+                    other => panic!("expected ListLit, got {other:?}"),
                 },
-                _ => panic!("expected AddBlock"),
+                other => panic!("expected AddBlock, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1033,11 +1033,11 @@ mod tests {
             StmtKind::Def { body, .. } => match body.kind.as_ref() {
                 ExprKind::AddBlock { expr } => match expr.kind.as_ref() {
                     HvDataExprKind::TupleLit(elems) => assert_eq!(elems.len(), 2),
-                    _ => panic!("expected TupleLit"),
+                    other => panic!("expected TupleLit, got {other:?}"),
                 },
-                _ => panic!("expected AddBlock"),
+                other => panic!("expected AddBlock, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1055,9 +1055,9 @@ mod tests {
                         }
                     ));
                 }
-                _ => panic!("expected AddBlock"),
+                other => panic!("expected AddBlock, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1075,9 +1075,9 @@ mod tests {
                         }
                     ));
                 }
-                _ => panic!("expected AddBlock"),
+                other => panic!("expected AddBlock, got {other:?}"),
             },
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1092,7 +1092,7 @@ mod tests {
                 // Outer + is TANGLE Add (union)
                 assert!(matches!(body.kind.as_ref(), ExprKind::Add(_, _)));
             }
-            _ => panic!("expected Def"),
+            other => panic!("expected Def, got {other:?}"),
         }
     }
 
@@ -1109,12 +1109,12 @@ mod tests {
                         HvStmtKind::Assignment { target, .. } => {
                             assert_eq!(target, "x");
                         }
-                        _ => panic!("expected Assignment"),
+                        other => panic!("expected Assignment, got {other:?}"),
                     },
-                    _ => panic!("expected Stmt"),
+                    other => panic!("expected Stmt, got {other:?}"),
                 }
             }
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1132,12 +1132,12 @@ mod tests {
                         } => {
                             assert_eq!(else_stmts.len(), 1);
                         }
-                        _ => panic!("expected If with else"),
+                        other => panic!("expected If with else, got {other:?}"),
                     },
-                    _ => panic!("expected Stmt"),
+                    other => panic!("expected Stmt, got {other:?}"),
                 }
             }
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1149,9 +1149,9 @@ mod tests {
                 HvItemKind::Stmt(stmt) => {
                     assert!(matches!(stmt.kind, HvStmtKind::While { .. }));
                 }
-                _ => panic!("expected Stmt"),
+                other => panic!("expected Stmt, got {other:?}"),
             },
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1162,11 +1162,11 @@ mod tests {
             StmtKind::HarvardBlock { program } => match &program.items[0].kind {
                 HvItemKind::Stmt(stmt) => match &stmt.kind {
                     HvStmtKind::For { var, .. } => assert_eq!(var, "i"),
-                    _ => panic!("expected For"),
+                    other => panic!("expected For, got {other:?}"),
                 },
-                _ => panic!("expected Stmt"),
+                other => panic!("expected Stmt, got {other:?}"),
             },
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1179,11 +1179,11 @@ mod tests {
                     HvStmtKind::Return { value: Some(v) } => {
                         assert!(matches!(v.kind.as_ref(), HvDataExprKind::IntLit(42)));
                     }
-                    _ => panic!("expected Return with value"),
+                    other => panic!("expected Return with value, got {other:?}"),
                 },
-                _ => panic!("expected Stmt"),
+                other => panic!("expected Stmt, got {other:?}"),
             },
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1194,11 +1194,11 @@ mod tests {
             StmtKind::HarvardBlock { program } => match &program.items[0].kind {
                 HvItemKind::Stmt(stmt) => match &stmt.kind {
                     HvStmtKind::Print { args } => assert_eq!(args.len(), 2),
-                    _ => panic!("expected Print"),
+                    other => panic!("expected Print, got {other:?}"),
                 },
-                _ => panic!("expected Stmt"),
+                other => panic!("expected Stmt, got {other:?}"),
             },
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1218,9 +1218,9 @@ mod tests {
                         Some(HvType::Basic(ref s)) if s == "Int"
                     ));
                 }
-                _ => panic!("expected FnDecl"),
+                other => panic!("expected FnDecl, got {other:?}"),
             },
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1235,9 +1235,9 @@ mod tests {
                     assert_eq!(decl.purity, Some(HvPurity::Total));
                     assert_eq!(decl.body.len(), 1); // single if stmt
                 }
-                _ => panic!("expected FnDecl"),
+                other => panic!("expected FnDecl, got {other:?}"),
             },
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1250,9 +1250,9 @@ mod tests {
                     assert_eq!(name, "math");
                     assert_eq!(body.len(), 1);
                 }
-                _ => panic!("expected Module"),
+                other => panic!("expected Module, got {other:?}"),
             },
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1265,9 +1265,9 @@ mod tests {
                     assert_eq!(path, &["math", "utils"]);
                     assert_eq!(alias.as_deref(), Some("mu"));
                 }
-                _ => panic!("expected Import"),
+                other => panic!("expected Import, got {other:?}"),
             },
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1279,7 +1279,7 @@ mod tests {
             StmtKind::HarvardBlock { program } => {
                 assert_eq!(program.items.len(), 1);
             }
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1300,11 +1300,11 @@ mod tests {
                             HvReversibleStmtKind::SubAssign { .. }
                         ));
                     }
-                    _ => panic!("expected ReverseBlock"),
+                    other => panic!("expected ReverseBlock, got {other:?}"),
                 },
-                _ => panic!("expected Stmt"),
+                other => panic!("expected Stmt, got {other:?}"),
             },
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1322,12 +1322,12 @@ mod tests {
                             assert_eq!(params.len(), 1);
                             assert!(matches!(ret.as_ref(), HvType::Basic(s) if s == "Int"));
                         }
-                        _ => panic!("expected Func type"),
+                        other => panic!("expected Func type, got {other:?}"),
                     }
                 }
-                _ => panic!("expected FnDecl"),
+                other => panic!("expected FnDecl, got {other:?}"),
             },
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1342,11 +1342,11 @@ mod tests {
                     Some(HvType::List(inner)) => {
                         assert!(matches!(inner.as_ref(), HvType::Basic(s) if s == "Int"));
                     }
-                    _ => panic!("expected List type"),
+                    other => panic!("expected List type, got {other:?}"),
                 },
-                _ => panic!("expected FnDecl"),
+                other => panic!("expected FnDecl, got {other:?}"),
             },
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1357,11 +1357,11 @@ mod tests {
             StmtKind::HarvardBlock { program } => match &program.items[0].kind {
                 HvItemKind::Stmt(stmt) => match &stmt.kind {
                     HvStmtKind::Return { value: None } => {}
-                    _ => panic!("expected Return with no value"),
+                    other => panic!("expected Return with no value, got {other:?}"),
                 },
-                _ => panic!("expected Stmt"),
+                other => panic!("expected Stmt, got {other:?}"),
             },
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1372,7 +1372,7 @@ mod tests {
             StmtKind::HarvardBlock { program } => {
                 assert_eq!(program.items.len(), 3);
             }
-            _ => panic!("expected HarvardBlock"),
+            other => panic!("expected HarvardBlock, got {other:?}"),
         }
     }
 
@@ -1412,7 +1412,7 @@ mod tests {
             StmtKind::Assert { expr } => {
                 assert!(matches!(expr.kind.as_ref(), ExprKind::Eq(_, _)));
             }
-            _ => panic!("expected Assert"),
+            other => panic!("expected Assert, got {other:?}"),
         }
     }
 }
