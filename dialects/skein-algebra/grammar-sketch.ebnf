@@ -1,0 +1,101 @@
+(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk> *)
+(* Skein Algebra — Tangle DSL sketch                                              *)
+(*                                                                                 *)
+(* Models the skein module Sk(M; R) of a 3-manifold M over a ring R, with        *)
+(* algebra structure (stacking) when M = Σ × [0,1].                              *)
+(* Three built-in skein styles: jones, homflypt, alexander.                       *)
+(* Parameters are symbolic ring variables (A, q, z, a, …) that appear            *)
+(* as coefficients in linear combinations.                                         *)
+
+program      = { declaration } ;
+
+declaration  = skein_decl
+             | parameter_decl
+             | generator_decl
+             | relation_decl
+             | binding
+             | expression_stmt
+             | evaluate_stmt
+             | lookup_stmt ;
+
+(* ----------------------------------------------------------------- *)
+(* Top-level declarations                                             *)
+(* ----------------------------------------------------------------- *)
+
+(* Choose which skein relation family is active for this block *)
+skein_decl   = "using" , skein_style , ";" ;
+skein_style  = "jones" | "homflypt" | "alexander" | "custom" ;
+
+(* Declare symbolic ring parameters *)
+parameter_decl = "parameter" , identifier , { "," , identifier } , ";" ;
+
+(* Declare named framed-link generators *)
+generator_decl = "generator" , identifier , { "," , identifier } , ":" , "framed_link" , ";" ;
+
+(* Assert a skein relation (local rewriting rule) *)
+(* LHS may be a product or a special crossing form *)
+relation_decl  = "relation" , "(" , expression , ")" , "=" , expression , ";" ;
+
+(* Named let-binding *)
+binding        = "let" , identifier , "=" , expression , ";" ;
+
+(* Bare expression as statement *)
+expression_stmt = expression , ";" ;
+
+(* Evaluate a skein element in a named representation *)
+evaluate_stmt  = "evaluate" , "(" , rep_name , "," , expression , ")" , ";" ;
+rep_name       = identifier ;        (* e.g. jones_rep, homflypt_rep, burau_rep *)
+
+(* Query Skein.jl for a stored polynomial or knot record *)
+lookup_stmt    = "lookup" , string , rep_name , ";" ;
+
+(* ----------------------------------------------------------------- *)
+(* Expressions — linear combinations over the parameter ring          *)
+(* ----------------------------------------------------------------- *)
+
+expression    = add_expr ;
+add_expr      = mult_expr , { ( "+" | "-" ) , mult_expr } ;
+mult_expr     = unary_expr , { "*" , unary_expr } ;       (* algebra product = stacking *)
+unary_expr    = "-" , unary_expr
+              | atom ;
+
+atom          = coefficient                                 (* ring element: integer or identifier *)
+              | link_literal                                (* L+, L-, L0, L∞ — crossing forms *)
+              | "unknot"                                    (* identity of the skein algebra *)
+              | "empty_link"                                (* unit of the module (= 1 in S³) *)
+              | "delta"                                     (* loop value: -A² - A⁻² in Jones *)
+              | identifier                                  (* named generator or binding *)
+              | "(" , expression , ")"
+              | power_expr ;
+
+(* Ring coefficient: integer literal or parameter variable with optional exponent *)
+coefficient   = integer
+              | identifier , "^" , ( integer | "-" , integer ) ;
+
+(* Canonical crossing forms in a skein triple *)
+link_literal  = "L+"                                       (* positive crossing *)
+              | "L-"                                        (* negative crossing *)
+              | "L0"                                        (* A-smoothing / oriented smoothing *)
+              | "Linf" ;                                    (* B-smoothing / ∞-smoothing *)
+
+(* Power of an algebra element *)
+power_expr    = "(" , expression , ")" , "^" , integer ;
+
+(* ----------------------------------------------------------------- *)
+(* Lexical rules                                                      *)
+(* ----------------------------------------------------------------- *)
+
+identifier    = letter , { letter | digit | "_" } ;
+integer       = [ "-" ] , digit , { digit } ;
+string        = '"' , { any_char_except_quote } , '"' ;
+letter        = "a" | ... | "z" | "A" | ... | "Z" ;
+digit         = "0" | ... | "9" ;
+
+(* Comments: -- to end of line *)
+
+(* Reserved words:
+   using  jones  homflypt  alexander  custom
+   parameter  generator  framed_link  relation  let  evaluate  lookup
+   unknot  empty_link  delta  L+  L-  L0  Linf
+*)

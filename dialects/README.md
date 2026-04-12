@@ -27,10 +27,12 @@ multi-DSL host, not a single-purpose language.
 
 | Dialect | Status | Domain |
 |---|---|---|
-| [krl](../../krl/) (separate repo) | grade E | Knot resolution — construct, transform, resolve, retrieve |
+| [krl](../../krl/) (separate repo) | grade E → D (v0.2 parser 2026-04-12) | Knot resolution — construct, transform, resolve, retrieve |
 | [braid-calculus](braid-calculus/) | sketch | Artin braid group Bn calculus |
 | [quantum-circuit](quantum-circuit/) | sketch | Quantum circuit compositional calculus |
 | [string-diagram](string-diagram/) | sketch | Monoidal/braided category string diagrams |
+| [virtual-knot](virtual-knot/) | sketch | Kauffman virtual knot calculus (extends braid-calculus with virtual crossings) |
+| [skein-algebra](skein-algebra/) | sketch | Skein algebra calculus (Jones/HOMFLY-PT/Alexander; connects to Skein.jl + KnotTheory.jl) |
 
 ## Relationship to KRL
 

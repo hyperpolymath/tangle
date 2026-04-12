@@ -1,0 +1,77 @@
+(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk> *)
+(* Virtual Knot Calculus — Tangle DSL sketch *)
+(* Extends braid-calculus with Kauffman virtual crossings (1999). *)
+(* Virtual crossings ν have no sign and obey virtual Reidemeister moves. *)
+(* The forbidden move (classical crossing passing a virtual one via R3) *)
+(* is explicitly EXCLUDED from the semantics — performing it would       *)
+(* collapse virtual knot theory to classical knot theory.                *)
+
+program       = { statement } ;
+statement     = binding | expression_stmt | predicate_stmt ;
+
+binding          = "let" , identifier , "=" , expression , ";" ;
+expression_stmt  = expression , ";" ;
+predicate_stmt   = predicate , ";" ;
+
+(* ----------------------------------------------------------------- *)
+(* Expressions                                                        *)
+(* ----------------------------------------------------------------- *)
+
+expression    = mult_expr ;
+mult_expr     = unary_expr , { "*" , unary_expr } ;    (* braid multiplication *)
+unary_expr    = "inverse" , unary_expr
+              | closure_expr ;
+closure_expr  = "close" , atom
+              | atom ;
+
+atom          = classical_gen
+              | virtual_gen
+              | gauss_literal
+              | identifier
+              | "(" , expression , ")" ;
+
+(* Classical crossing generators — same as braid-calculus *)
+classical_gen = "sigma"     , integer          (* positive crossing at strand n *)
+              | "sigma_inv" , integer ;        (* negative crossing at strand n *)
+
+(* Virtual crossing generator — unsigned; obeys only virtual Reidemeister moves *)
+virtual_gen   = "virtual" , integer ;
+
+(* ----------------------------------------------------------------- *)
+(* Gauss code literals (alternative to braid-word notation)          *)
+(* Each entry records: O/U (over/under), label, sign (+/-),          *)
+(* or "virtual" for an unsigned virtual entry.                       *)
+(* ----------------------------------------------------------------- *)
+
+gauss_literal = "gauss_code" , "[" , gauss_entry , { "," , gauss_entry } , "]" ;
+gauss_entry   = ( "O" | "U" ) , integer , ( "+" | "-" )  (* classical signed entry *)
+              | "virtual" , integer ;                      (* unsigned virtual entry *)
+
+(* ----------------------------------------------------------------- *)
+(* Predicates                                                         *)
+(* ----------------------------------------------------------------- *)
+
+predicate     = is_classical
+              | is_markov_equivalent
+              | is_detour_equivalent ;
+
+is_classical         = "is_classical?"       , "(" , expression , ")" ;
+is_markov_equivalent = "is_markov_equivalent?" , "(" , expression , "," , expression , ")" ;
+is_detour_equivalent = "is_detour_equivalent?" , "(" , expression , "," , expression , ")" ;
+
+(* ----------------------------------------------------------------- *)
+(* Lexical rules                                                      *)
+(* ----------------------------------------------------------------- *)
+
+identifier    = letter , { letter | digit | "_" } ;
+integer       = digit , { digit } ;
+letter        = "a" | ... | "z" | "A" | ... | "Z" ;
+digit         = "0" | ... | "9" ;
+
+(* Comments: -- to end of line *)
+
+(* Reserved words:
+   let  close  inverse  sigma  sigma_inv  virtual  gauss_code
+   O  U  is_classical?  is_markov_equivalent?  is_detour_equivalent?
+*)
