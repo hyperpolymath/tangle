@@ -2,6 +2,8 @@
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 
 = EXPLAINME: Tangle
+:toc: preamble
+:icons: font
 
 == A Turing-Complete Topological Programming Language
 
@@ -47,4 +49,23 @@ not via a traditional proof.
 
 | `examples/`
 | Worked examples demonstrating language features
+|===
+
+== Dogfooded Across The Account
+
+[cols="1,2,2", options="header"]
+|===
+| Technology / Pattern | Role in Tangle | Also Used In
+
+| *Idris2 ABI + Zig FFI standard*
+| `src/abi/` -- Idris2 dependent types for braid-word ASTs, isotopy witness types, and ABI contracts; `ffi/` Zig FFI layer for C-compatible runtime interop
+| gossamer, burble, ephapax, hypatia, verisimdb, typed-wasm -- universal pattern across the estate
+
+| *Rust compiler pipeline*
+| `src/rust/` -- lexer, parser (EBNF grammar at `src/tangle.ebnf`), type checker (`Word[n]` vs `Tangle[A,B]`), evaluator, WASM codegen target
+| ephapax (17-crate Rust workspace), panic-attack (Rust analysis engine), k9-rs, a2ml-rs
+
+| *Formal semantics + topological domain*
+| `docs/spec/FORMAL-SEMANTICS.md` -- denotational model for tangle programs; isotopy-class equivalence; Reidemeister-move reduction rules
+| KnotTheory.jl (Julia knot invariant library), KRLAdapter.jl (KRL bridging), typed-wasm (structured braid-type analogues), standards (spec-first documentation pattern)
 |===
