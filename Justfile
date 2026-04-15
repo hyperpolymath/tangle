@@ -2,6 +2,8 @@
 # Justfile for tangle
 
 # Default recipe — list available commands
+import? "contractile.just"
+
 default:
     @just --list
 
