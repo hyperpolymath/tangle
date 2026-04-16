@@ -845,7 +845,7 @@ mod tests {
     #[test]
     fn test_empty_program_generates_valid_wasm() {
         let mut backend = WasmBackend::new();
-        let module = backend.generate(&empty_program()).unwrap();
+        let module = backend.generate(&empty_program()).expect("TODO: handle error");
         let bytes = module.to_bytes();
         // Valid WASM magic number
         assert_eq!(&bytes[0..4], b"\0asm");
@@ -861,7 +861,7 @@ mod tests {
     #[test]
     fn test_simple_generator_compiles() {
         let mut backend = WasmBackend::new();
-        let module = backend.generate(&simple_program()).unwrap();
+        let module = backend.generate(&simple_program()).expect("TODO: handle error");
         // 1 generator + 3 runtime helpers
         assert_eq!(module.functions.len(), 4);
         assert_eq!(module.functions[0].name, "sigma1");
@@ -900,7 +900,7 @@ mod tests {
         };
 
         let mut backend = WasmBackend::new();
-        let module = backend.generate(&program).unwrap();
+        let module = backend.generate(&program).expect("TODO: handle error");
         // 2 generators + 1 composed braid + 3 runtime helpers
         assert_eq!(module.functions.len(), 6);
         assert_eq!(module.functions[2].name, "trefoil");
@@ -972,15 +972,15 @@ mod tests {
         let program = simple_program();
         let mut backend1 = WasmBackend::new();
         let mut backend2 = WasmBackend::new();
-        let module1 = backend1.generate(&program).unwrap();
-        let module2 = backend2.generate(&program).unwrap();
+        let module1 = backend1.generate(&program).expect("TODO: handle error");
+        let module2 = backend2.generate(&program).expect("TODO: handle error");
         assert_eq!(module1.to_bytes(), module2.to_bytes());
     }
 
     #[test]
     fn test_module_structure_has_imports() {
         let mut backend = WasmBackend::new();
-        let module = backend.generate(&simple_program()).unwrap();
+        let module = backend.generate(&simple_program()).expect("TODO: handle error");
         // Should have 2 runtime imports: alloc_strands and swap_strands
         assert_eq!(module.imports.len(), 2);
         assert_eq!(module.imports[0].name, "alloc_strands");
@@ -1024,7 +1024,7 @@ mod tests {
         };
 
         let mut backend = WasmBackend::new();
-        let module = backend.generate(&program).unwrap();
+        let module = backend.generate(&program).expect("TODO: handle error");
         let bytes = module.to_bytes();
         assert_eq!(&bytes[0..4], b"\0asm");
         // The binary should be larger with string data

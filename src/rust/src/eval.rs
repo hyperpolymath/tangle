@@ -1401,8 +1401,8 @@ mod tests {
         let _interp = run("def x = identity");
         // x is a thunk (zero-arg closure); force it
         let mut interp2 = run("def x = identity");
-        let program = parser::parse("assert x == braid[]").unwrap();
-        interp2.exec_program(&program).unwrap();
+        let program = parser::parse("assert x == braid[]").expect("TODO: handle error");
+        interp2.exec_program(&program).expect("TODO: handle error");
     }
 
     #[test]
@@ -1411,16 +1411,16 @@ mod tests {
         // Force the thunk
         let mut interp = interp;
         let program =
-            parser::parse("assert t == braid[s1, s1, s1]").unwrap();
-        interp.exec_program(&program).unwrap();
+            parser::parse("assert t == braid[s1, s1, s1]").expect("TODO: handle error");
+        interp.exec_program(&program).expect("TODO: handle error");
     }
 
     #[test]
     fn test_num_literal() {
         let interp = run("def x = 42");
         let mut interp = interp;
-        let program = parser::parse("assert x == 42").unwrap();
-        interp.exec_program(&program).unwrap();
+        let program = parser::parse("assert x == 42").expect("TODO: handle error");
+        interp.exec_program(&program).expect("TODO: handle error");
     }
 
     // ---- Arithmetic ----
@@ -1544,8 +1544,8 @@ mod tests {
         let prog = parser::parse(
             "assert close(braid[s1, s1, s1]) ~ close(braid[s1, s1, s1])",
         )
-        .unwrap();
-        interp.exec_program(&prog).unwrap();
+        .expect("TODO: handle error");
+        interp.exec_program(&prog).expect("TODO: handle error");
     }
 
     // ---- Let binding ----

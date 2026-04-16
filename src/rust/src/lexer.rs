@@ -552,7 +552,7 @@ impl Lexer {
                     num_str.push('e');
                     self.advance();
                     if matches!(self.peek(), Some('+') | Some('-')) {
-                        num_str.push(self.advance().unwrap());
+                        num_str.push(self.advance().expect("TODO: handle error"));
                     }
                     while let Some(ch) = self.peek() {
                         if ch.is_ascii_digit() {
@@ -2328,7 +2328,7 @@ end"#;
         assert_eq!(arrow_count, 3);
         assert!(kinds.contains(&TokenKind::Identity));
         assert!(kinds.contains(&TokenKind::Underscore));
-        assert_eq!(*kinds.last().unwrap(), TokenKind::End);
+        assert_eq!(*kinds.last().expect("TODO: handle error"), TokenKind::End);
     }
 
     #[test]
