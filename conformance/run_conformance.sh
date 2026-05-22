@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Conformance test runner for Tangle
 #
 # Invokes the Tangle compiler (OCaml/Menhir) on every file in valid/

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // lexer.rs — TANGLE + TANGLE-JTV tokenizer with mode switching
 //
 // Three lexing modes:
@@ -1436,7 +1436,7 @@ end"#;
 
     // =====================================================================
     // Comprehensive lexer tests
-    // SPDX-License-Identifier: PMPL-1.0-or-later
+    // SPDX-License-Identifier: MPL-2.0
     // =====================================================================
 
     // ----- 1. All TANGLE keywords (exhaustive) -----

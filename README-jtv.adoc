@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = TANGLE-JTV: Julia-the-Viper Injection Blocks
 :toc:
 :source-highlighter: highlight.js
@@ -196,7 +196,7 @@ See `SONNET-TASKS.md` for detailed implementation plan.
 
 == License
 
-PMPL-1.0-or-later — see `LICENSE`.
+MPL-2.0 — see `LICENSE`.
 
 == Author
 

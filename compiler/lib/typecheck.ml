@@ -1,4 +1,4 @@
-(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* SPDX-License-Identifier: MPL-2.0 *)
 (* typecheck.ml — Type checker for the core TANGLE language.
  *
  * Implements all 37 typing rules from docs/spec/FORMAL-SEMANTICS.md (Part 1).

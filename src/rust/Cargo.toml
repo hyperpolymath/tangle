@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # tanglec — TANGLE language compiler
 
 [package]
@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"]
 description = "Compiler for TANGLE, a Turing-complete topological programming language"
-license = "LicenseRef-PMPL-1.0-or-later"
+license = "LicenseRef-MPL-2.0"
 repository = "https://github.com/hyperpolymath/tangle"
 
 [dependencies]

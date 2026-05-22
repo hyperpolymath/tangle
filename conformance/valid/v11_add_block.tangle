@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Conformance: add{} block (JTV data injection)
 
 def x = add{ 1 + 2 + 3 }

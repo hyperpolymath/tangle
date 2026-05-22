@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Conformance: braid literal constructing Word[n]
 
 def w2 = braid[s1]

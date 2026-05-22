@@ -1,5 +1,5 @@
 (* @taxonomy: compiler/parser *)
-(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* SPDX-License-Identifier: MPL-2.0 *)
 (* parser.mly — Menhir grammar for the core TANGLE language.
  *
  * Translates the EBNF from src/tangle.ebnf into an LR(1) grammar.

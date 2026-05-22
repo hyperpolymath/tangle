@@ -1,5 +1,5 @@
 (lang dune 3.0)
-; SPDX-License-Identifier: PMPL-1.0-or-later
+; SPDX-License-Identifier: MPL-2.0
 ; dune-project — TANGLE compiler build configuration
 (name tangle)
 (using menhir 2.1)

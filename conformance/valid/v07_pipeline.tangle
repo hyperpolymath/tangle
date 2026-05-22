@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Conformance: pipeline operator (>> lower precedence than .)
 
 def composed = braid[s1] . braid[s2] >> braid[s3] . braid[s1]

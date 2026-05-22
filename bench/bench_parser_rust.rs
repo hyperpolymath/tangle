@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // bench_parser_rust.rs -- Parser benchmark harness for Tangle (Rust)
 //
 // Generates a large synthetic Tangle program and measures

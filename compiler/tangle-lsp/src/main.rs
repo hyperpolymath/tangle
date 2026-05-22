@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! tangle-lsp — Language Server Protocol server for the Tangle language.
 //!
 //! Provides diagnostics, hover, completion, go-to-definition, and document

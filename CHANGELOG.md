@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: PMPL-1.0-or-later -->
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <!-- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk> -->
 
 # Changelog — Tangle
@@ -41,7 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### RSR compliance
 - A2ML migration of state files
-- SPDX headers, license migration to PMPL-1.0-or-later
+- SPDX headers, license migration to MPL-2.0
 - stapeln.toml container definition
 - Standard workflow deployment (codeql, hypatia, scorecard, etc.)
 

@@ -65,7 +65,7 @@ Bot-specific instructions for rhodibot, echidnabot, sustainabot, glambot, seambo
 4. **Word[n] != Tangle[A,B]** - These are different types with implicit coercion (D1.1)
 5. **~ means isotopy** - Mathematical equality in FR(T), NOT AST comparison (D1.2)
 6. **add{} is TOTAL** - No loops, no recursion, no side effects (D2.1)
-7. **License consistency** - All code PMPL-1.0-or-later
+7. **License consistency** - All code MPL-2.0
 8. **Author attribution** - Always "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
 
 ## REPOSITORY STRUCTURE
@@ -122,7 +122,7 @@ tangle/
 - **Format Version:** 1.0.0
 - **Created:** 2026-02-12
 - **Maintained By:** Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-- **License:** PMPL-1.0-or-later
+- **License:** MPL-2.0
 - **Protocol:** https://github.com/hyperpolymath/0-ai-gatekeeper-protocol
 
 ## Taxonomy Index

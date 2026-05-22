@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // parser.rs — Recursive descent parser for TANGLE
 //
 // Precedence (lowest to highest):

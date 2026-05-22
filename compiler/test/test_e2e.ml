@@ -1,4 +1,4 @@
-(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* SPDX-License-Identifier: MPL-2.0 *)
 (* test_e2e.ml — End-to-end test suite for the TANGLE pipeline.
  *
  * Each test case runs the full chain:

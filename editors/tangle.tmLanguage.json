@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-  "_comment": "SPDX-License-Identifier: PMPL-1.0-or-later",
+  "_comment": "SPDX-License-Identifier: MPL-2.0",
   "_description": "TextMate grammar for TANGLE — Turing-complete topological programming language",
   "name": "Tangle",
   "scopeName": "source.tangle",

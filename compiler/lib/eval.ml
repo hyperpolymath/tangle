@@ -1,4 +1,4 @@
-(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* SPDX-License-Identifier: MPL-2.0 *)
 (* eval.ml — Tree-walking interpreter for the core TANGLE language.
  *
  * Evaluates TANGLE programs by walking the AST produced by the parser.

@@ -1,4 +1,4 @@
-(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* SPDX-License-Identifier: MPL-2.0 *)
 (* test_parser.ml — Test suite for the TANGLE lexer and parser.
  *
  * Tests cover:

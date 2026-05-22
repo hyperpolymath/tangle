@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: PMPL-1.0-or-later
+-- SPDX-License-Identifier: MPL-2.0
 -- Tangle.lean — Mechanized type safety proofs for the TANGLE language core.
 --
 -- Models the core type system from docs/spec/FORMAL-SEMANTICS.md:

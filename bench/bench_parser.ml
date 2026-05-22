@@ -1,4 +1,4 @@
-(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* SPDX-License-Identifier: MPL-2.0 *)
 (* bench_parser.ml — Parser benchmark harness for Tangle (OCaml/Menhir)
  *
  * Generates a large synthetic Tangle program and measures

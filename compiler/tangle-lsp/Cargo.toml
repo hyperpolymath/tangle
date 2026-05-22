@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # tangle-lsp — Language Server Protocol implementation for the Tangle
 # topological braid language.
 
@@ -6,7 +6,7 @@
 name = "tangle-lsp"
 version = "0.1.0"
 edition = "2021"
-license = "PMPL-1.0-or-later"
+license = "MPL-2.0"
 description = "LSP server for the Tangle topological braid language"
 repository = "https://github.com/hyperpolymath/nextgen-languages"
 authors = ["Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"]

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # tensor_product.tangle — Horizontal tensor and multi-strand braids
 #
 # The tensor product (|) places two braids side by side, shifting

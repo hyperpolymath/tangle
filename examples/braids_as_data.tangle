@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # braids_as_data.tangle — Braid words as an algebraic data structure
 #
 # Tangle's most distinctive feature: braid words ARE the data structure.

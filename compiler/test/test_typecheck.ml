@@ -1,4 +1,4 @@
-(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* SPDX-License-Identifier: MPL-2.0 *)
 (* test_typecheck.ml — Test suite for the TANGLE type checker.
  *
  * Tests cover all 37 typing rules from FORMAL-SEMANTICS.md:

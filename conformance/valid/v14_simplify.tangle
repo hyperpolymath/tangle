@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Conformance: simplify (Reidemeister moves) and isotopy
 
 assert simplify(braid[s1, s1^-1]) == identity

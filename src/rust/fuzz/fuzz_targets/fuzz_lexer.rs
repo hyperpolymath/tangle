@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Fuzz target for the Tangle (Rust) lexer.
 //!
 //! Invariant: the lexer must NEVER panic on ANY input. It should always

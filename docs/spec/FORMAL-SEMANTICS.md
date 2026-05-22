@@ -3,7 +3,7 @@
 Specification Version: 1.0.0-draft
 Date: 2026-02-12
 Authors: Jonathan D.A. Jewell, Claude (Opus 4.6)
-License: PMPL-1.0-or-later
+License: MPL-2.0
 
 This document defines the formal typing rules and operational semantics for
 TANGLE (Part 1) and TANGLE-JTV (Part 2). All rules reference locked decisions

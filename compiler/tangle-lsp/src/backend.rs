@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Backend implementation for the Tangle LSP server.
 //!
 //! Handles all LSP lifecycle events and request dispatching.  Document state

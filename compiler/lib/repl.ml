@@ -1,4 +1,4 @@
-(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* SPDX-License-Identifier: MPL-2.0 *)
 (* repl.ml — Interactive Read-Eval-Print Loop for the TANGLE language.
  *
  * Reads a line of input, lexes, parses, type-checks, and evaluates it,

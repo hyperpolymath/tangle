@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # turing_complete.tangle — Demonstrating Turing completeness
 #
 # TANGLE is Turing complete via pattern matching + recursion on Words (D1.24).

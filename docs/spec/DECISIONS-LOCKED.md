@@ -1138,7 +1138,7 @@ Items explicitly noted for post-MVP review:
 - **Decisions Locked**: 2026-02-12
 - **Total Decisions**: 37 (25 TANGLE + 11 TANGLE-JTV + 1 deferred)
 - **Authors**: Jonathan D.A. Jewell, Claude (Sonnet 4.5, Opus 4.6)
-- **License**: PMPL-1.0-or-later
+- **License**: MPL-2.0
 - **Status**: Ready for formal specification writing
 
 ---

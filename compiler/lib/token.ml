@@ -1,4 +1,4 @@
-(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* SPDX-License-Identifier: MPL-2.0 *)
 (* token.ml — Token type definitions for the TANGLE lexer.
  *
  * Each constructor corresponds to a terminal symbol in the TANGLE EBNF

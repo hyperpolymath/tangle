@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Fuzz testing for the Tangle (Rust) lexer and parser
 
 [package]

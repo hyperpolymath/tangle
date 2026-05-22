@@ -1,4 +1,4 @@
-(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* SPDX-License-Identifier: MPL-2.0 *)
 (* test_property.ml — Property tests for the TANGLE parser.
  *
  * The core property tested is:

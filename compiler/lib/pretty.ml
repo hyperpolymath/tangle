@@ -1,4 +1,4 @@
-(* SPDX-License-Identifier: PMPL-1.0-or-later *)
+(* SPDX-License-Identifier: MPL-2.0 *)
 (* pretty.ml — AST pretty printer for TANGLE.
  *
  * Produces a human-readable, indented representation of a parsed
