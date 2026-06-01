@@ -34,7 +34,7 @@ Cross-references use `[[A-TG-N.M]]` syntax, resolved here.
 | A-TG-7.1 | MATH | Word problem in the braid group `B_n` is solvable in polynomial time (Birman–Ko–Lee / Garside normal form) | TG-7 | Birman–Ko–Lee 1998; _A New Approach to the Word and Conjugacy Problems in the Braid Groups_ |
 | A-TG-8.1 | DESIGN | Each dialect's grammar is a strict superset of core's EBNF (`tangle.ebnf`) | TG-8 | `dialects/*/grammar.ebnf` |
 | A-TG-8.2 | DESIGN | Each dialect's typing rules are additive (new constructors + their typing rules only; no modification of existing rules) | TG-8 | Per-dialect spec |
-| A-TG-9.1 | DESIGN | `tangle-lsp` reuses `compiler/lib/typecheck.ml` as the diagnostic engine (no LSP-only diagnostics) | TG-9 | `compiler/tangle-lsp/src/` |
+| A-TG-9.1 | DESIGN | `tangle-lsp` emits diagnostics in four documented categories (`PARSE_ERROR`, `MISSPELLING_HINT`, `STRUCTURAL_HINT`, `NAME_HINT`); only `PARSE_ERROR` corresponds to a grammar-level rejection. The other three are LSP-only by design (Option B from TG-9 audit; Option A — full refinement via FFI to `typecheck.ml` — remains queued at #28). Each emission site is tagged in the `Diagnostic.source` field as `tangle-lsp[CATEGORY]`. | TG-9 | `compiler/tangle-lsp/src/backend.rs`; `compiler/tangle-lsp/docs/lsp-diagnostic-categories.md` |
 
 ---
 
@@ -69,3 +69,4 @@ date and reason.
 | Date | Change | By |
 |------|--------|-----|
 | 2026-06-01 | Initial registry, scoped to Tangle metatheory + implementation refinement obligations | Audit |
+| 2026-06-01 | A-TG-9.1 reformulated under TG-9 Option B — accept LSP-only categories instead of pretending refinement (full Option A queued at #28). See `compiler/tangle-lsp/docs/lsp-diagnostic-categories.md`. | TG-9 Option B PR |
