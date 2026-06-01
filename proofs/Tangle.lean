@@ -214,7 +214,10 @@ private theorem foldl_max_init (gs : List Generator) (a : Nat) :
     max a (gs.foldl (fun acc g => max acc (g.idx + 1)) 0) := by
   induction gs generalizing a with
   | nil => simp [List.foldl]
-  | cons g rest ih => simp only [List.foldl]; rw [ih, ih (max 0 _)]; omega
+  | cons g rest ih =>
+    simp only [List.foldl]
+    rw [ih (max a (g.idx + 1)), ih (max 0 (g.idx + 1))]
+    omega
 
 theorem generatorWidth_append (gs₁ gs₂ : List Generator) :
     generatorWidth (gs₁ ++ gs₂) = max (generatorWidth gs₁) (generatorWidth gs₂) := by
@@ -226,11 +229,14 @@ private theorem foldl_shift_init (gs : List Generator) (n a : Nat) :
     if gs = [] then a
     else max a (gs.foldl (fun acc g => max acc (g.idx + 1)) 0 + n) := by
   induction gs generalizing a with
-  | nil => simp [List.foldl, List.map]
+  | nil => simp
   | cons g rest ih =>
-    simp only [List.map, List.foldl, List.cons_ne_nil, ↓reduceIte]
-    rw [ih, foldl_max_init rest (max 0 _)]
-    split <;> omega
+    simp only [List.map, List.foldl, List.cons_ne_nil, if_false]
+    rw [ih]
+    rw [foldl_max_init rest (max 0 (g.idx + 1))]
+    by_cases hrest : rest = []
+    · subst hrest; simp [List.foldl]; omega
+    · simp [hrest]; omega
 
 theorem generatorWidth_shift (gs : List Generator) (n : Nat) :
     generatorWidth (shiftGenerators gs n) =
@@ -252,39 +258,39 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
   | tBool => left; exact .boolLit _
   | tIdentity => left; exact .identity
   | tBraid => left; exact .braidLit _
-  | tComposeWord _ _ _ n m h₁ h₂ =>
+  | tComposeWord _ _ n m h₁ h₂ =>
     right
     rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
     · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
       · rcases canonical_word hv₁ h₁ with ⟨rfl, _⟩ | ⟨gs₁, rfl, _⟩ <;>
         rcases canonical_word hv₂ h₂ with ⟨rfl, _⟩ | ⟨gs₂, rfl, _⟩
         · exact ⟨_, .composeIdId⟩
-        · exact ⟨_, .composeIdL gs₂⟩
-        · exact ⟨_, .composeIdR gs₁⟩
+        · exact ⟨_, .composeIdL⟩
+        · exact ⟨_, .composeIdR⟩
         · exact ⟨_, .composeWords⟩
       · exact ⟨_, .composeRight hv₁ hs₂⟩
     · exact ⟨_, .composeLeft hs₁⟩
-  | tTensorWord _ _ _ n m h₁ h₂ =>
+  | tTensorWord _ _ n m h₁ h₂ =>
     right
     rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
     · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
       · rcases canonical_word hv₁ h₁ with ⟨rfl, _⟩ | ⟨gs₁, rfl, _⟩ <;>
         rcases canonical_word hv₂ h₂ with ⟨rfl, _⟩ | ⟨gs₂, rfl, _⟩
         · exact ⟨_, .tensorIdId⟩
-        · exact ⟨_, .tensorIdL gs₂⟩
-        · exact ⟨_, .tensorIdR gs₁⟩
+        · exact ⟨_, .tensorIdL⟩
+        · exact ⟨_, .tensorIdR⟩
         · exact ⟨_, .tensorWords⟩
       · exact ⟨_, .tensorRight hv₁ hs₂⟩
     · exact ⟨_, .tensorLeft hs₁⟩
-  | tPipeline _ _ _ _ _ => exact .inr ⟨_, .pipeline⟩
-  | tCloseWord _ _ n h =>
+  | tPipeline _ _ _ _ => exact .inr ⟨_, .pipeline⟩
+  | tCloseWord _ n h =>
     right
     rcases progress h with hv | ⟨e', hs⟩
     · rcases canonical_word hv h with ⟨rfl, _⟩ | ⟨gs, rfl, _⟩
       · exact ⟨_, .closeId⟩
       · exact ⟨_, .closeWord⟩
     · exact ⟨_, .closeStep hs⟩
-  | tAddNum _ _ _ h₁ h₂ =>
+  | tAddNum _ _ h₁ h₂ =>
     right
     rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
     · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
@@ -293,7 +299,7 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
         exact ⟨_, .addNums⟩
       · exact ⟨_, .addRight hv₁ hs₂⟩
     · exact ⟨_, .addLeft hs₁⟩
-  | tEqWord _ _ _ n h₁ h₂ =>
+  | tEqWord _ _ n h₁ h₂ =>
     right
     rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
     · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
@@ -305,7 +311,7 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
         · exact ⟨_, .eqBraids⟩
       · exact ⟨_, .eqRight hv₁ hs₂⟩
     · exact ⟨_, .eqLeft hs₁⟩
-  | tEqNum _ _ _ h₁ h₂ =>
+  | tEqNum _ _ h₁ h₂ =>
     right
     rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
     · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
@@ -314,7 +320,7 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
         exact ⟨_, .eqNums⟩
       · exact ⟨_, .eqRight hv₁ hs₂⟩
     · exact ⟨_, .eqLeft hs₁⟩
-  | tEqStr _ _ _ h₁ h₂ =>
+  | tEqStr _ _ h₁ h₂ =>
     right
     rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
     · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
@@ -334,61 +340,66 @@ theorem preservation : HasType [] e τ → Step e e' → HasType [] e' τ := by
   intro ht hs
   induction hs generalizing τ with
   | composeLeft hs ih =>
-    cases ht with | tComposeWord _ _ _ n m h₁ h₂ => exact .tComposeWord _ _ _ n m (ih h₁) h₂
+    cases ht with | tComposeWord _ _ n m h₁ h₂ => exact .tComposeWord _ _ _ n m (ih h₁) h₂
   | composeRight _ hs ih =>
-    cases ht with | tComposeWord _ _ _ n m h₁ h₂ => exact .tComposeWord _ _ _ n m h₁ (ih h₂)
+    cases ht with | tComposeWord _ _ n m h₁ h₂ => exact .tComposeWord _ _ _ n m h₁ (ih h₂)
   | composeWords =>
-    cases ht with | tComposeWord _ _ _ n m h₁ h₂ =>
-    cases h₁; cases h₂; exact .tBraid _ _
+    cases ht with | tComposeWord _ _ n m h₁ h₂ =>
+    cases h₁; cases h₂
+    rw [← generatorWidth_append]
+    exact .tBraid _ _
   | composeIdL =>
-    cases ht with | tComposeWord _ _ _ n m h₁ h₂ =>
+    cases ht with | tComposeWord _ _ n m h₁ h₂ =>
     cases h₁ with | tIdentity => simp at *; exact h₂
   | composeIdR =>
-    cases ht with | tComposeWord _ _ _ n m h₁ h₂ =>
+    cases ht with | tComposeWord _ _ n m h₁ h₂ =>
     cases h₂ with | tIdentity => simp at *; exact h₁
   | composeIdId =>
-    cases ht with | tComposeWord _ _ _ n m h₁ h₂ =>
+    cases ht with | tComposeWord _ _ n m h₁ h₂ =>
     cases h₁; cases h₂; exact .tIdentity _
   | tensorLeft hs ih =>
-    cases ht with | tTensorWord _ _ _ n m h₁ h₂ => exact .tTensorWord _ _ _ n m (ih h₁) h₂
+    cases ht with | tTensorWord _ _ n m h₁ h₂ => exact .tTensorWord _ _ _ n m (ih h₁) h₂
   | tensorRight _ hs ih =>
-    cases ht with | tTensorWord _ _ _ n m h₁ h₂ => exact .tTensorWord _ _ _ n m h₁ (ih h₂)
+    cases ht with | tTensorWord _ _ n m h₁ h₂ => exact .tTensorWord _ _ _ n m h₁ (ih h₂)
   | tensorWords =>
-    cases ht with | tTensorWord _ _ _ n m h₁ h₂ =>
+    cases ht with | tTensorWord _ _ n m h₁ h₂ =>
     cases h₁; cases h₂
-    simp [generatorWidth_append, generatorWidth_shift]
-    split
-    · rename_i hempty; subst hempty; simp [generatorWidth, List.foldl]; exact .tBraid _ _
-    · rename_i hne
-      have := HasType.tBraid ([] : Ctx) _
-      simp [generatorWidth_append, generatorWidth_shift, hne] at this ⊢
-      exact .tBraid _ _
+    rename_i gs₁ gs₂
+    have hgoal :
+        generatorWidth (gs₁ ++ shiftGenerators gs₂ (generatorWidth gs₁))
+          = generatorWidth gs₁ + generatorWidth gs₂ := by
+      rw [generatorWidth_append, generatorWidth_shift]
+      by_cases hempty : gs₂ = []
+      · subst hempty; simp [generatorWidth, List.foldl]
+      · simp [hempty]; omega
+    rw [← hgoal]
+    exact .tBraid _ _
   | tensorIdL =>
-    cases ht with | tTensorWord _ _ _ n m h₁ h₂ =>
+    cases ht with | tTensorWord _ _ n m h₁ h₂ =>
     cases h₁ with | tIdentity => simp at *; exact h₂
   | tensorIdR =>
-    cases ht with | tTensorWord _ _ _ n m h₁ h₂ =>
+    cases ht with | tTensorWord _ _ n m h₁ h₂ =>
     cases h₂ with | tIdentity => simp at *; exact h₁
   | tensorIdId =>
-    cases ht with | tTensorWord _ _ _ n m h₁ h₂ =>
+    cases ht with | tTensorWord _ _ n m h₁ h₂ =>
     cases h₁; cases h₂; exact .tIdentity _
-  | pipeline => cases ht with | tPipeline _ _ _ _ h => exact h
-  | closeStep hs ih => cases ht with | tCloseWord _ _ n h => exact .tCloseWord _ _ n (ih h)
+  | pipeline => cases ht with | tPipeline _ _ _ h => exact h
+  | closeStep hs ih => cases ht with | tCloseWord _ n h => exact .tCloseWord _ _ n (ih h)
   | closeWord => cases ht with | tCloseWord => exact .tIdentity _
   | closeId => cases ht with | tCloseWord => exact .tIdentity _
-  | addLeft hs ih => cases ht with | tAddNum _ _ _ h₁ h₂ => exact .tAddNum _ _ _ (ih h₁) h₂
-  | addRight _ hs ih => cases ht with | tAddNum _ _ _ h₁ h₂ => exact .tAddNum _ _ _ h₁ (ih h₂)
+  | addLeft hs ih => cases ht with | tAddNum _ _ h₁ h₂ => exact .tAddNum _ _ _ (ih h₁) h₂
+  | addRight _ hs ih => cases ht with | tAddNum _ _ h₁ h₂ => exact .tAddNum _ _ _ h₁ (ih h₂)
   | addNums => cases ht with | tAddNum => exact .tNum _ _
   | eqLeft hs ih =>
     cases ht with
-    | tEqWord _ _ _ n h₁ h₂ => exact .tEqWord _ _ _ n (ih h₁) h₂
-    | tEqNum _ _ _ h₁ h₂ => exact .tEqNum _ _ _ (ih h₁) h₂
-    | tEqStr _ _ _ h₁ h₂ => exact .tEqStr _ _ _ (ih h₁) h₂
+    | tEqWord _ _ n h₁ h₂ => exact .tEqWord _ _ _ n (ih h₁) h₂
+    | tEqNum _ _ h₁ h₂ => exact .tEqNum _ _ _ (ih h₁) h₂
+    | tEqStr _ _ h₁ h₂ => exact .tEqStr _ _ _ (ih h₁) h₂
   | eqRight _ hs ih =>
     cases ht with
-    | tEqWord _ _ _ n h₁ h₂ => exact .tEqWord _ _ _ n h₁ (ih h₂)
-    | tEqNum _ _ _ h₁ h₂ => exact .tEqNum _ _ _ h₁ (ih h₂)
-    | tEqStr _ _ _ h₁ h₂ => exact .tEqStr _ _ _ h₁ (ih h₂)
+    | tEqWord _ _ n h₁ h₂ => exact .tEqWord _ _ _ n h₁ (ih h₂)
+    | tEqNum _ _ h₁ h₂ => exact .tEqNum _ _ _ h₁ (ih h₂)
+    | tEqStr _ _ h₁ h₂ => exact .tEqStr _ _ _ h₁ (ih h₂)
   | eqNums => cases ht with
     | tEqNum => exact .tBool _ _
     | tEqWord _ _ _ _ h₁ => cases h₁
@@ -423,7 +434,7 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
   intro hs₁ hs₂
   induction hs₁ generalizing e₂ with
   | composeLeft hs ih => cases hs₂ with
-    | composeLeft h => exact congrArg (·.compose _) (ih h)
+    | composeLeft h => rw [ih h]
     | composeRight hv _ => exact absurd hs (value_no_step hv)
     | composeWords => exact absurd hs (value_no_step (.braidLit _))
     | composeIdL => exact absurd hs (value_no_step .identity)
@@ -453,7 +464,7 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
     | composeRight _ h => exact absurd h (value_no_step .identity)
     | composeIdId => rfl
   | tensorLeft hs ih => cases hs₂ with
-    | tensorLeft h => exact congrArg (·.tensor _) (ih h)
+    | tensorLeft h => rw [ih h]
     | tensorRight hv _ => exact absurd hs (value_no_step hv)
     | tensorWords => exact absurd hs (value_no_step (.braidLit _))
     | tensorIdL => exact absurd hs (value_no_step .identity)
@@ -494,7 +505,7 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
     | closeStep h => exact absurd h (value_no_step .identity)
     | closeId => rfl
   | addLeft hs ih => cases hs₂ with
-    | addLeft h => exact congrArg (·.add _) (ih h)
+    | addLeft h => rw [ih h]
     | addRight hv _ => exact absurd hs (value_no_step hv)
     | addNums => exact absurd hs (value_no_step (.num _))
   | addRight hv hs ih => cases hs₂ with
@@ -506,7 +517,7 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
     | addRight _ h => exact absurd h (value_no_step (.num _))
     | addNums => rfl
   | eqLeft hs ih => cases hs₂ with
-    | eqLeft h => exact congrArg (·.eq _) (ih h)
+    | eqLeft h => rw [ih h]
     | eqRight hv _ => exact absurd hs (value_no_step hv)
     | eqNums => exact absurd hs (value_no_step (.num _))
     | eqStrs => exact absurd hs (value_no_step (.str _))

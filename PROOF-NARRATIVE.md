@@ -52,7 +52,22 @@ delivered slice and the remaining gap explicit.
 ## 2. Proven now
 
 All 16 results live in [`proofs/Tangle.lean`](proofs/Tangle.lean)
-(Lean 4, ~560 LoC, no `sorry`, no `axiom`).
+(Lean 4, ~570 LoC, no `sorry`, no `axiom`).
+
+**Build oracle.** As of 2026-06-01 (PR closing TG-0, hyperpolymath/tangle#32),
+the file is verified at every push/PR by `.github/workflows/lean-proofs.yml`,
+pinned to `proofs/lean-toolchain = leanprover/lean4:v4.14.0`. Empirical
+result on the original 2026-03-30 commit: 121 errors on every Lean 4
+version 4.9–4.16 — the file had never compiled. The current commit
+returns **0 errors**, verified locally on v4.10/4.11/4.12/4.13/4.14/4.15/4.16,
+with CI gating both `lean Tangle.lean` and a `sorry`/`axiom`/`admit`
+slippage check. Future drift will fail CI rather than land silently.
+
+**Echo-types audit.** Per [[proofs-must-check-and-cross-doc-echo-types]]:
+echo-types is fibre-based loss-with-residue semantics — it has zero
+lambda-calculus / progress / preservation content. Verdict:
+**NOT-RELEVANT** for all four theorems below. Recorded once at
+`feedback_echo_types_audit_krl_tangle_quandledb_not_relevant.md`.
 
 ### Theorems (the main results)
 
