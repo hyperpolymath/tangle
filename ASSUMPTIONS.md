@@ -70,3 +70,4 @@ date and reason.
 |------|--------|-----|
 | 2026-06-01 | Initial registry, scoped to Tangle metatheory + implementation refinement obligations | Audit |
 | 2026-06-01 | A-TG-9.1 reformulated under TG-9 Option B — accept LSP-only categories instead of pretending refinement (full Option A queued at #28). See `compiler/tangle-lsp/docs/lsp-diagnostic-categories.md`. | TG-9 Option B PR |
+| 2026-06-01 | TG-0 closed: `proofs/Tangle.lean` previously had 121 errors on Lean 4.9–4.16 (commit 8ce7be7 was committed without ever compiling). Repaired: 62/51 diff, 0 errors on Lean 4.10–4.16. CI oracle at `.github/workflows/lean-proofs.yml` pinned to v4.14.0 via `proofs/lean-toolchain`. Sorry/axiom/admit slippage check added. Closes hyperpolymath/tangle#32. | TG-0 PR |
