@@ -726,4 +726,141 @@ theorem echo_roundtrip_typed (e : Expr) (n : Nat) (h : HasType [] e (.word n)) :
     HasType [] (.lower (.echoClose e)) (.word 0) :=
   ⟨.tResidue _ _ _ _ (.tEchoClose _ _ n h), .tLower _ _ _ _ (.tEchoClose _ _ n h)⟩
 
+-- ═══════════════════════════════════════════════════════════════════════
+-- TG-2: DECIDABILITY OF TYPE CHECKING
+-- ═══════════════════════════════════════════════════════════════════════
+--
+-- `infer Γ e` computes the unique type of `e` in context `Γ`, or `none` if `e`
+-- is ill-typed.  It is the algorithmic counterpart of the `HasType` relation:
+-- `infer_sound` + `infer_complete` prove the two equivalent, hence `HasType`
+-- is decidable (`decidableHasType`) and types are unique (`type_unique`).
+-- This is the specification `compiler/lib/typecheck.ml` is meant to refine
+-- (TG-3).
+
+/-- Algorithmic type inference: total, structurally recursive on the AST. -/
+def infer (Γ : Ctx) : Expr → Option Ty
+  | .num _       => some .num
+  | .str _       => some .str
+  | .boolLit _   => some .bool
+  | .identity    => some (.word 0)
+  | .braidLit gs => some (.word (generatorWidth gs))
+  | .compose e₁ e₂ =>
+      match infer Γ e₁, infer Γ e₂ with
+      | some (.word n), some (.word m) => some (.word (max n m))
+      | _, _ => none
+  | .tensor e₁ e₂ =>
+      match infer Γ e₁, infer Γ e₂ with
+      | some (.word n), some (.word m) => some (.word (n + m))
+      | _, _ => none
+  | .pipeline e₁ e₂ =>
+      match infer Γ e₁, infer Γ e₂ with
+      | some (.word n), some (.word m) => some (.word (max n m))
+      | _, _ => none
+  | .close e =>
+      match infer Γ e with
+      | some (.word _) => some (.word 0)
+      | _ => none
+  | .add e₁ e₂ =>
+      match infer Γ e₁, infer Γ e₂ with
+      | some .num, some .num => some .num
+      | _, _ => none
+  | .eq e₁ e₂ =>
+      match infer Γ e₁, infer Γ e₂ with
+      | some (.word n), some (.word m) => if n = m then some .bool else none
+      | some .num, some .num => some .bool
+      | some .str, some .str => some .bool
+      | _, _ => none
+  | .echoClose e =>
+      match infer Γ e with
+      | some (.word n) => some (.echo (.word n) (.word 0))
+      | _ => none
+  | .lower e =>
+      match infer Γ e with
+      | some (.echo _ τ) => some τ
+      | _ => none
+  | .residue e =>
+      match infer Γ e with
+      | some (.echo ρ _) => some ρ
+      | _ => none
+
+/-- **Completeness**: every typing derivation is computed by `infer`. -/
+theorem infer_complete {Γ : Ctx} {e : Expr} {τ : Ty} :
+    HasType Γ e τ → infer Γ e = some τ := by
+  intro h
+  induction h <;> simp_all [infer]
+
+/-- **Soundness**: every successful inference is a valid typing derivation. -/
+theorem infer_sound {Γ : Ctx} {e : Expr} {τ : Ty} :
+    infer Γ e = some τ → HasType Γ e τ := by
+  induction e generalizing Γ τ with
+  | num _ => intro h; simp only [infer, Option.some.injEq] at h; subst h; exact .tNum _ _
+  | str _ => intro h; simp only [infer, Option.some.injEq] at h; subst h; exact .tStr _ _
+  | boolLit _ => intro h; simp only [infer, Option.some.injEq] at h; subst h; exact .tBool _ _
+  | identity => intro h; simp only [infer, Option.some.injEq] at h; subst h; exact .tIdentity _
+  | braidLit _ => intro h; simp only [infer, Option.some.injEq] at h; subst h; exact .tBraid _ _
+  | compose e₁ e₂ ih₁ ih₂ =>
+      intro h; simp only [infer] at h; split at h
+      next n m he₁ he₂ =>
+        injection h with h; subst h; exact .tComposeWord _ _ _ n m (ih₁ he₁) (ih₂ he₂)
+      all_goals simp at h
+  | tensor e₁ e₂ ih₁ ih₂ =>
+      intro h; simp only [infer] at h; split at h
+      next n m he₁ he₂ =>
+        injection h with h; subst h; exact .tTensorWord _ _ _ n m (ih₁ he₁) (ih₂ he₂)
+      all_goals simp at h
+  | pipeline e₁ e₂ ih₁ ih₂ =>
+      intro h; simp only [infer] at h; split at h
+      next n m he₁ he₂ =>
+        injection h with h; subst h
+        exact .tPipeline _ _ _ _ (.tComposeWord _ _ _ n m (ih₁ he₁) (ih₂ he₂))
+      all_goals simp at h
+  | close e ih =>
+      intro h; simp only [infer] at h; split at h
+      next k he => injection h with h; subst h; exact .tCloseWord _ _ k (ih he)
+      all_goals simp at h
+  | add e₁ e₂ ih₁ ih₂ =>
+      intro h; simp only [infer] at h; split at h
+      next he₁ he₂ => injection h with h; subst h; exact .tAddNum _ _ _ (ih₁ he₁) (ih₂ he₂)
+      all_goals simp at h
+  | eq e₁ e₂ ih₁ ih₂ =>
+      intro h; simp only [infer] at h; split at h
+      next n m he₁ he₂ =>
+        split at h
+        next hnm =>
+          injection h with h; subst h; subst hnm
+          exact .tEqWord _ _ _ _ (ih₁ he₁) (ih₂ he₂)
+        next => simp at h
+      next he₁ he₂ => injection h with h; subst h; exact .tEqNum _ _ _ (ih₁ he₁) (ih₂ he₂)
+      next he₁ he₂ => injection h with h; subst h; exact .tEqStr _ _ _ (ih₁ he₁) (ih₂ he₂)
+      all_goals simp at h
+  | echoClose e ih =>
+      intro h; simp only [infer] at h; split at h
+      next k he => injection h with h; subst h; exact .tEchoClose _ _ k (ih he)
+      all_goals simp at h
+  | lower e ih =>
+      intro h; simp only [infer] at h; split at h
+      next ρ τ' he => injection h with h; subst h; exact .tLower _ _ ρ τ' (ih he)
+      all_goals simp at h
+  | residue e ih =>
+      intro h; simp only [infer] at h; split at h
+      next ρ τ' he => injection h with h; subst h; exact .tResidue _ _ ρ τ' (ih he)
+      all_goals simp at h
+
+/-- **Decidability of type checking** (TG-2): `infer` decides `HasType`. -/
+theorem infer_iff_hasType {Γ : Ctx} {e : Expr} {τ : Ty} :
+    infer Γ e = some τ ↔ HasType Γ e τ :=
+  ⟨infer_sound, infer_complete⟩
+
+/-- Types are unique: `HasType` assigns at most one type per (context, term). -/
+theorem type_unique {Γ : Ctx} {e : Expr} {τ₁ τ₂ : Ty}
+    (h₁ : HasType Γ e τ₁) (h₂ : HasType Γ e τ₂) : τ₁ = τ₂ := by
+  have p₁ := infer_complete h₁
+  have p₂ := infer_complete h₂
+  rw [p₁] at p₂
+  exact Option.some.inj p₂
+
+/-- Type checking in the empty context is decidable. -/
+instance decidableHasType (e : Expr) (τ : Ty) : Decidable (HasType [] e τ) :=
+  decidable_of_iff (infer [] e = some τ) infer_iff_hasType
+
 end Tangle
