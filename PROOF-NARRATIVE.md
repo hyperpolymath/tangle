@@ -63,11 +63,24 @@ returns **0 errors**, verified locally on v4.10/4.11/4.12/4.13/4.14/4.15/4.16,
 with CI gating both `lean Tangle.lean` and a `sorry`/`axiom`/`admit`
 slippage check. Future drift will fail CI rather than land silently.
 
-**Echo-types audit.** Per [[proofs-must-check-and-cross-doc-echo-types]]:
-echo-types is fibre-based loss-with-residue semantics — it has zero
-lambda-calculus / progress / preservation content. Verdict:
-**NOT-RELEVANT** for all four theorems below. Recorded once at
-`feedback_echo_types_audit_krl_tangle_quandledb_not_relevant.md`.
+**Echo-types — now integrated as a type-system feature (2026-06-03).**
+The earlier audit (`feedback_echo_types_audit_krl_tangle_quandledb_not_relevant.md`)
+correctly found that the *external* echo-types Agda library
+(hyperpolymath/echo-types) carries no lambda-calculus / progress /
+preservation content of its own, so it does not perturb the four base
+theorems. That verdict stands for the external library. **Tangle now
+ships its own simply-typed shadow of echo-types as a first-class feature
+of the type system** (`Ty.echo ρ τ`, constructors `echoClose`/`lower`/
+`residue`, rules `T-Echo-Close`/`T-Lower`/`T-Residue`). The motivation is
+intrinsic to Tangle: `close : Word[n] → Word[0]` is the canonical lossy
+map (the analogue of echo-types' `collapse : Bool → ⊤`), and the echo
+layer makes that loss recoverable at the type level — the residue
+`Word[n]` is retained and projected back out. Progress, Preservation,
+Determinism, and Type Safety in `proofs/Tangle.lean` now **cover the echo
+fragment**, and three capstone theorems (`echo_lower_collapses`,
+`echo_residue_recovers`, `echo_distinguishes_collapsed`) reproduce
+echo-types' `no-section` / `sigma-distinguishes` barrier inside Tangle.
+See PROOF-NARRATIVE §2.5.
 
 ### Theorems (the main results)
 
@@ -103,13 +116,56 @@ themselves proofs of the form "these are the rules"):
 - **`Expr`** — the AST (mirrors `compiler/lib/ast.ml`)
 - **`Ty`** — `num`, `str`, `bool`, `word n`
 - **`IsValue`** — value predicate
-- **`HasType`** — typing judgment, 13 rules (`tNum`, `tStr`, `tBool`,
+- **`HasType`** — typing judgment, 16 rules (`tNum`, `tStr`, `tBool`,
   `tIdentity`, `tBraid`, `tComposeWord`, `tTensorWord`, `tPipeline`,
-  `tCloseWord`, `tAddNum`, `tEqWord`, `tEqNum`, `tEqStr`)
-- **`Step`** — small-step semantics, 26 rules
+  `tCloseWord`, `tAddNum`, `tEqWord`, `tEqNum`, `tEqStr`, plus the echo
+  rules `tEchoClose`, `tLower`, `tResidue`)
+- **`Step`** — small-step semantics, 31 rules (26 base + 5 echo)
 
 These are the formal spec the OCaml implementation is meant to refine
 (see TG-3 below).
+
+## 2.5 Echo types — structured loss as a type-system feature
+
+Echo types are integrated into the core type system (not a separate
+layer). The design mirrors echo-types' fibre definition
+`Echo f y := Σ (x : A), f x ≡ y` (hyperpolymath/echo-types,
+`Echo.agda`) in Tangle's simply-typed setting, motivated by Tangle's own
+canonical lossy operation.
+
+**Why `close`.** `close : Word[n] → Word[0]` collapses every braid word
+to the identity, discarding the word — exactly the kind of
+information-destroying map echo-types is about (cf. `collapse : Bool → ⊤`
+in `EchoResidue.agda`). Echo types make that loss *recoverable in the
+type system*.
+
+| Construct | Form | Echo-types analogue |
+|-----------|------|---------------------|
+| Type former | `Ty.echo ρ τ` — a `τ`-result carrying a `ρ`-residue | `Echo f y` (ρ = domain witness, τ = codomain point) |
+| `echoClose e` | `Word[n] → Echo (Word[n]) (Word[0])` | `echo-intro close` |
+| `lower e` | `Echo ρ τ → τ` — project to result (forget residue) | the collapse / `proj₂` |
+| `residue e` | `Echo ρ τ → ρ` — recover the witness braid | `proj₁` |
+
+**Metatheory.** Progress, Preservation, Determinism, and Type Safety all
+cover `echoClose`/`lower`/`residue` (the inductions are exhaustive over
+the extended `Step`/`HasType`). A new canonical-forms lemma
+`canonical_echo` characterises echo values; `value_no_step` became
+structurally recursive because a formed echo `echoClose v` is a value iff
+its residue `v` is.
+
+**Capstone theorems** (the echo-types *content*, `Tangle.lean` §ECHO-TYPES):
+- `echo_lower_collapses` — every closed braid lowers to `identity`
+  (the lossy step, re-derived through the echo).
+- `echo_residue_recovers` — `residue (echoClose (braidLit gs)) ⟶ braidLit gs`
+  (the witness is retained; `close` becomes reversible).
+- `echo_distinguishes_collapsed` — distinct braids collapse to the *same*
+  identity under `lower`, yet their residues stay distinct. This is the
+  Tangle instantiation of echo-types' non-injectivity barrier
+  (`collapse-residue-same` + `no-section-collapse-to-residue`).
+- `echo_roundtrip_typed` — the round-trip is well-typed: `residue` returns
+  a `Word[n]`, `lower` returns a `Word[0]`.
+
+Tracked as obligation **TG-10** in PROOF-NEEDS.md (landed).
 
 ## 3. Remaining obligations (the narrative arc)
 

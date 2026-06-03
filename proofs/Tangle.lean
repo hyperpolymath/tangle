@@ -3,27 +3,38 @@
 --
 -- Models the core type system from docs/spec/FORMAL-SEMANTICS.md:
 --   - Syntax: Expr inductive with Num, Str, Bool, Identity, BraidLit,
---     Compose (.), Tensor (|), Pipeline (>>), Close, Add, Eq
+--     Compose (.), Tensor (|), Pipeline (>>), Close, Add, Eq, and the echo
+--     constructors EchoClose, Lower, Residue (structured loss)
 --   - Typing: HasType inductive relation covering T-Num, T-Str, T-Bool,
 --     T-Identity, T-Braid, T-Compose-Word, T-Tensor-Word, T-Pipeline,
---     T-Close-Word, T-Add-Num, T-Eq-Word, T-Eq-Num, T-Eq-Str
---   - Semantics: Small-step Step relation with 26 rules
+--     T-Close-Word, T-Add-Num, T-Eq-Word, T-Eq-Num, T-Eq-Str, and the echo
+--     rules T-Echo-Close, T-Lower, T-Residue
+--   - Semantics: Small-step Step relation (31 rules incl. echo)
 --
 -- Theorems proven:
 --   1. Progress:     well-typed closed terms are values or can step
 --   2. Preservation: stepping preserves types
 --   3. Determinism:  if e ⟶ e₁ and e ⟶ e₂ then e₁ = e₂
 --   4. Type Safety:  corollary combining progress and preservation
+--   All four cover the echo-types fragment as well as the let-free base.
 --
--- Note on T-Let: The let binding requires a generalized de Bruijn
--- substitution lemma (standard POPLmark machinery). The core fragment
--- without let already covers the knot-theoretic operations (compose,
--- tensor, close) that are central to TANGLE. A future version can add
--- the full substitution machinery from e.g. Autosubst.
+-- Echo types (structured loss): `close : Word[n] → Word[0]` is TANGLE's
+-- canonical lossy map.  The echo type former `Ty.echo ρ τ` and the
+-- constructors `echoClose`/`lower`/`residue` integrate echo-types
+-- (hyperpolymath/echo-types: `Echo f y := Σ (x : A), f x ≡ y`) directly into
+-- the type system: closing a braid through an echo retains the residue, so the
+-- otherwise-irreversible `close` becomes reversible at the type level.  See the
+-- §ECHO-TYPES section at the foot of the file for the residue-recovery and
+-- non-injectivity theorems.
 --
--- Developed for Lean 4. Tested against leanprover/lean4:v4.x.
+-- Note on T-Let: the let binding requires a generalized de Bruijn substitution
+-- lemma (standard POPLmark machinery); tracked as TG-1.  The fragment here
+-- already covers the knot-theoretic operations (compose, tensor, close) and the
+-- echo-types layer that are central to TANGLE.
 --
--- Author: Jonathan D.A. Jewell, Claude (Opus 4.6)
+-- Developed for Lean 4. Tested against leanprover/lean4:v4.14.0.
+--
+-- Author: Jonathan D.A. Jewell, Claude
 
 namespace Tangle
 
@@ -45,6 +56,12 @@ inductive Ty where
   | str  : Ty              -- Str: strings
   | bool : Ty              -- Bool: booleans
   | word : Nat → Ty        -- Word[n]: braid word on n strands
+  | echo : Ty → Ty → Ty    -- Echo[ρ, τ]: structured-loss type — a τ-result
+                           --   carrying a ρ-typed residue.  The simply-typed
+                           --   shadow of echo-types' `Echo f y := Σ (x : A), f x ≡ y`
+                           --   (hyperpolymath/echo-types, Echo.agda): ρ is the
+                           --   residue (domain witness x : A), τ is the result
+                           --   (codomain point y).  See §ECHO-TYPES below.
   deriving DecidableEq, Repr
 
 /-- Core expression AST. Mirrors the OCaml AST in compiler/lib/ast.ml.
@@ -62,6 +79,12 @@ inductive Expr where
   | close    : Expr → Expr                  -- closure
   | add      : Expr → Expr → Expr           -- numeric addition
   | eq       : Expr → Expr → Expr           -- structural equality
+  -- Echo types (structured loss).  `close` is TANGLE's canonical lossy map
+  -- (Word[n] ↠ Word[0]); these constructors give it a residue-retaining
+  -- variant and the two projections, mirroring echo-types' fibre/residue API.
+  | echoClose : Expr → Expr                 -- echo-preserving closure (echo-intro for `close`)
+  | lower     : Expr → Expr                 -- project an echo to its result (forget residue)
+  | residue   : Expr → Expr                 -- project an echo to its residue (recover witness)
   deriving DecidableEq, Repr
 
 /-- Value predicate: fully reduced expressions. -/
@@ -71,6 +94,7 @@ inductive IsValue : Expr → Prop where
   | boolLit  : ∀ b, IsValue (.boolLit b)
   | identity : IsValue .identity
   | braidLit : ∀ gs, IsValue (.braidLit gs)
+  | echoClose : ∀ {v}, IsValue v → IsValue (.echoClose v)  -- a formed echo (residue v retained)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- WIDTH
@@ -136,6 +160,15 @@ inductive HasType : Ctx → Expr → Ty → Prop where
       HasType Γ e₁ .str →
       HasType Γ e₂ .str →
       HasType Γ (.eq e₁ e₂) .bool
+  | tEchoClose (Γ : Ctx) (e : Expr) (n : Nat) :             -- [T-Echo-Close]
+      HasType Γ e (.word n) →                               --   echo-intro for `close`:
+      HasType Γ (.echoClose e) (.echo (.word n) (.word 0))  --   residue Word[n], result Word[0]
+  | tLower (Γ : Ctx) (e : Expr) (ρ τ : Ty) :                -- [T-Lower]  (project to result)
+      HasType Γ e (.echo ρ τ) →
+      HasType Γ (.lower e) τ
+  | tResidue (Γ : Ctx) (e : Expr) (ρ τ : Ty) :              -- [T-Residue] (recover witness)
+      HasType Γ e (.echo ρ τ) →
+      HasType Γ (.residue e) ρ
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- SMALL-STEP SEMANTICS
@@ -180,14 +213,25 @@ inductive Step : Expr → Expr → Prop where
   | eqIdId       : Step (.eq .identity .identity) (.boolLit true)
   | eqIdBraid    : Step (.eq .identity (.braidLit gs)) (.boolLit (gs == []))
   | eqBraidId    : Step (.eq (.braidLit gs) .identity) (.boolLit (gs == []))
+  -- Echo (structured loss): closure that retains its residue, and the two
+  -- projections.  `lower` collapses to the codomain point (identity : Word[0]);
+  -- `residue` recovers the witness braid — the fibre element echo-types keeps.
+  | echoCloseStep : Step e e' → Step (.echoClose e) (.echoClose e')
+  | lowerStep     : Step e e' → Step (.lower e) (.lower e')
+  | lowerEcho     : IsValue v → Step (.lower (.echoClose v)) .identity
+  | residueStep   : Step e e' → Step (.residue e) (.residue e')
+  | residueEcho   : IsValue v → Step (.residue (.echoClose v)) v
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- LEMMAS
 -- ═══════════════════════════════════════════════════════════════════════
 
-/-- Values are in normal form. -/
-theorem value_no_step : IsValue e → Step e e' → False := by
-  intro hv hs; cases hv <;> cases hs
+/-- Values are in normal form.  Recursive on the value structure because a
+    formed echo `echoClose v` is a value exactly when its residue `v` is. -/
+theorem value_no_step {e e' : Expr} (hv : IsValue e) (hs : Step e e') : False := by
+  induction hv generalizing e' with
+  | echoClose _ ih => cases hs with | echoCloseStep h => exact ih h
+  | _ => cases hs
 
 /-- Canonical forms for Num. -/
 theorem canonical_num : IsValue e → HasType [] e .num → ∃ n, e = .num n := by
@@ -207,6 +251,21 @@ theorem canonical_word : IsValue e → HasType [] e (.word n) →
   | boolLit => cases ht
   | identity => left; cases ht with | tIdentity => exact ⟨rfl, rfl⟩
   | braidLit gs => right; cases ht with | tBraid => exact ⟨gs, rfl, rfl⟩
+  | echoClose _ => cases ht
+
+/-- Canonical forms for Echo[ρ, τ]: a value of echo type is a formed echo
+    `echoClose v` whose residue `v` is itself a value.  This is the canonical
+    form that lets `lower`/`residue` make progress. -/
+theorem canonical_echo : IsValue e → HasType [] e (.echo ρ τ) →
+    ∃ v, e = .echoClose v ∧ IsValue v := by
+  intro hv ht
+  cases hv with
+  | num => cases ht
+  | str => cases ht
+  | boolLit => cases ht
+  | identity => cases ht
+  | braidLit => cases ht
+  | echoClose hv => exact ⟨_, rfl, hv⟩
 
 -- Width distribution lemmas
 private theorem foldl_max_init (gs : List Generator) (a : Nat) :
@@ -329,6 +388,23 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
         exact ⟨_, .eqStrs⟩
       · exact ⟨_, .eqRight hv₁ hs₂⟩
     · exact ⟨_, .eqLeft hs₁⟩
+  | tEchoClose _ n h =>
+    -- `echoClose e` is a value once `e` is (the residue is retained); else it steps.
+    rcases progress h with hv | ⟨e', hs⟩
+    · exact .inl (.echoClose hv)
+    · exact .inr ⟨_, .echoCloseStep hs⟩
+  | tLower _ ρ τ h =>
+    right
+    rcases progress h with hv | ⟨e', hs⟩
+    · obtain ⟨v, rfl, hv'⟩ := canonical_echo hv h
+      exact ⟨_, .lowerEcho hv'⟩
+    · exact ⟨_, .lowerStep hs⟩
+  | tResidue _ ρ τ h =>
+    right
+    rcases progress h with hv | ⟨e', hs⟩
+    · obtain ⟨v, rfl, hv'⟩ := canonical_echo hv h
+      exact ⟨_, .residueEcho hv'⟩
+    · exact ⟨_, .residueStep hs⟩
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- THEOREM 2: PRESERVATION
@@ -424,6 +500,21 @@ theorem preservation : HasType [] e τ → Step e e' → HasType [] e' τ := by
     | tEqWord => exact .tBool _ _
     | tEqNum _ _ _ h₁ => cases h₁
     | tEqStr _ _ _ h₁ => cases h₁
+  -- Echo congruence preserves the (residue Word[n], result Word[0]) echo type.
+  | echoCloseStep hs ih =>
+    cases ht with | tEchoClose _ n h => exact .tEchoClose _ _ n (ih h)
+  | lowerStep hs ih =>
+    cases ht with | tLower _ _ _ h => exact .tLower _ _ _ _ (ih h)
+  | residueStep hs ih =>
+    cases ht with | tResidue _ _ _ h => exact .tResidue _ _ _ _ (ih h)
+  -- `lower` yields the codomain point identity : Word[0]; the echo type forces τ = Word[0].
+  | lowerEcho hv =>
+    cases ht with | tLower _ _ _ h =>
+    cases h with | tEchoClose _ n _ => exact .tIdentity _
+  -- `residue` recovers the witness, whose type is exactly the echo's residue type.
+  | residueEcho hv =>
+    cases ht with | tResidue _ _ _ h =>
+    cases h with | tEchoClose _ n h' => exact h'
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- THEOREM 3: DETERMINISM
@@ -558,6 +649,22 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
     | eqLeft h => exact absurd h (value_no_step (.braidLit _))
     | eqRight _ h => exact absurd h (value_no_step .identity)
     | eqBraidId => rfl
+  -- Echo: congruence is deterministic by IH; the computation rules fire only
+  -- on a formed echo (a value), so they never race with their congruence rule.
+  | echoCloseStep hs ih => cases hs₂ with
+    | echoCloseStep h => exact congrArg Expr.echoClose (ih h)
+  | lowerStep hs ih => cases hs₂ with
+    | lowerStep h => exact congrArg Expr.lower (ih h)
+    | lowerEcho hv => exact absurd hs (value_no_step (.echoClose hv))
+  | residueStep hs ih => cases hs₂ with
+    | residueStep h => exact congrArg Expr.residue (ih h)
+    | residueEcho hv => exact absurd hs (value_no_step (.echoClose hv))
+  | lowerEcho hv => cases hs₂ with
+    | lowerStep h => exact absurd h (value_no_step (.echoClose hv))
+    | lowerEcho _ => rfl
+  | residueEcho hv => cases hs₂ with
+    | residueStep h => exact absurd h (value_no_step (.echoClose hv))
+    | residueEcho _ => rfl
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- COROLLARY: TYPE SAFETY
@@ -567,5 +674,56 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
 theorem type_safety (ht : HasType [] e τ) (hs : Step e e') :
     HasType [] e' τ ∧ (IsValue e' ∨ ∃ e'', Step e' e'') :=
   ⟨preservation ht hs, progress (preservation ht hs)⟩
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- ECHO-TYPES: STRUCTURED LOSS AS A FEATURE OF THE TYPE SYSTEM
+-- ═══════════════════════════════════════════════════════════════════════
+--
+-- `close : Word[n] → Word[0]` is TANGLE's canonical lossy map: it collapses
+-- every braid to the identity, discarding the word.  This mirrors echo-types'
+-- `collapse : Bool → ⊤` (hyperpolymath/echo-types, EchoResidue.agda).  The echo
+-- constructors above (`echoClose`/`lower`/`residue`, type former `Ty.echo`)
+-- make that loss *recoverable in the type system*: the residue `Word[n]` is
+-- retained and projected back out.  Progress, Preservation, Determinism, and
+-- Type Safety (proved above) all cover these constructors — echo types are not
+-- a bolt-on, they are part of the metatheory.
+--
+-- The three theorems below are the TANGLE instantiation of the echo-types
+-- `no-section` / `sigma-distinguishes` results: `lower` collapses, `residue`
+-- distinguishes.
+
+/-- `lower ∘ echoClose` is the collapsing map: every closed braid lowers to the
+    identity (the single `Word[0]` value).  This is `close` re-derived through the
+    echo — the step that loses information. -/
+theorem echo_lower_collapses (gs : List Generator) :
+    Step (.lower (.echoClose (.braidLit gs))) .identity :=
+  .lowerEcho (.braidLit gs)
+
+/-- `residue ∘ echoClose` recovers the witness: the original braid is retained in
+    the residue.  This is echo-types' `proj₁`/`echo-intro` round-trip — the lossy
+    `close` becomes reversible once its echo is carried. -/
+theorem echo_residue_recovers (gs : List Generator) :
+    Step (.residue (.echoClose (.braidLit gs))) (.braidLit gs) :=
+  .residueEcho (.braidLit gs)
+
+/-- **Echo distinguishes what `close` collapses.**  Two distinct braids close to
+    the *same* identity (the residue forgotten by `lower`), yet their echoes carry
+    distinct residues (recovered by `residue`).  This is the TANGLE form of
+    echo-types' non-injectivity barrier (`collapse-residue-same` paired with
+    `echo-true≢echo-false` / `no-section-collapse-to-residue`). -/
+theorem echo_distinguishes_collapsed {gs₁ gs₂ : List Generator} (h : gs₁ ≠ gs₂) :
+    (Step (.lower (.echoClose (.braidLit gs₁))) .identity ∧
+     Step (.lower (.echoClose (.braidLit gs₂))) .identity) ∧
+    (Expr.braidLit gs₁ ≠ Expr.braidLit gs₂) :=
+  ⟨⟨.lowerEcho (.braidLit gs₁), .lowerEcho (.braidLit gs₂)⟩,
+   fun heq => h (Expr.braidLit.inj heq)⟩
+
+/-- The echo round-trip is type-safe: from `e : Word[n]`, `residue` recovers a
+    `Word[n]` and `lower` yields the `Word[0]` codomain point.  The type system
+    tracks both the recovered witness type and the collapsed result type. -/
+theorem echo_roundtrip_typed (e : Expr) (n : Nat) (h : HasType [] e (.word n)) :
+    HasType [] (.residue (.echoClose e)) (.word n) ∧
+    HasType [] (.lower (.echoClose e)) (.word 0) :=
+  ⟨.tResidue _ _ _ _ (.tEchoClose _ _ n h), .tLower _ _ _ _ (.tEchoClose _ _ n h)⟩
 
 end Tangle
