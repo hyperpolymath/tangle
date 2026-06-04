@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
-// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
-
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 = EXPLAINME: Tangle
+image:https://img.shields.io/badge/License-MPL_2.0-blue.svg[License: MPL-2.0,link="https://opensource.org/licenses/MPL-2.0"]
+
 :toc: preamble
 :icons: font
 
@@ -69,3 +70,10 @@ not via a traditional proof.
 | `docs/spec/FORMAL-SEMANTICS.md` -- denotational model for tangle programs; isotopy-class equivalence; Reidemeister-move reduction rules
 | KnotTheory.jl (Julia knot invariant library), KRLAdapter.jl (KRL bridging), typed-wasm (structured braid-type analogues), standards (spec-first documentation pattern)
 |===
+
+
+== License
+
+This project is licensed under the Mozilla Public License, v. 2.0. See the `LICENSE` file for details.
+
+SPDX-License-Identifier: MPL-2.0

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 // bench_parser_rust.rs -- Parser benchmark harness for Tangle (Rust)
 //
 // Generates a large synthetic Tangle program and measures

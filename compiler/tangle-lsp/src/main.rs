@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! tangle-lsp — Language Server Protocol server for the Tangle language.
 //!
 //! Provides diagnostics, hover, completion, go-to-definition, and document

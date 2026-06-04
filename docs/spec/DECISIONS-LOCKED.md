@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # TANGLE & TANGLE-JTV Design Decisions (LOCKED 2026-02-12)
 
 This document records all locked design decisions for:
