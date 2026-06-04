@@ -45,6 +45,9 @@ TC_PATH="$ELAN_DIR/toolchains/$TC_NAME"
 
 # --print-path mode: just emit the PATH export (for eval), do no work.
 if [ "$PRINT_PATH" -eq 1 ]; then
+  # $PATH is intentionally literal — it must expand when this line is later
+  # eval'd / sourced, not now. Only %s (= $ELAN_DIR) expands here.
+  # shellcheck disable=SC2016
   printf 'export PATH="%s/bin:$PATH"\n' "$ELAN_DIR"
   exit 0
 fi

@@ -40,13 +40,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install elan
+      - name: Bootstrap Lean toolchain (pinned; GitHub-asset fallback)
         run: |
-          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
-            | sh -s -- -y --default-toolchain none
+          # Single source of truth for toolchain setup (proofs/bootstrap-lean.sh).
+          # Uses the normal elan dist server on open networks (GitHub runners);
+          # falls back to the GitHub release asset if release.lean-lang.org is
+          # unreachable, so CI stays green through dist-server outages.
+          bash proofs/bootstrap-lean.sh
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: Pin Lean toolchain from proofs/lean-toolchain
+      - name: Show pinned Lean version
         working-directory: proofs
         run: |
           test -f lean-toolchain || { echo "::error::proofs/lean-toolchain missing"; exit 1; }
