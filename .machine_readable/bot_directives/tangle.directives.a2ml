@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# tangle.directives.a2ml — directives for the bot fleet on hyperpolymath/tangle
+[metadata]
+version = "1.0.0"
+last-updated = "2026-06-05"
+applies-to = ["hypatia", "gitbot-fleet", "git-private-farm"]
+
+[development]
+# Where bots should develop. Never push to main directly.
+dev-branch = "claude/<session>"
+default-base = "main"
+pr-policy = "open as draft; CI must be green before ready-for-review"
+
+[proof-discipline]
+# Tangle owns a real metatheory — these are hard gates.
+prover = "Lean 4"
+toolchain-pin = "proofs/lean-toolchain (leanprover/lean4:v4.14.0)"
+banned-tokens = ["sorry", "axiom", "admit", "Admitted"]   # CI-enforced, outside comments
+rule = "every edit to proofs/ ends with: cd proofs && lean Tangle.lean (expect 0 errors)"
+oracle-workflow = ".github/workflows/lean-proofs.yml"
+
+[toolchain-bootstrap]
+# Sandboxed/web environments cannot reach release.lean-lang.org.
+script = "proofs/bootstrap-lean.sh"        # normal elan path + GitHub-asset fallback
+session-hook = ".claude/hooks/session-start.sh"   # auto-bootstraps web sessions
+note = "Do NOT hand-roll elan installs; call the bootstrap script (single source of truth)."
+
+[cross-repo-coordination]
+# Tangle is the semantic core; KRL and QuandleDB rest on its metatheory.
+downstream = ["hyperpolymath/krl", "hyperpolymath/quandledb"]
+tangle-ir = "Changes to Ty/Expr/HasType are conservative extensions; flag any that reach TangleIR (QuandleDB consumes it)."
+quandle-seam = "echoClose's residue is the pre-closure braid — exactly what QuandleDB extracts a quandle presentation from. Coordinate echo→IR threading with the quandledb session."
+echo-types = "hyperpolymath/echo-types is the reference theory (Echo f y := Σ(x:A), f x ≡ y); Tangle ships a simply-typed shadow as a type-system feature."
+
+[no-go]
+# Do not develop these here.
+julia = "No Julia development in this repo (Skein.jl/QuandleDB own the Julia layer)."
+languages = "No TypeScript/Node/npm/Go/Python/Kotlin/Swift (see ANCHOR implementation-policy)."
