@@ -1,19 +1,36 @@
-= Contractiles Template Set
+// SPDX-License-Identifier: MPL-2.0
+= Tangle Contractiles
 :toc:
 :sectnums:
 
-This directory contains the generalized contractiles templates. Copy the `contractiles/` directory into a new repo to establish a consistent operational, validation, trust, recovery, and intent framework.
-
-== Fill-In Instructions
-
-1. Update the Mustfile to reflect your real invariants (paths, schema versions, ports).
-2. Replace Trustfile.hs placeholders with your actual key paths and verification commands.
-3. Adjust Dustfile handlers to match your rollback and recovery tooling.
-4. Update Intentfile to mirror the roadmap you want the system to evolve toward.
+The contractiles for this repository: a consistent operational, validation,
+trust, recovery, and intent framework. (Originally scaffolded from the RSR
+template; the file references below are corrected to the files actually
+shipped here.)
 
 == Contents
 
-* `must/Mustfile` - required invariants and validations.
-* `trust/Trustfile.hs` - cryptographic verification steps.
-* `dust/Dustfile` - rollback and recovery semantics.
-* `lust/Intentfile` - future intent and roadmap direction.
+* `must/Mustfile` — required invariants and validations.
+* `trust/Trustfile.a2ml` — trust / verification steps.
+* `dust/Dustfile` — rollback and recovery semantics.
+* `intend/Intentfile.a2ml` — future intent and roadmap direction.
+
+NOTE: This repo also carries the S-expression companion set under
+`.machine_readable/` (`MUST.contractile`, `TRUST.contractile`,
+`INTENT.contractile`, `ADJUST.contractile`). The two representations coexist
+because tangle was scaffolded at an intermediate RSR-template generation; the
+canonical layout is being reconciled estate-wide (the template master, krl,
+has since relocated `contractiles/` *into* `.machine_readable/` and added
+`adjust/` + `bust/`). Until that reconciliation lands, treat
+`.machine_readable/*.contractile` as authoritative and the `contractiles/<name>/`
+tree as the human-readable mirror.
+
+== Maintenance
+
+Keep these in step with reality:
+
+1. `must/Mustfile` — real invariants (proof discipline, paths, schema versions).
+2. `trust/Trustfile.a2ml` — actual key paths and verification commands.
+3. `dust/Dustfile` — rollback and recovery tooling.
+4. `intend/Intentfile.a2ml` — the roadmap (see `.machine_readable/6a2/STATE.a2ml`
+   `route-to-mvp` for the live milestone list).

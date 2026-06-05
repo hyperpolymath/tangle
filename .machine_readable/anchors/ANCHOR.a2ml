@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# ANCHOR.a2ml - authoritative anchor for this repository
+#
+# Established 2026-06-05 on the echo-types realignment: echo types became an
+# intrinsic feature of the Tangle type system (not external reference), the
+# safety metatheory was extended to cover them, and type checking was proved
+# decidable. This anchor records the post-realignment canonical baseline.
+
+[metadata]
+version = "1.0.0"
+last-updated = "2026-06-05"
+
+[anchor]
+schema = "hyperpolymath.anchor/1"
+repo = "hyperpolymath/tangle"
+authority = "upstream-canonical"
+
+purpose = [
+  "Define the canonical type-system semantics for the Tangle stack.",
+  "Declare what downstream repos (KRL, QuandleDB) may extend but not redefine.",
+  "Provide a stable golden path and invariant contract for proof/release readiness.",
+]
+
+[identity]
+project = "Tangle"
+kind = "language"
+one-sentence = "Tangle — a Turing-complete topological (braid/tangle) programming language whose core type system is mechanised in Lean 4."
+domain = "knot-theory / topological computing"
+
+[semantic-authority]
+policy = "canonical"
+
+owns = [
+  "Core type system: HasType (typing) and Step (small-step) inductives.",
+  "Type-safety metatheory: Progress, Preservation, Determinism, Type Safety.",
+  "Echo-types semantics: Ty.echo, echoClose/lower/residue (structured loss over `close`).",
+  "Decidability of type checking: infer ≡ HasType.",
+  "TangleIR semantics consumed by KRL (lowering) and QuandleDB (quandle extraction).",
+]
+
+[realignment-log]
+events = [
+  "2026-06-05 R1: echo types integrated into the type system (TG-10); all four safety theorems extended; echo-types audit verdict changed from NOT-RELEVANT to integrated feature.",
+  "2026-06-05 R2: decidability landed (TG-2) — infer/HasType equivalence, type uniqueness, Decidable instance.",
+]
+
+[implementation-policy]
+allowed = ["Lean4", "OCaml", "Rust", "Scheme", "Shell", "Just", "AsciiDoc", "Markdown", "Nickel"]
+forbidden = ["TypeScript", "Node.js", "npm", "Go", "Python", "Java", "Kotlin", "Swift"]
+
+[golden-path]
+smoke-test-command = [
+  "cd proofs && lean Tangle.lean",
+  "just test",
+]
+
+success-criteria = [
+  "proofs/Tangle.lean reports 0 errors under the pinned toolchain",
+  "No sorry/axiom/admit/Admitted outside comments (CI-enforced)",
+  "Core tests pass; quality gates pass",
+]
+
+[satellite-policy]
+must-pin-upstream = true
+must-declare-authority = true
+must-have-anchor = true
+must-have-golden-path = true
+
+[semantic-authority-files]
+formal-proofs = "proofs/Tangle.lean"
+language-spec = "docs/spec/FORMAL-SEMANTICS.md"
+proof-narrative = "PROOF-NARRATIVE.md"
+proof-needs = "PROOF-NEEDS.md"
+build-proofs = "proofs/README.md"
