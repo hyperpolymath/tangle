@@ -3,8 +3,8 @@
 #
 # META.a2ml — Tangle meta-level information
 [metadata]
-version = "1.0.0"
-last-updated = "2026-04-11"
+version = "1.1.0"
+last-updated = "2026-06-05"
 
 [project-info]
 license = "MPL-2.0"
@@ -12,13 +12,20 @@ author = "Jonathan D.A. Jewell (hyperpolymath)"
 
 [architecture-decisions]
 decisions = [
-  # No ADRs recorded
+  "ADR-1: The Lean 4 inductives (HasType, Step) in proofs/Tangle.lean ARE the formal spec; the OCaml compiler refines them (TG-3). Metatheory is the source of truth.",
+  "ADR-2: Typing context is de Bruijn (Ctx = List Ty), so the core is ready for binders (let, TG-1) without renaming machinery.",
+  "ADR-3: Echo types are intrinsic to the type system, not a bolt-on. `close : Word[n]→Word[0]` is the canonical lossy map; Ty.echo ρ τ is the simply-typed shadow of echo-types' Echo f y := Σ(x:A), f x ≡ y (hyperpolymath/echo-types). echoClose=echo-intro, lower=collapse, residue=witness. All four safety theorems cover it.",
+  "ADR-4: Decidability is proved by an algorithmic `infer : Ctx → Expr → Option Ty` shown equivalent to HasType (infer_sound/infer_complete); yields type uniqueness + a Decidable instance (TG-2).",
+  "ADR-5: Lean toolchain setup is a single source of truth (proofs/bootstrap-lean.sh): normal elan path on open networks, GitHub-asset fallback when release.lean-lang.org is off-allowlist (sandboxed/web). CI and the SessionStart hook both call it.",
+  "ADR-6 (OPEN): echo value shape — uniform `echoVal (residue,result)` (faithful to Echo=Σ; reworks merged single-step capstones to Step*) vs per-operation lower/residue computation rules. Decision pending; gates the add/eq generalisation.",
 ]
 
 [development-practices]
 versioning = "SemVer"
 documentation = "AsciiDoc"
 build-tool = "just"
+proof-assistant = "Lean 4 (pinned leanprover/lean4:v4.14.0)"
+proof-discipline = "no sorry/axiom/admit (CI-enforced); every edit ends with a Lean compile"
 
 [maintenance-axes]
 scoping-first = true

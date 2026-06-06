@@ -3,18 +3,29 @@
 #
 # ECOSYSTEM.a2ml — Tangle ecosystem position
 [metadata]
-version = "1.0.0"
-last-updated = "2026-04-11"
+version = "1.1.0"
+last-updated = "2026-06-05"
 
 [project]
 name = "Tangle"
 purpose = "A Turing-complete topological programming language where programs are isotopy classes of tangles"
-role = "specification"
+role = "semantic-core"
 
 [position-in-ecosystem]
-category = ""
+category = "language / verified semantic core"
+summary = """Tangle is the semantic core of a four-layer federated stack:
+KRL (surface) → TangleIR (interchange) → Tangle core (this repo; Lean metatheory
++ OCaml/Rust impl) → Skein.jl + QuandleDB (persistence/invariants). KRL and
+QuandleDB rest on Tangle's metatheory."""
 
 [related-projects]
 projects = [
-  # No related projects recorded
+  "hyperpolymath/krl — KRL surface language; lowers to TangleIR (rests on Tangle's type safety). NOTE: repo currently half-instantiated from rsr-template (see checkpoint 2026-06-05).",
+  "hyperpolymath/quandledb — consumes TangleIR via quandle_presentation(ir)::QuandlePresentation. SEAM: echoClose's residue is the pre-closure braid, exactly the data QuandleDB extracts the quandle from.",
+  "hyperpolymath/Skein.jl — knot-theoretic database (Julia); persistence/invariants layer. No Julia development from the Tangle side.",
+  "hyperpolymath/echo-types — reference theory for echo types (Echo f y := Σ(x:A), f x ≡ y). Tangle ships a simply-typed shadow as a type-system feature (TG-10).",
 ]
+
+[downstream-contract]
+conservative-extension = "Echo-type additions to Ty/Expr/HasType are conservative; prior theorems unchanged. Flag any change that surfaces in TangleIR."
+coordinate-with = ["quandledb session — echo residue → TangleIR threading"]

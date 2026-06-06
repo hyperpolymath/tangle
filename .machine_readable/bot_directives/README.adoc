@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
+= Bot directives — Tangle
+
+Machine-readable directives for the hyperpolymath bot fleet operating on this
+repository (Hypatia governance/scan, gitbot-fleet, and the `.git-private-farm`
+automation). The repo-root `.bot_directives` symlink points here.
+
+Until 2026-06-05 the `.bot_directives` symlink dangled (target did not exist);
+it was created during the echo-types realignment housekeeping checkpoint.
+
+== Files
+
+* `tangle.directives.a2ml` — the active directive set for bots on this repo:
+  development branch, proof discipline, toolchain bootstrap, and cross-repo
+  coordination notes.
+
+== Authority
+
+These directives are subordinate to `.machine_readable/anchors/ANCHOR.a2ml`
+(canonical semantics) and the contractiles (`MUST` / `TRUST` / `INTENT` /
+`ADJUST`). Where a directive conflicts with the anchor or a contractile, the
+anchor/contractile wins and the directive must be corrected.
