@@ -4,40 +4,53 @@
 # STATE.a2ml — Tangle project state
 [metadata]
 project = "tangle"
-version = "0.1.0"
-last-updated = "2026-02-12"
+version = "0.2.0-dev"
+last-updated = "2026-06-05"
 status = "active"
-session = "converted from scheme — 2026-04-11"
+session = "echo-types realignment + decidability + CI bootstrap — 2026-06-05"
 
 [project-context]
 name = "Tangle"
-purpose = """A Turing-complete topological programming language"""
-completion-percentage = 35
+purpose = """A Turing-complete topological programming language whose core type
+system is mechanised in Lean 4. `close` (braid closure) is the canonical lossy
+map; echo types make that loss recoverable at the type level."""
+completion-percentage = 55
 
 [position]
-phase = "specification-complete"   # design | implementation | testing | maintenance | archived
-maturity = "experimental"  # experimental | alpha | beta | production | lts
+phase = "implementation"            # design | implementation | testing | maintenance | archived
+maturity = "alpha"                  # experimental | alpha | beta | production | lts
 
 [route-to-mvp]
 milestones = [
-  # No milestones recorded
+  "DONE: OCaml compiler — lexer, parser, typecheck, eval, pretty, compositional (compiler/lib/*.ml)",
+  "DONE: Rust tangle-wasm backend + tangle-lsp",
+  "DONE (TG-0): proofs/Tangle.lean compiles clean; CI build oracle wired (lean-proofs.yml)",
+  "DONE: Type safety (Progress/Preservation/Determinism/TypeSafety) for the let-free core",
+  "DONE (TG-10): echo types integrated into the type system (Ty.echo, echoClose/lower/residue); all four theorems extended; residue-recovery + non-injectivity capstones",
+  "DONE (TG-2): decidability — infer ≡ HasType, type uniqueness, Decidable instance",
+  "DONE: reproducible Lean toolchain bootstrap (proofs/bootstrap-lean.sh) + SessionStart hook; CI consolidated onto it",
+  "NEXT (TG-1): extend type safety to let-binding (full de Bruijn substitution)",
+  "NEXT: generalise echo to add/eq (needs a product/residue type in Ty)",
+  "NEXT: thread echo residue into TangleIR (coordinate with quandledb)",
+  "NEXT: full OCaml echo pipeline (ast/typecheck/eval/parser/pretty)",
+  "LATER (TG-3): OCaml typecheck.ml refines the Lean HasType spec",
+  "LATER (TG-5/6/7): compositional rewriter preservation; WASM semantic preservation; braid-group eqBraids",
 ]
 
 [blockers-and-issues]
 issues = [
-  # No blockers recorded
+  "DESIGN (open, user): echo value shape — uniform `echoVal (residue,result)` (faithful to Echo=Σ, reworks merged capstones to multi-step Step*) vs per-operation lower/residue rules. Blocks the echo generalisation to add/eq.",
 ]
 
 [critical-next-actions]
 actions = [
-  "Begin lexer implementation (Task 1 in SONNET-TASKS.md)",
-  "Set up Rust project structure with cargo",
-  "Complete lexer with mode switching",
-  "Begin TANGLE parser (recursive descent)",
-  "Complete parser + type checker",
-  "Begin evaluator",
+  "Resolve the echo value-shape design fork (A vs B), then add the product type",
+  "TG-1: let-binding type safety via de Bruijn substitution",
+  "Generalise echo to add/eq; thread residue into TangleIR with the quandledb session",
+  "Extend the OCaml typechecker (typecheck.ml/ast.ml) with echo types",
 ]
 
 [maintenance-status]
-last-run-utc = "2026-02-12T00:00:00Z"
-last-result = "unknown"  # unknown | pass | warn | fail
+last-run-utc = "2026-06-05T00:00:00Z"
+last-result = "pass"               # unknown | pass | warn | fail
+notes = "lean-proofs oracle GREEN (PR #34, #36 merged); Tangle.lean 0 errors, no sorry/axiom/admit"
