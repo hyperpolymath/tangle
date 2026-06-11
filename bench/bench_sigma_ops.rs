@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 // (MPL-2.0 is automatic legal fallback until PMPL is formally recognised)
 //
 // bench_sigma_ops.rs — Tangle parser + IR ops benchmark with Six Sigma

@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
 name: Mirror to Git Forges
-
 on:
   push:
     branches: [main]
