@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+// Owner: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Backend implementation for the Tangle LSP server.
 //!
 //! Handles all LSP lifecycle events and request dispatching.  Document state
@@ -190,7 +190,7 @@ impl DocumentState {
                 self.diagnostics.push(Diagnostic {
                     range: self.line_range(ln),
                     severity: Some(DiagnosticSeverity::ERROR),
-                    source: Some("tangle-lsp".into()),
+                    source: Some("tangle-lsp[MISSPELLING_HINT]".into()),
                     message: format!("Possible misspelling: `{}`", trimmed.split_whitespace().next().unwrap_or("")),
                     ..Default::default()
                 });
@@ -205,7 +205,7 @@ impl DocumentState {
                     end: Position::new(0, 1),
                 },
                 severity: Some(DiagnosticSeverity::ERROR),
-                source: Some("tangle-lsp".into()),
+                source: Some("tangle-lsp[PARSE_ERROR]".into()),
                 message: format!("Unbalanced parentheses (depth: {})", paren_depth),
                 ..Default::default()
             });
@@ -217,7 +217,7 @@ impl DocumentState {
                     end: Position::new(0, 1),
                 },
                 severity: Some(DiagnosticSeverity::ERROR),
-                source: Some("tangle-lsp".into()),
+                source: Some("tangle-lsp[PARSE_ERROR]".into()),
                 message: format!("Unbalanced brackets (depth: {})", bracket_depth),
                 ..Default::default()
             });
@@ -229,7 +229,7 @@ impl DocumentState {
                     end: Position::new(0, 1),
                 },
                 severity: Some(DiagnosticSeverity::ERROR),
-                source: Some("tangle-lsp".into()),
+                source: Some("tangle-lsp[PARSE_ERROR]".into()),
                 message: format!("Unbalanced braces (depth: {})", brace_depth),
                 ..Default::default()
             });
@@ -241,7 +241,7 @@ impl DocumentState {
                     end: Position::new(0, 1),
                 },
                 severity: Some(DiagnosticSeverity::WARNING),
-                source: Some("tangle-lsp".into()),
+                source: Some("tangle-lsp[STRUCTURAL_HINT]".into()),
                 message: "Unclosed `weave` block — expected `yield strands`".into(),
                 ..Default::default()
             });
@@ -253,7 +253,7 @@ impl DocumentState {
                     end: Position::new(0, 1),
                 },
                 severity: Some(DiagnosticSeverity::WARNING),
-                source: Some("tangle-lsp".into()),
+                source: Some("tangle-lsp[STRUCTURAL_HINT]".into()),
                 message: format!("Possible unclosed block (nesting depth: {})", depth),
                 ..Default::default()
             });
@@ -274,7 +274,7 @@ impl DocumentState {
                         end: Position::new(*ln, *col + name.len() as u32),
                     },
                     severity: Some(DiagnosticSeverity::HINT),
-                    source: Some("tangle-lsp".into()),
+                    source: Some("tangle-lsp[NAME_HINT]".into()),
                     message: format!("Possibly undefined: `{}`", name),
                     ..Default::default()
                 });

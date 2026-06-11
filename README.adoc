@@ -109,11 +109,18 @@ This includes:
   * preservation
   * determinism
   * type safety
+  * decidability of type checking (`infer` ≡ `HasType`)
+
+* *echo types* — structured loss as a type-system feature: `close` (braid
+  closure) is the canonical lossy map, and `echoClose`/`lower`/`residue` make
+  that loss recoverable at the type level (a simply-typed shadow of
+  hyperpolymath/echo-types). All four safety theorems cover them.
 
 See:
 
-* `Tangle.lean`
+* `proofs/Tangle.lean` (and `proofs/README.md` to build/verify)
 * `docs/spec/FORMAL-SEMANTICS.md`
+* `PROOF-NARRATIVE.md` / `PROOF-NEEDS.md`
 
 This formal core covers the *structural heart of the language*, though not all surface features.
 

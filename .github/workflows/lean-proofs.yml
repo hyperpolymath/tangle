@@ -1,0 +1,87 @@
+# SPDX-License-Identifier: MPL-2.0
+# Owner: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+#
+# Lean proof build oracle for proofs/Tangle.lean.
+#
+# Closes the TG-0 gap: prior to 2026-06-01, the Lean file claimed to prove
+# Progress / Preservation / Determinism / TypeSafety but had 121 errors on
+# every Lean 4 version 4.9-4.16, with no CI running it. This workflow makes
+# the build oracle the single source of truth — any future PR that breaks the
+# proofs fails CI rather than landing silently.
+#
+# Pinned via `proofs/lean-toolchain` to `leanprover/lean4:v4.14.0`. Verified
+# 0 errors on v4.10–v4.16 inclusive.
+
+name: Lean Proofs
+
+on:
+  pull_request:
+    paths:
+      - 'proofs/**'
+      - '.github/workflows/lean-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proofs/**'
+      - '.github/workflows/lean-proofs.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Lean proofs (oracle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v5
+        with:
+          persist-credentials: false
+
+      - name: Bootstrap Lean toolchain (pinned; GitHub-asset fallback)
+        run: |
+          # Single source of truth for toolchain setup (proofs/bootstrap-lean.sh).
+          # Uses the normal elan dist server on open networks (GitHub runners);
+          # falls back to the GitHub release asset if release.lean-lang.org is
+          # unreachable, so CI stays green through dist-server outages.
+          bash proofs/bootstrap-lean.sh
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Show pinned Lean version
+        working-directory: proofs
+        run: |
+          test -f lean-toolchain || { echo "::error::proofs/lean-toolchain missing"; exit 1; }
+          echo "Using toolchain: $(cat lean-toolchain)"
+          lean --version
+
+      - name: Build Tangle.lean (oracle)
+        working-directory: proofs
+        run: |
+          set -euo pipefail
+          lean Tangle.lean 2>&1 | tee /tmp/lean-output.txt
+          errors=$(grep -c "error:" /tmp/lean-output.txt || true)
+          if [ "$errors" -ne 0 ]; then
+            echo "::error::Tangle.lean has $errors errors — see job output above."
+            exit 1
+          fi
+          echo "Tangle.lean: 0 errors. Build oracle GREEN."
+
+      - name: Assert no sorry / axiom / admit slippage
+        working-directory: proofs
+        run: |
+          set -euo pipefail
+          banned_count=0
+          for pat in '\bsorry\b' '\baxiom\b' '\badmit\b' '\bAdmitted\b'; do
+            matches=$(grep -nE "$pat" Tangle.lean | grep -vE "^\s*--|^\s*/--|/-" || true)
+            if [ -n "$matches" ]; then
+              echo "::error::Forbidden token matching '$pat' in Tangle.lean:"
+              echo "$matches"
+              banned_count=$((banned_count + 1))
+            fi
+          done
+          if [ "$banned_count" -ne 0 ]; then
+            exit 1
+          fi
+          echo "No sorry/axiom/admit/Admitted found outside comments."

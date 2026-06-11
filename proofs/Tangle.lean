@@ -3,27 +3,38 @@
 --
 -- Models the core type system from docs/spec/FORMAL-SEMANTICS.md:
 --   - Syntax: Expr inductive with Num, Str, Bool, Identity, BraidLit,
---     Compose (.), Tensor (|), Pipeline (>>), Close, Add, Eq
+--     Compose (.), Tensor (|), Pipeline (>>), Close, Add, Eq, and the echo
+--     constructors EchoClose, Lower, Residue (structured loss)
 --   - Typing: HasType inductive relation covering T-Num, T-Str, T-Bool,
 --     T-Identity, T-Braid, T-Compose-Word, T-Tensor-Word, T-Pipeline,
---     T-Close-Word, T-Add-Num, T-Eq-Word, T-Eq-Num, T-Eq-Str
---   - Semantics: Small-step Step relation with 26 rules
+--     T-Close-Word, T-Add-Num, T-Eq-Word, T-Eq-Num, T-Eq-Str, and the echo
+--     rules T-Echo-Close, T-Lower, T-Residue
+--   - Semantics: Small-step Step relation (31 rules incl. echo)
 --
 -- Theorems proven:
 --   1. Progress:     well-typed closed terms are values or can step
 --   2. Preservation: stepping preserves types
 --   3. Determinism:  if e ⟶ e₁ and e ⟶ e₂ then e₁ = e₂
 --   4. Type Safety:  corollary combining progress and preservation
+--   All four cover the echo-types fragment as well as the let-free base.
 --
--- Note on T-Let: The let binding requires a generalized de Bruijn
--- substitution lemma (standard POPLmark machinery). The core fragment
--- without let already covers the knot-theoretic operations (compose,
--- tensor, close) that are central to TANGLE. A future version can add
--- the full substitution machinery from e.g. Autosubst.
+-- Echo types (structured loss): `close : Word[n] → Word[0]` is TANGLE's
+-- canonical lossy map.  The echo type former `Ty.echo ρ τ` and the
+-- constructors `echoClose`/`lower`/`residue` integrate echo-types
+-- (hyperpolymath/echo-types: `Echo f y := Σ (x : A), f x ≡ y`) directly into
+-- the type system: closing a braid through an echo retains the residue, so the
+-- otherwise-irreversible `close` becomes reversible at the type level.  See the
+-- §ECHO-TYPES section at the foot of the file for the residue-recovery and
+-- non-injectivity theorems.
 --
--- Developed for Lean 4. Tested against leanprover/lean4:v4.x.
+-- Note on T-Let: the let binding requires a generalized de Bruijn substitution
+-- lemma (standard POPLmark machinery); tracked as TG-1.  The fragment here
+-- already covers the knot-theoretic operations (compose, tensor, close) and the
+-- echo-types layer that are central to TANGLE.
 --
--- Author: Jonathan D.A. Jewell, Claude (Opus 4.6)
+-- Developed for Lean 4. Tested against leanprover/lean4:v4.14.0.
+--
+-- Author: Jonathan D.A. Jewell, Claude
 
 namespace Tangle
 
@@ -45,6 +56,12 @@ inductive Ty where
   | str  : Ty              -- Str: strings
   | bool : Ty              -- Bool: booleans
   | word : Nat → Ty        -- Word[n]: braid word on n strands
+  | echo : Ty → Ty → Ty    -- Echo[ρ, τ]: structured-loss type — a τ-result
+                           --   carrying a ρ-typed residue.  The simply-typed
+                           --   shadow of echo-types' `Echo f y := Σ (x : A), f x ≡ y`
+                           --   (hyperpolymath/echo-types, Echo.agda): ρ is the
+                           --   residue (domain witness x : A), τ is the result
+                           --   (codomain point y).  See §ECHO-TYPES below.
   deriving DecidableEq, Repr
 
 /-- Core expression AST. Mirrors the OCaml AST in compiler/lib/ast.ml.
@@ -62,6 +79,12 @@ inductive Expr where
   | close    : Expr → Expr                  -- closure
   | add      : Expr → Expr → Expr           -- numeric addition
   | eq       : Expr → Expr → Expr           -- structural equality
+  -- Echo types (structured loss).  `close` is TANGLE's canonical lossy map
+  -- (Word[n] ↠ Word[0]); these constructors give it a residue-retaining
+  -- variant and the two projections, mirroring echo-types' fibre/residue API.
+  | echoClose : Expr → Expr                 -- echo-preserving closure (echo-intro for `close`)
+  | lower     : Expr → Expr                 -- project an echo to its result (forget residue)
+  | residue   : Expr → Expr                 -- project an echo to its residue (recover witness)
   deriving DecidableEq, Repr
 
 /-- Value predicate: fully reduced expressions. -/
@@ -71,6 +94,7 @@ inductive IsValue : Expr → Prop where
   | boolLit  : ∀ b, IsValue (.boolLit b)
   | identity : IsValue .identity
   | braidLit : ∀ gs, IsValue (.braidLit gs)
+  | echoClose : ∀ {v}, IsValue v → IsValue (.echoClose v)  -- a formed echo (residue v retained)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- WIDTH
@@ -136,6 +160,15 @@ inductive HasType : Ctx → Expr → Ty → Prop where
       HasType Γ e₁ .str →
       HasType Γ e₂ .str →
       HasType Γ (.eq e₁ e₂) .bool
+  | tEchoClose (Γ : Ctx) (e : Expr) (n : Nat) :             -- [T-Echo-Close]
+      HasType Γ e (.word n) →                               --   echo-intro for `close`:
+      HasType Γ (.echoClose e) (.echo (.word n) (.word 0))  --   residue Word[n], result Word[0]
+  | tLower (Γ : Ctx) (e : Expr) (ρ τ : Ty) :                -- [T-Lower]  (project to result)
+      HasType Γ e (.echo ρ τ) →
+      HasType Γ (.lower e) τ
+  | tResidue (Γ : Ctx) (e : Expr) (ρ τ : Ty) :              -- [T-Residue] (recover witness)
+      HasType Γ e (.echo ρ τ) →
+      HasType Γ (.residue e) ρ
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- SMALL-STEP SEMANTICS
@@ -180,14 +213,25 @@ inductive Step : Expr → Expr → Prop where
   | eqIdId       : Step (.eq .identity .identity) (.boolLit true)
   | eqIdBraid    : Step (.eq .identity (.braidLit gs)) (.boolLit (gs == []))
   | eqBraidId    : Step (.eq (.braidLit gs) .identity) (.boolLit (gs == []))
+  -- Echo (structured loss): closure that retains its residue, and the two
+  -- projections.  `lower` collapses to the codomain point (identity : Word[0]);
+  -- `residue` recovers the witness braid — the fibre element echo-types keeps.
+  | echoCloseStep : Step e e' → Step (.echoClose e) (.echoClose e')
+  | lowerStep     : Step e e' → Step (.lower e) (.lower e')
+  | lowerEcho     : IsValue v → Step (.lower (.echoClose v)) .identity
+  | residueStep   : Step e e' → Step (.residue e) (.residue e')
+  | residueEcho   : IsValue v → Step (.residue (.echoClose v)) v
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- LEMMAS
 -- ═══════════════════════════════════════════════════════════════════════
 
-/-- Values are in normal form. -/
-theorem value_no_step : IsValue e → Step e e' → False := by
-  intro hv hs; cases hv <;> cases hs
+/-- Values are in normal form.  Recursive on the value structure because a
+    formed echo `echoClose v` is a value exactly when its residue `v` is. -/
+theorem value_no_step {e e' : Expr} (hv : IsValue e) (hs : Step e e') : False := by
+  induction hv generalizing e' with
+  | echoClose _ ih => cases hs with | echoCloseStep h => exact ih h
+  | _ => cases hs
 
 /-- Canonical forms for Num. -/
 theorem canonical_num : IsValue e → HasType [] e .num → ∃ n, e = .num n := by
@@ -207,6 +251,21 @@ theorem canonical_word : IsValue e → HasType [] e (.word n) →
   | boolLit => cases ht
   | identity => left; cases ht with | tIdentity => exact ⟨rfl, rfl⟩
   | braidLit gs => right; cases ht with | tBraid => exact ⟨gs, rfl, rfl⟩
+  | echoClose _ => cases ht
+
+/-- Canonical forms for Echo[ρ, τ]: a value of echo type is a formed echo
+    `echoClose v` whose residue `v` is itself a value.  This is the canonical
+    form that lets `lower`/`residue` make progress. -/
+theorem canonical_echo : IsValue e → HasType [] e (.echo ρ τ) →
+    ∃ v, e = .echoClose v ∧ IsValue v := by
+  intro hv ht
+  cases hv with
+  | num => cases ht
+  | str => cases ht
+  | boolLit => cases ht
+  | identity => cases ht
+  | braidLit => cases ht
+  | echoClose hv => exact ⟨_, rfl, hv⟩
 
 -- Width distribution lemmas
 private theorem foldl_max_init (gs : List Generator) (a : Nat) :
@@ -214,7 +273,10 @@ private theorem foldl_max_init (gs : List Generator) (a : Nat) :
     max a (gs.foldl (fun acc g => max acc (g.idx + 1)) 0) := by
   induction gs generalizing a with
   | nil => simp [List.foldl]
-  | cons g rest ih => simp only [List.foldl]; rw [ih, ih (max 0 _)]; omega
+  | cons g rest ih =>
+    simp only [List.foldl]
+    rw [ih (max a (g.idx + 1)), ih (max 0 (g.idx + 1))]
+    omega
 
 theorem generatorWidth_append (gs₁ gs₂ : List Generator) :
     generatorWidth (gs₁ ++ gs₂) = max (generatorWidth gs₁) (generatorWidth gs₂) := by
@@ -226,11 +288,14 @@ private theorem foldl_shift_init (gs : List Generator) (n a : Nat) :
     if gs = [] then a
     else max a (gs.foldl (fun acc g => max acc (g.idx + 1)) 0 + n) := by
   induction gs generalizing a with
-  | nil => simp [List.foldl, List.map]
+  | nil => simp
   | cons g rest ih =>
-    simp only [List.map, List.foldl, List.cons_ne_nil, ↓reduceIte]
-    rw [ih, foldl_max_init rest (max 0 _)]
-    split <;> omega
+    simp only [List.map, List.foldl, List.cons_ne_nil, if_false]
+    rw [ih]
+    rw [foldl_max_init rest (max 0 (g.idx + 1))]
+    by_cases hrest : rest = []
+    · subst hrest; simp [List.foldl]; omega
+    · simp [hrest]; omega
 
 theorem generatorWidth_shift (gs : List Generator) (n : Nat) :
     generatorWidth (shiftGenerators gs n) =
@@ -252,39 +317,39 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
   | tBool => left; exact .boolLit _
   | tIdentity => left; exact .identity
   | tBraid => left; exact .braidLit _
-  | tComposeWord _ _ _ n m h₁ h₂ =>
+  | tComposeWord _ _ n m h₁ h₂ =>
     right
     rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
     · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
       · rcases canonical_word hv₁ h₁ with ⟨rfl, _⟩ | ⟨gs₁, rfl, _⟩ <;>
         rcases canonical_word hv₂ h₂ with ⟨rfl, _⟩ | ⟨gs₂, rfl, _⟩
         · exact ⟨_, .composeIdId⟩
-        · exact ⟨_, .composeIdL gs₂⟩
-        · exact ⟨_, .composeIdR gs₁⟩
+        · exact ⟨_, .composeIdL⟩
+        · exact ⟨_, .composeIdR⟩
         · exact ⟨_, .composeWords⟩
       · exact ⟨_, .composeRight hv₁ hs₂⟩
     · exact ⟨_, .composeLeft hs₁⟩
-  | tTensorWord _ _ _ n m h₁ h₂ =>
+  | tTensorWord _ _ n m h₁ h₂ =>
     right
     rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
     · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
       · rcases canonical_word hv₁ h₁ with ⟨rfl, _⟩ | ⟨gs₁, rfl, _⟩ <;>
         rcases canonical_word hv₂ h₂ with ⟨rfl, _⟩ | ⟨gs₂, rfl, _⟩
         · exact ⟨_, .tensorIdId⟩
-        · exact ⟨_, .tensorIdL gs₂⟩
-        · exact ⟨_, .tensorIdR gs₁⟩
+        · exact ⟨_, .tensorIdL⟩
+        · exact ⟨_, .tensorIdR⟩
         · exact ⟨_, .tensorWords⟩
       · exact ⟨_, .tensorRight hv₁ hs₂⟩
     · exact ⟨_, .tensorLeft hs₁⟩
-  | tPipeline _ _ _ _ _ => exact .inr ⟨_, .pipeline⟩
-  | tCloseWord _ _ n h =>
+  | tPipeline _ _ _ _ => exact .inr ⟨_, .pipeline⟩
+  | tCloseWord _ n h =>
     right
     rcases progress h with hv | ⟨e', hs⟩
     · rcases canonical_word hv h with ⟨rfl, _⟩ | ⟨gs, rfl, _⟩
       · exact ⟨_, .closeId⟩
       · exact ⟨_, .closeWord⟩
     · exact ⟨_, .closeStep hs⟩
-  | tAddNum _ _ _ h₁ h₂ =>
+  | tAddNum _ _ h₁ h₂ =>
     right
     rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
     · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
@@ -293,7 +358,7 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
         exact ⟨_, .addNums⟩
       · exact ⟨_, .addRight hv₁ hs₂⟩
     · exact ⟨_, .addLeft hs₁⟩
-  | tEqWord _ _ _ n h₁ h₂ =>
+  | tEqWord _ _ n h₁ h₂ =>
     right
     rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
     · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
@@ -305,7 +370,7 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
         · exact ⟨_, .eqBraids⟩
       · exact ⟨_, .eqRight hv₁ hs₂⟩
     · exact ⟨_, .eqLeft hs₁⟩
-  | tEqNum _ _ _ h₁ h₂ =>
+  | tEqNum _ _ h₁ h₂ =>
     right
     rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
     · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
@@ -314,7 +379,7 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
         exact ⟨_, .eqNums⟩
       · exact ⟨_, .eqRight hv₁ hs₂⟩
     · exact ⟨_, .eqLeft hs₁⟩
-  | tEqStr _ _ _ h₁ h₂ =>
+  | tEqStr _ _ h₁ h₂ =>
     right
     rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
     · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
@@ -323,6 +388,23 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
         exact ⟨_, .eqStrs⟩
       · exact ⟨_, .eqRight hv₁ hs₂⟩
     · exact ⟨_, .eqLeft hs₁⟩
+  | tEchoClose _ n h =>
+    -- `echoClose e` is a value once `e` is (the residue is retained); else it steps.
+    rcases progress h with hv | ⟨e', hs⟩
+    · exact .inl (.echoClose hv)
+    · exact .inr ⟨_, .echoCloseStep hs⟩
+  | tLower _ ρ τ h =>
+    right
+    rcases progress h with hv | ⟨e', hs⟩
+    · obtain ⟨v, rfl, hv'⟩ := canonical_echo hv h
+      exact ⟨_, .lowerEcho hv'⟩
+    · exact ⟨_, .lowerStep hs⟩
+  | tResidue _ ρ τ h =>
+    right
+    rcases progress h with hv | ⟨e', hs⟩
+    · obtain ⟨v, rfl, hv'⟩ := canonical_echo hv h
+      exact ⟨_, .residueEcho hv'⟩
+    · exact ⟨_, .residueStep hs⟩
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- THEOREM 2: PRESERVATION
@@ -334,61 +416,66 @@ theorem preservation : HasType [] e τ → Step e e' → HasType [] e' τ := by
   intro ht hs
   induction hs generalizing τ with
   | composeLeft hs ih =>
-    cases ht with | tComposeWord _ _ _ n m h₁ h₂ => exact .tComposeWord _ _ _ n m (ih h₁) h₂
+    cases ht with | tComposeWord _ _ n m h₁ h₂ => exact .tComposeWord _ _ _ n m (ih h₁) h₂
   | composeRight _ hs ih =>
-    cases ht with | tComposeWord _ _ _ n m h₁ h₂ => exact .tComposeWord _ _ _ n m h₁ (ih h₂)
+    cases ht with | tComposeWord _ _ n m h₁ h₂ => exact .tComposeWord _ _ _ n m h₁ (ih h₂)
   | composeWords =>
-    cases ht with | tComposeWord _ _ _ n m h₁ h₂ =>
-    cases h₁; cases h₂; exact .tBraid _ _
+    cases ht with | tComposeWord _ _ n m h₁ h₂ =>
+    cases h₁; cases h₂
+    rw [← generatorWidth_append]
+    exact .tBraid _ _
   | composeIdL =>
-    cases ht with | tComposeWord _ _ _ n m h₁ h₂ =>
+    cases ht with | tComposeWord _ _ n m h₁ h₂ =>
     cases h₁ with | tIdentity => simp at *; exact h₂
   | composeIdR =>
-    cases ht with | tComposeWord _ _ _ n m h₁ h₂ =>
+    cases ht with | tComposeWord _ _ n m h₁ h₂ =>
     cases h₂ with | tIdentity => simp at *; exact h₁
   | composeIdId =>
-    cases ht with | tComposeWord _ _ _ n m h₁ h₂ =>
+    cases ht with | tComposeWord _ _ n m h₁ h₂ =>
     cases h₁; cases h₂; exact .tIdentity _
   | tensorLeft hs ih =>
-    cases ht with | tTensorWord _ _ _ n m h₁ h₂ => exact .tTensorWord _ _ _ n m (ih h₁) h₂
+    cases ht with | tTensorWord _ _ n m h₁ h₂ => exact .tTensorWord _ _ _ n m (ih h₁) h₂
   | tensorRight _ hs ih =>
-    cases ht with | tTensorWord _ _ _ n m h₁ h₂ => exact .tTensorWord _ _ _ n m h₁ (ih h₂)
+    cases ht with | tTensorWord _ _ n m h₁ h₂ => exact .tTensorWord _ _ _ n m h₁ (ih h₂)
   | tensorWords =>
-    cases ht with | tTensorWord _ _ _ n m h₁ h₂ =>
+    cases ht with | tTensorWord _ _ n m h₁ h₂ =>
     cases h₁; cases h₂
-    simp [generatorWidth_append, generatorWidth_shift]
-    split
-    · rename_i hempty; subst hempty; simp [generatorWidth, List.foldl]; exact .tBraid _ _
-    · rename_i hne
-      have := HasType.tBraid ([] : Ctx) _
-      simp [generatorWidth_append, generatorWidth_shift, hne] at this ⊢
-      exact .tBraid _ _
+    rename_i gs₁ gs₂
+    have hgoal :
+        generatorWidth (gs₁ ++ shiftGenerators gs₂ (generatorWidth gs₁))
+          = generatorWidth gs₁ + generatorWidth gs₂ := by
+      rw [generatorWidth_append, generatorWidth_shift]
+      by_cases hempty : gs₂ = []
+      · subst hempty; simp [generatorWidth, List.foldl]
+      · simp [hempty]; omega
+    rw [← hgoal]
+    exact .tBraid _ _
   | tensorIdL =>
-    cases ht with | tTensorWord _ _ _ n m h₁ h₂ =>
+    cases ht with | tTensorWord _ _ n m h₁ h₂ =>
     cases h₁ with | tIdentity => simp at *; exact h₂
   | tensorIdR =>
-    cases ht with | tTensorWord _ _ _ n m h₁ h₂ =>
+    cases ht with | tTensorWord _ _ n m h₁ h₂ =>
     cases h₂ with | tIdentity => simp at *; exact h₁
   | tensorIdId =>
-    cases ht with | tTensorWord _ _ _ n m h₁ h₂ =>
+    cases ht with | tTensorWord _ _ n m h₁ h₂ =>
     cases h₁; cases h₂; exact .tIdentity _
-  | pipeline => cases ht with | tPipeline _ _ _ _ h => exact h
-  | closeStep hs ih => cases ht with | tCloseWord _ _ n h => exact .tCloseWord _ _ n (ih h)
+  | pipeline => cases ht with | tPipeline _ _ _ h => exact h
+  | closeStep hs ih => cases ht with | tCloseWord _ n h => exact .tCloseWord _ _ n (ih h)
   | closeWord => cases ht with | tCloseWord => exact .tIdentity _
   | closeId => cases ht with | tCloseWord => exact .tIdentity _
-  | addLeft hs ih => cases ht with | tAddNum _ _ _ h₁ h₂ => exact .tAddNum _ _ _ (ih h₁) h₂
-  | addRight _ hs ih => cases ht with | tAddNum _ _ _ h₁ h₂ => exact .tAddNum _ _ _ h₁ (ih h₂)
+  | addLeft hs ih => cases ht with | tAddNum _ _ h₁ h₂ => exact .tAddNum _ _ _ (ih h₁) h₂
+  | addRight _ hs ih => cases ht with | tAddNum _ _ h₁ h₂ => exact .tAddNum _ _ _ h₁ (ih h₂)
   | addNums => cases ht with | tAddNum => exact .tNum _ _
   | eqLeft hs ih =>
     cases ht with
-    | tEqWord _ _ _ n h₁ h₂ => exact .tEqWord _ _ _ n (ih h₁) h₂
-    | tEqNum _ _ _ h₁ h₂ => exact .tEqNum _ _ _ (ih h₁) h₂
-    | tEqStr _ _ _ h₁ h₂ => exact .tEqStr _ _ _ (ih h₁) h₂
+    | tEqWord _ _ n h₁ h₂ => exact .tEqWord _ _ _ n (ih h₁) h₂
+    | tEqNum _ _ h₁ h₂ => exact .tEqNum _ _ _ (ih h₁) h₂
+    | tEqStr _ _ h₁ h₂ => exact .tEqStr _ _ _ (ih h₁) h₂
   | eqRight _ hs ih =>
     cases ht with
-    | tEqWord _ _ _ n h₁ h₂ => exact .tEqWord _ _ _ n h₁ (ih h₂)
-    | tEqNum _ _ _ h₁ h₂ => exact .tEqNum _ _ _ h₁ (ih h₂)
-    | tEqStr _ _ _ h₁ h₂ => exact .tEqStr _ _ _ h₁ (ih h₂)
+    | tEqWord _ _ n h₁ h₂ => exact .tEqWord _ _ _ n h₁ (ih h₂)
+    | tEqNum _ _ h₁ h₂ => exact .tEqNum _ _ _ h₁ (ih h₂)
+    | tEqStr _ _ h₁ h₂ => exact .tEqStr _ _ _ h₁ (ih h₂)
   | eqNums => cases ht with
     | tEqNum => exact .tBool _ _
     | tEqWord _ _ _ _ h₁ => cases h₁
@@ -413,6 +500,21 @@ theorem preservation : HasType [] e τ → Step e e' → HasType [] e' τ := by
     | tEqWord => exact .tBool _ _
     | tEqNum _ _ _ h₁ => cases h₁
     | tEqStr _ _ _ h₁ => cases h₁
+  -- Echo congruence preserves the (residue Word[n], result Word[0]) echo type.
+  | echoCloseStep hs ih =>
+    cases ht with | tEchoClose _ n h => exact .tEchoClose _ _ n (ih h)
+  | lowerStep hs ih =>
+    cases ht with | tLower _ _ _ h => exact .tLower _ _ _ _ (ih h)
+  | residueStep hs ih =>
+    cases ht with | tResidue _ _ _ h => exact .tResidue _ _ _ _ (ih h)
+  -- `lower` yields the codomain point identity : Word[0]; the echo type forces τ = Word[0].
+  | lowerEcho hv =>
+    cases ht with | tLower _ _ _ h =>
+    cases h with | tEchoClose _ n _ => exact .tIdentity _
+  -- `residue` recovers the witness, whose type is exactly the echo's residue type.
+  | residueEcho hv =>
+    cases ht with | tResidue _ _ _ h =>
+    cases h with | tEchoClose _ n h' => exact h'
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- THEOREM 3: DETERMINISM
@@ -423,7 +525,7 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
   intro hs₁ hs₂
   induction hs₁ generalizing e₂ with
   | composeLeft hs ih => cases hs₂ with
-    | composeLeft h => exact congrArg (·.compose _) (ih h)
+    | composeLeft h => rw [ih h]
     | composeRight hv _ => exact absurd hs (value_no_step hv)
     | composeWords => exact absurd hs (value_no_step (.braidLit _))
     | composeIdL => exact absurd hs (value_no_step .identity)
@@ -453,7 +555,7 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
     | composeRight _ h => exact absurd h (value_no_step .identity)
     | composeIdId => rfl
   | tensorLeft hs ih => cases hs₂ with
-    | tensorLeft h => exact congrArg (·.tensor _) (ih h)
+    | tensorLeft h => rw [ih h]
     | tensorRight hv _ => exact absurd hs (value_no_step hv)
     | tensorWords => exact absurd hs (value_no_step (.braidLit _))
     | tensorIdL => exact absurd hs (value_no_step .identity)
@@ -494,7 +596,7 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
     | closeStep h => exact absurd h (value_no_step .identity)
     | closeId => rfl
   | addLeft hs ih => cases hs₂ with
-    | addLeft h => exact congrArg (·.add _) (ih h)
+    | addLeft h => rw [ih h]
     | addRight hv _ => exact absurd hs (value_no_step hv)
     | addNums => exact absurd hs (value_no_step (.num _))
   | addRight hv hs ih => cases hs₂ with
@@ -506,7 +608,7 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
     | addRight _ h => exact absurd h (value_no_step (.num _))
     | addNums => rfl
   | eqLeft hs ih => cases hs₂ with
-    | eqLeft h => exact congrArg (·.eq _) (ih h)
+    | eqLeft h => rw [ih h]
     | eqRight hv _ => exact absurd hs (value_no_step hv)
     | eqNums => exact absurd hs (value_no_step (.num _))
     | eqStrs => exact absurd hs (value_no_step (.str _))
@@ -547,6 +649,22 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
     | eqLeft h => exact absurd h (value_no_step (.braidLit _))
     | eqRight _ h => exact absurd h (value_no_step .identity)
     | eqBraidId => rfl
+  -- Echo: congruence is deterministic by IH; the computation rules fire only
+  -- on a formed echo (a value), so they never race with their congruence rule.
+  | echoCloseStep hs ih => cases hs₂ with
+    | echoCloseStep h => exact congrArg Expr.echoClose (ih h)
+  | lowerStep hs ih => cases hs₂ with
+    | lowerStep h => exact congrArg Expr.lower (ih h)
+    | lowerEcho hv => exact absurd hs (value_no_step (.echoClose hv))
+  | residueStep hs ih => cases hs₂ with
+    | residueStep h => exact congrArg Expr.residue (ih h)
+    | residueEcho hv => exact absurd hs (value_no_step (.echoClose hv))
+  | lowerEcho hv => cases hs₂ with
+    | lowerStep h => exact absurd h (value_no_step (.echoClose hv))
+    | lowerEcho _ => rfl
+  | residueEcho hv => cases hs₂ with
+    | residueStep h => exact absurd h (value_no_step (.echoClose hv))
+    | residueEcho _ => rfl
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- COROLLARY: TYPE SAFETY
@@ -556,5 +674,193 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
 theorem type_safety (ht : HasType [] e τ) (hs : Step e e') :
     HasType [] e' τ ∧ (IsValue e' ∨ ∃ e'', Step e' e'') :=
   ⟨preservation ht hs, progress (preservation ht hs)⟩
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- ECHO-TYPES: STRUCTURED LOSS AS A FEATURE OF THE TYPE SYSTEM
+-- ═══════════════════════════════════════════════════════════════════════
+--
+-- `close : Word[n] → Word[0]` is TANGLE's canonical lossy map: it collapses
+-- every braid to the identity, discarding the word.  This mirrors echo-types'
+-- `collapse : Bool → ⊤` (hyperpolymath/echo-types, EchoResidue.agda).  The echo
+-- constructors above (`echoClose`/`lower`/`residue`, type former `Ty.echo`)
+-- make that loss *recoverable in the type system*: the residue `Word[n]` is
+-- retained and projected back out.  Progress, Preservation, Determinism, and
+-- Type Safety (proved above) all cover these constructors — echo types are not
+-- a bolt-on, they are part of the metatheory.
+--
+-- The three theorems below are the TANGLE instantiation of the echo-types
+-- `no-section` / `sigma-distinguishes` results: `lower` collapses, `residue`
+-- distinguishes.
+
+/-- `lower ∘ echoClose` is the collapsing map: every closed braid lowers to the
+    identity (the single `Word[0]` value).  This is `close` re-derived through the
+    echo — the step that loses information. -/
+theorem echo_lower_collapses (gs : List Generator) :
+    Step (.lower (.echoClose (.braidLit gs))) .identity :=
+  .lowerEcho (.braidLit gs)
+
+/-- `residue ∘ echoClose` recovers the witness: the original braid is retained in
+    the residue.  This is echo-types' `proj₁`/`echo-intro` round-trip — the lossy
+    `close` becomes reversible once its echo is carried. -/
+theorem echo_residue_recovers (gs : List Generator) :
+    Step (.residue (.echoClose (.braidLit gs))) (.braidLit gs) :=
+  .residueEcho (.braidLit gs)
+
+/-- **Echo distinguishes what `close` collapses.**  Two distinct braids close to
+    the *same* identity (the residue forgotten by `lower`), yet their echoes carry
+    distinct residues (recovered by `residue`).  This is the TANGLE form of
+    echo-types' non-injectivity barrier (`collapse-residue-same` paired with
+    `echo-true≢echo-false` / `no-section-collapse-to-residue`). -/
+theorem echo_distinguishes_collapsed {gs₁ gs₂ : List Generator} (h : gs₁ ≠ gs₂) :
+    (Step (.lower (.echoClose (.braidLit gs₁))) .identity ∧
+     Step (.lower (.echoClose (.braidLit gs₂))) .identity) ∧
+    (Expr.braidLit gs₁ ≠ Expr.braidLit gs₂) :=
+  ⟨⟨.lowerEcho (.braidLit gs₁), .lowerEcho (.braidLit gs₂)⟩,
+   fun heq => h (Expr.braidLit.inj heq)⟩
+
+/-- The echo round-trip is type-safe: from `e : Word[n]`, `residue` recovers a
+    `Word[n]` and `lower` yields the `Word[0]` codomain point.  The type system
+    tracks both the recovered witness type and the collapsed result type. -/
+theorem echo_roundtrip_typed (e : Expr) (n : Nat) (h : HasType [] e (.word n)) :
+    HasType [] (.residue (.echoClose e)) (.word n) ∧
+    HasType [] (.lower (.echoClose e)) (.word 0) :=
+  ⟨.tResidue _ _ _ _ (.tEchoClose _ _ n h), .tLower _ _ _ _ (.tEchoClose _ _ n h)⟩
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- TG-2: DECIDABILITY OF TYPE CHECKING
+-- ═══════════════════════════════════════════════════════════════════════
+--
+-- `infer Γ e` computes the unique type of `e` in context `Γ`, or `none` if `e`
+-- is ill-typed.  It is the algorithmic counterpart of the `HasType` relation:
+-- `infer_sound` + `infer_complete` prove the two equivalent, hence `HasType`
+-- is decidable (`decidableHasType`) and types are unique (`type_unique`).
+-- This is the specification `compiler/lib/typecheck.ml` is meant to refine
+-- (TG-3).
+
+/-- Algorithmic type inference: total, structurally recursive on the AST. -/
+def infer (Γ : Ctx) : Expr → Option Ty
+  | .num _       => some .num
+  | .str _       => some .str
+  | .boolLit _   => some .bool
+  | .identity    => some (.word 0)
+  | .braidLit gs => some (.word (generatorWidth gs))
+  | .compose e₁ e₂ =>
+      match infer Γ e₁, infer Γ e₂ with
+      | some (.word n), some (.word m) => some (.word (max n m))
+      | _, _ => none
+  | .tensor e₁ e₂ =>
+      match infer Γ e₁, infer Γ e₂ with
+      | some (.word n), some (.word m) => some (.word (n + m))
+      | _, _ => none
+  | .pipeline e₁ e₂ =>
+      match infer Γ e₁, infer Γ e₂ with
+      | some (.word n), some (.word m) => some (.word (max n m))
+      | _, _ => none
+  | .close e =>
+      match infer Γ e with
+      | some (.word _) => some (.word 0)
+      | _ => none
+  | .add e₁ e₂ =>
+      match infer Γ e₁, infer Γ e₂ with
+      | some .num, some .num => some .num
+      | _, _ => none
+  | .eq e₁ e₂ =>
+      match infer Γ e₁, infer Γ e₂ with
+      | some (.word n), some (.word m) => if n = m then some .bool else none
+      | some .num, some .num => some .bool
+      | some .str, some .str => some .bool
+      | _, _ => none
+  | .echoClose e =>
+      match infer Γ e with
+      | some (.word n) => some (.echo (.word n) (.word 0))
+      | _ => none
+  | .lower e =>
+      match infer Γ e with
+      | some (.echo _ τ) => some τ
+      | _ => none
+  | .residue e =>
+      match infer Γ e with
+      | some (.echo ρ _) => some ρ
+      | _ => none
+
+/-- **Completeness**: every typing derivation is computed by `infer`. -/
+theorem infer_complete {Γ : Ctx} {e : Expr} {τ : Ty} :
+    HasType Γ e τ → infer Γ e = some τ := by
+  intro h
+  induction h <;> simp_all [infer]
+
+/-- **Soundness**: every successful inference is a valid typing derivation. -/
+theorem infer_sound {Γ : Ctx} {e : Expr} {τ : Ty} :
+    infer Γ e = some τ → HasType Γ e τ := by
+  induction e generalizing Γ τ with
+  | num _ => intro h; simp only [infer, Option.some.injEq] at h; subst h; exact .tNum _ _
+  | str _ => intro h; simp only [infer, Option.some.injEq] at h; subst h; exact .tStr _ _
+  | boolLit _ => intro h; simp only [infer, Option.some.injEq] at h; subst h; exact .tBool _ _
+  | identity => intro h; simp only [infer, Option.some.injEq] at h; subst h; exact .tIdentity _
+  | braidLit _ => intro h; simp only [infer, Option.some.injEq] at h; subst h; exact .tBraid _ _
+  | compose e₁ e₂ ih₁ ih₂ =>
+      intro h; simp only [infer] at h; split at h
+      next n m he₁ he₂ =>
+        injection h with h; subst h; exact .tComposeWord _ _ _ n m (ih₁ he₁) (ih₂ he₂)
+      all_goals simp at h
+  | tensor e₁ e₂ ih₁ ih₂ =>
+      intro h; simp only [infer] at h; split at h
+      next n m he₁ he₂ =>
+        injection h with h; subst h; exact .tTensorWord _ _ _ n m (ih₁ he₁) (ih₂ he₂)
+      all_goals simp at h
+  | pipeline e₁ e₂ ih₁ ih₂ =>
+      intro h; simp only [infer] at h; split at h
+      next n m he₁ he₂ =>
+        injection h with h; subst h
+        exact .tPipeline _ _ _ _ (.tComposeWord _ _ _ n m (ih₁ he₁) (ih₂ he₂))
+      all_goals simp at h
+  | close e ih =>
+      intro h; simp only [infer] at h; split at h
+      next k he => injection h with h; subst h; exact .tCloseWord _ _ k (ih he)
+      all_goals simp at h
+  | add e₁ e₂ ih₁ ih₂ =>
+      intro h; simp only [infer] at h; split at h
+      next he₁ he₂ => injection h with h; subst h; exact .tAddNum _ _ _ (ih₁ he₁) (ih₂ he₂)
+      all_goals simp at h
+  | eq e₁ e₂ ih₁ ih₂ =>
+      intro h; simp only [infer] at h; split at h
+      next n m he₁ he₂ =>
+        split at h
+        next hnm =>
+          injection h with h; subst h; subst hnm
+          exact .tEqWord _ _ _ _ (ih₁ he₁) (ih₂ he₂)
+        next => simp at h
+      next he₁ he₂ => injection h with h; subst h; exact .tEqNum _ _ _ (ih₁ he₁) (ih₂ he₂)
+      next he₁ he₂ => injection h with h; subst h; exact .tEqStr _ _ _ (ih₁ he₁) (ih₂ he₂)
+      all_goals simp at h
+  | echoClose e ih =>
+      intro h; simp only [infer] at h; split at h
+      next k he => injection h with h; subst h; exact .tEchoClose _ _ k (ih he)
+      all_goals simp at h
+  | lower e ih =>
+      intro h; simp only [infer] at h; split at h
+      next ρ τ' he => injection h with h; subst h; exact .tLower _ _ ρ τ' (ih he)
+      all_goals simp at h
+  | residue e ih =>
+      intro h; simp only [infer] at h; split at h
+      next ρ τ' he => injection h with h; subst h; exact .tResidue _ _ ρ τ' (ih he)
+      all_goals simp at h
+
+/-- **Decidability of type checking** (TG-2): `infer` decides `HasType`. -/
+theorem infer_iff_hasType {Γ : Ctx} {e : Expr} {τ : Ty} :
+    infer Γ e = some τ ↔ HasType Γ e τ :=
+  ⟨infer_sound, infer_complete⟩
+
+/-- Types are unique: `HasType` assigns at most one type per (context, term). -/
+theorem type_unique {Γ : Ctx} {e : Expr} {τ₁ τ₂ : Ty}
+    (h₁ : HasType Γ e τ₁) (h₂ : HasType Γ e τ₂) : τ₁ = τ₂ := by
+  have p₁ := infer_complete h₁
+  have p₂ := infer_complete h₂
+  rw [p₁] at p₂
+  exact Option.some.inj p₂
+
+/-- Type checking in the empty context is decidable. -/
+instance decidableHasType (e : Expr) (τ : Ty) : Decidable (HasType [] e τ) :=
+  decidable_of_iff (infer [] e = some τ) infer_iff_hasType
 
 end Tangle
