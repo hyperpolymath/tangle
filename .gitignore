@@ -93,3 +93,6 @@ deps/
 .cache/
 build/
 dist/
+
+# Claude Code — transient agent worktrees (never committed)
+.claude/worktrees/
