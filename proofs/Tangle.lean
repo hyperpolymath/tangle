@@ -2,24 +2,31 @@
 -- Tangle.lean — Mechanized type safety proofs for the TANGLE language core.
 --
 -- Models the core type system from docs/spec/FORMAL-SEMANTICS.md:
---   - Syntax: Expr inductive with Num, Str, Bool, Identity, BraidLit,
---     Compose (.), Tensor (|), Pipeline (>>), Close, Add, Eq, the echo
---     constructors EchoClose, Lower, Residue, EchoVal (structured loss), and
---     the product constructors Pair, Fst, Snd, EchoAdd, EchoEq
---   - Typing: HasType inductive relation covering T-Num, T-Str, T-Bool,
---     T-Identity, T-Braid, T-Compose-Word, T-Tensor-Word, T-Pipeline,
---     T-Close-Word, T-Add-Num, T-Eq-Word, T-Eq-Num, T-Eq-Str, the echo
---     rules T-Echo-Close, T-Lower, T-Residue, T-Echo-Val, the product
+--   - Syntax: Expr inductive (26 constructors) with the de Bruijn Var and the
+--     let binder Lett, plus Num, Str, Bool, Identity, BraidLit, Compose (.),
+--     Tensor (|), Pipeline (>>), Close, Add, Eq, the echo constructors
+--     EchoClose, Lower, Residue, EchoVal (structured loss), and the product
+--     constructors Pair, Fst, Snd, EchoAdd, EchoEq
+--   - Typing: HasType inductive relation (26 rules) covering T-Var, T-Let,
+--     T-Num, T-Str, T-Bool, T-Identity, T-Braid, T-Compose-Word, T-Tensor-Word,
+--     T-Pipeline, T-Close-Word, T-Add-Num, T-Eq-Word, T-Eq-Num, T-Eq-Str, the
+--     echo rules T-Echo-Close, T-Lower, T-Residue, T-Echo-Val, the product
 --     rules T-Pair, T-Fst, T-Snd, T-Echo-Add, and the echo-equality rules
---     T-Echo-Eq-Word, T-Echo-Eq-Num, T-Echo-Eq-Str
---   - Semantics: Small-step Step relation (55 rules incl. echo + product)
+--     T-Echo-Eq-Word, T-Echo-Eq-Num, T-Echo-Eq-Str.  Contexts are
+--     `Ctx = List Ty` (de Bruijn); `Γ[i]?` (`List.getElem?`) looks up Var.
+--   - Substitution: capture-avoiding de Bruijn `shift`/`subst` over all 22
+--     value/operation constructors (TG-1).
+--   - Semantics: Small-step Step relation (55 rules incl. echo + product +
+--     the two let rules letStep / letRed)
 --
 -- Theorems proven:
 --   1. Progress:     well-typed closed terms are values or can step
 --   2. Preservation: stepping preserves types
 --   3. Determinism:  if e ⟶ e₁ and e ⟶ e₂ then e₁ = e₂
 --   4. Type Safety:  corollary combining progress and preservation
---   All four cover the echo-types fragment as well as the let-free base.
+--   Plus the two metatheory lemmas WEAKENING (context insertion) and
+--   SUBST_PRESERVES (the substitution lemma) underpinning let-reduction.
+--   All cover the echo-types fragment, the product fragment, and let-binding.
 --
 -- Echo types (structured loss): `close : Word[n] → Word[0]` is TANGLE's
 -- canonical lossy map.  The echo type former `Ty.echo ρ τ` and the
@@ -37,10 +44,16 @@
 -- residue-recovery and non-injectivity theorems (the `close`, `echoAdd`, and
 -- `echoEq` forms).
 --
--- Note on T-Let: the let binding requires a generalized de Bruijn substitution
--- lemma (standard POPLmark machinery); tracked as TG-1.  The fragment here
--- already covers the knot-theoretic operations (compose, tensor, close) and the
--- echo-types layer that are central to TANGLE.
+-- TG-1 LANDED: variables + the `lett` binder, capture-avoiding de Bruijn
+-- `shift`/`subst`, and the full substitution metatheory.  `weakening`
+-- (context insertion) and `subst_preserves` (the substitution lemma) are
+-- proved, and Progress / Preservation / Determinism / Type Safety + the
+-- decidability layer (`infer`, `infer_sound`, `infer_complete`) all extend to
+-- cover variables and let.  One honest deviation: `subst_preserves` carries
+-- its substitutee `s` typed in the COMBINED context `Γ₁ ++ Γ₂` (the true
+-- inductive invariant — the closed-context `HasType Γ₂ s σ` form is false for a
+-- non-empty prefix); the `letRed` consumer uses `Γ₁ := []` where the two forms
+-- coincide.  See the §METATHEORY comment block for the full rationale.
 --
 -- Developed for Lean 4. Tested against leanprover/lean4:v4.14.0.
 --
@@ -79,6 +92,8 @@ inductive Ty where
     Uses de Bruijn indices (not needed for closed terms but included
     for completeness of the typing judgment). -/
 inductive Expr where
+  | var      : Nat → Expr                   -- de Bruijn variable
+  | lett     : Expr → Expr → Expr           -- let _ = e₁ in e₂ (e₂ binds var 0)
   | num      : Int → Expr                   -- integer literal
   | str      : String → Expr                -- string literal
   | boolLit  : Bool → Expr                  -- boolean literal
@@ -129,6 +144,68 @@ def generatorWidth (gs : List Generator) : Nat :=
     shift(σᵢ, k) = σ_{i+k} per §4.6. -/
 def shiftGenerators (gs : List Generator) (n : Nat) : List Generator :=
   gs.map fun g => { g with idx := g.idx + n }
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- DE BRUIJN SUBSTITUTION MACHINERY
+-- ═══════════════════════════════════════════════════════════════════════
+--
+-- Standard POPLmark substitution operators on de Bruijn terms.  `shift d c e`
+-- lifts every free variable of `e` whose index is ≥ the cutoff `c` by `d`
+-- (used to move a term under `d` extra binders).  `subst j s e` replaces the
+-- variable at index `j` by `s`, decrements every free variable > `j` (the
+-- binder being eliminated disappears), and shifts `s` by one under each binder
+-- it crosses.  Both recurse uniformly through every `Expr` constructor.
+
+/-- de Bruijn shift: lift free variables ≥ cutoff `c` by `d`. -/
+def shift (d : Nat) (c : Nat) : Expr → Expr
+  | .var k       => if k < c then .var k else .var (k + d)
+  | .lett e₁ e₂  => .lett (shift d c e₁) (shift d (c+1) e₂)
+  | .num n       => .num n
+  | .str s       => .str s
+  | .boolLit b   => .boolLit b
+  | .identity    => .identity
+  | .braidLit gs => .braidLit gs
+  | .compose a b => .compose (shift d c a) (shift d c b)
+  | .tensor a b  => .tensor (shift d c a) (shift d c b)
+  | .pipeline a b => .pipeline (shift d c a) (shift d c b)
+  | .close a     => .close (shift d c a)
+  | .add a b     => .add (shift d c a) (shift d c b)
+  | .eq a b      => .eq (shift d c a) (shift d c b)
+  | .echoClose a => .echoClose (shift d c a)
+  | .lower a     => .lower (shift d c a)
+  | .residue a   => .residue (shift d c a)
+  | .echoVal a b => .echoVal (shift d c a) (shift d c b)
+  | .pair a b    => .pair (shift d c a) (shift d c b)
+  | .fst a       => .fst (shift d c a)
+  | .snd a       => .snd (shift d c a)
+  | .echoAdd a b => .echoAdd (shift d c a) (shift d c b)
+  | .echoEq a b  => .echoEq (shift d c a) (shift d c b)
+
+/-- de Bruijn substitution: replace variable `j` by `s`, decrement vars > `j`,
+    shift `s` under binders. -/
+def subst (j : Nat) (s : Expr) : Expr → Expr
+  | .var k       => if k < j then .var k else if k = j then s else .var (k - 1)
+  | .lett e₁ e₂  => .lett (subst j s e₁) (subst (j+1) (shift 1 0 s) e₂)
+  | .num n       => .num n
+  | .str t       => .str t
+  | .boolLit b   => .boolLit b
+  | .identity    => .identity
+  | .braidLit gs => .braidLit gs
+  | .compose a b => .compose (subst j s a) (subst j s b)
+  | .tensor a b  => .tensor (subst j s a) (subst j s b)
+  | .pipeline a b => .pipeline (subst j s a) (subst j s b)
+  | .close a     => .close (subst j s a)
+  | .add a b     => .add (subst j s a) (subst j s b)
+  | .eq a b      => .eq (subst j s a) (subst j s b)
+  | .echoClose a => .echoClose (subst j s a)
+  | .lower a     => .lower (subst j s a)
+  | .residue a   => .residue (subst j s a)
+  | .echoVal a b => .echoVal (subst j s a) (subst j s b)
+  | .pair a b    => .pair (subst j s a) (subst j s b)
+  | .fst a       => .fst (subst j s a)
+  | .snd a       => .snd (subst j s a)
+  | .echoAdd a b => .echoAdd (subst j s a) (subst j s b)
+  | .echoEq a b  => .echoEq (subst j s a) (subst j s b)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- TYPING JUDGMENT
@@ -211,6 +288,11 @@ inductive HasType : Ctx → Expr → Ty → Prop where
   | tEchoEqStr (Γ : Ctx) (e₁ e₂ : Expr) :                  -- [T-Echo-Eq-Str]
       HasType Γ e₁ .str → HasType Γ e₂ .str →
       HasType Γ (.echoEq e₁ e₂) (.echo (.prod .str .str) .bool)
+  | tVar (Γ : Ctx) (i : Nat) (τ : Ty) :                    -- [T-Var]
+      Γ[i]? = some τ → HasType Γ (.var i) τ
+  | tLet (Γ : Ctx) (e₁ e₂ : Expr) (σ τ : Ty) :             -- [T-Let]
+      HasType Γ e₁ σ → HasType (σ :: Γ) e₂ τ →
+      HasType Γ (.lett e₁ e₂) τ
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- SMALL-STEP SEMANTICS
@@ -298,6 +380,10 @@ inductive Step : Expr → Expr → Prop where
                         (.echoVal (.pair .identity (.braidLit gs)) (.boolLit (gs == [])))
   | echoEqBraidId : Step (.echoEq (.braidLit gs) .identity)
                         (.echoVal (.pair (.braidLit gs) .identity) (.boolLit (gs == [])))
+  -- Let-binding: congruence on the bound expression, then β-reduction once it
+  -- is a value (the bound value is substituted into the body's variable 0).
+  | letStep : Step e₁ e₁' → Step (.lett e₁ e₂) (.lett e₁' e₂)
+  | letRed  : IsValue v → Step (.lett v e₂) (subst 0 v e₂)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- LEMMAS
@@ -403,23 +489,208 @@ theorem generatorWidth_shift (gs : List Generator) (n : Nat) :
   split <;> simp_all
 
 -- ═══════════════════════════════════════════════════════════════════════
+-- METATHEORY: WEAKENING + SUBSTITUTION (TG-1)
+-- ═══════════════════════════════════════════════════════════════════════
+--
+-- The two structural lemmas underpinning `let`-binding.  `weakening` inserts a
+-- fresh hypothesis `σ` at position `Γ₁.length` (shifting the term to skip the
+-- new binder); `subst_preserves` is the substitution lemma — typing is closed
+-- under replacing the variable at `Γ₁.length` by a term `s` of its type.
+--
+-- Implementation notes (deviations from the naive POPLmark recipe):
+--   * Variable lookup uses `Γ[i]?` (`List.getElem?`), not the deprecated
+--     `List.get?`, so the append splits go through `List.getElem?_append_left`
+--     / `List.getElem?_append_right`.
+--   * Each derivation is taken apart with a bare `cases h` followed by
+--     `rename_i`, rather than `cases h with | tCtor …`.  Under
+--     `induction e`, the binder/index arguments of `tVar`/`tLet` are unified
+--     with the surrounding context, so the positional `with`-arm naming does
+--     not line up; `rename_i` names exactly the residual hypotheses.
+--   * `subst_preserves` carries the hypothesis `s` typed in the COMBINED
+--     context `Γ₁ ++ Γ₂` (not merely `Γ₂`).  This is the genuine inductive
+--     invariant: the naive `HasType Γ₂ s σ` form is *false* for a non-empty
+--     prefix (e.g. `Γ₁ = [α]`, `s = .var 0` pointing into `Γ₂`).  The `letRed`
+--     consumer instantiates `Γ₁ := []`, where `Γ₁ ++ Γ₂ = Γ₂`, so it still
+--     accepts a closed-context premise directly.  Because `s` is already in
+--     the combined context, the `var = Γ₁.length` case closes by `exact hs`
+--     and no separate `front_weakening` / shift-composition lemma is needed.
+
+/-- **Weakening (insertion)**: inserting a fresh hypothesis `σ` at de Bruijn
+    position `Γ₁.length` preserves typing, provided the term is shifted to
+    skip the new binder. -/
+theorem weakening {Γ₁ Γ₂ : Ctx} {e : Expr} {τ σ : Ty} :
+    HasType (Γ₁ ++ Γ₂) e τ → HasType (Γ₁ ++ σ :: Γ₂) (shift 1 Γ₁.length e) τ := by
+  intro h
+  induction e generalizing Γ₁ τ with
+  | var k =>
+    cases h; rename_i hi; simp only [shift]
+    by_cases hk : k < Γ₁.length
+    · simp only [hk, if_true]
+      rw [List.getElem?_append_left hk] at hi
+      exact .tVar _ _ _ (by rw [List.getElem?_append_left hk]; exact hi)
+    · simp only [hk, if_false]
+      rw [List.getElem?_append_right (by omega)] at hi
+      refine .tVar _ _ _ ?_
+      rw [List.getElem?_append_right (by omega)]
+      have hrw : k + 1 - Γ₁.length = (k - Γ₁.length) + 1 := by omega
+      rw [hrw]; simpa using hi
+  | lett e₁ e₂ ih₁ ih₂ =>
+    cases h; rename_i a h₁ h₂; simp only [shift]
+    refine .tLet _ _ _ a _ (ih₁ h₁) ?_
+    have hr := ih₂ (Γ₁ := a :: Γ₁) h₂
+    simpa using hr
+  | num _ => cases h; exact .tNum _ _
+  | str _ => cases h; exact .tStr _ _
+  | boolLit _ => cases h; exact .tBool _ _
+  | identity => cases h; exact .tIdentity _
+  | braidLit _ => cases h; exact .tBraid _ _
+  | compose a b iha ihb =>
+    cases h; rename_i n m h₁ h₂; simp only [shift]; exact .tComposeWord _ _ _ n m (iha h₁) (ihb h₂)
+  | tensor a b iha ihb =>
+    cases h; rename_i n m h₁ h₂; simp only [shift]; exact .tTensorWord _ _ _ n m (iha h₁) (ihb h₂)
+  | pipeline a b iha ihb =>
+    cases h; rename_i hc; simp only [shift]
+    cases hc; rename_i n m h₁ h₂
+    exact .tPipeline _ _ _ _ (.tComposeWord _ _ _ n m (iha h₁) (ihb h₂))
+  | close a iha =>
+    cases h; rename_i n h₁; simp only [shift]; exact .tCloseWord _ _ n (iha h₁)
+  | add a b iha ihb =>
+    cases h; rename_i h₁ h₂; simp only [shift]; exact .tAddNum _ _ _ (iha h₁) (ihb h₂)
+  | eq a b iha ihb =>
+    cases h <;> simp only [shift]
+    · rename_i n h₁ h₂; exact .tEqWord _ _ _ n (iha h₁) (ihb h₂)
+    · rename_i h₁ h₂; exact .tEqNum _ _ _ (iha h₁) (ihb h₂)
+    · rename_i h₁ h₂; exact .tEqStr _ _ _ (iha h₁) (ihb h₂)
+  | echoClose a iha =>
+    cases h; rename_i n h₁; simp only [shift]; exact .tEchoClose _ _ n (iha h₁)
+  | lower a iha =>
+    cases h; rename_i ρ h₁; simp only [shift]; exact .tLower _ _ ρ _ (iha h₁)
+  | residue a iha =>
+    cases h; rename_i τ' h₁; simp only [shift]; exact .tResidue _ _ _ τ' (iha h₁)
+  | echoVal a b iha ihb =>
+    cases h; rename_i ρ τ' h₁ h₂; simp only [shift]; exact .tEchoVal _ _ _ ρ τ' (iha h₁) (ihb h₂)
+  | pair a b iha ihb =>
+    cases h; rename_i α β h₁ h₂; simp only [shift]; exact .tPair _ _ _ α β (iha h₁) (ihb h₂)
+  | fst a iha =>
+    cases h; rename_i β h₁; simp only [shift]; exact .tFst _ _ _ β (iha h₁)
+  | snd a iha =>
+    cases h; rename_i α h₁; simp only [shift]; exact .tSnd _ _ α _ (iha h₁)
+  | echoAdd a b iha ihb =>
+    cases h; rename_i h₁ h₂; simp only [shift]; exact .tEchoAdd _ _ _ (iha h₁) (ihb h₂)
+  | echoEq a b iha ihb =>
+    cases h <;> simp only [shift]
+    · rename_i n h₁ h₂; exact .tEchoEqWord _ _ _ n (iha h₁) (ihb h₂)
+    · rename_i h₁ h₂; exact .tEchoEqNum _ _ _ (iha h₁) (ihb h₂)
+    · rename_i h₁ h₂; exact .tEchoEqStr _ _ _ (iha h₁) (ihb h₂)
+
+/-- **Substitution**: typing is preserved by substituting the variable at de
+    Bruijn position `Γ₁.length` by a term `s` of its type, with `s` taken in
+    the combined context `Γ₁ ++ Γ₂` (the inductive invariant; see note above). -/
+theorem subst_preserves {Γ₁ Γ₂ : Ctx} {e s : Expr} {τ σ : Ty} :
+    HasType (Γ₁ ++ σ :: Γ₂) e τ → HasType (Γ₁ ++ Γ₂) s σ →
+    HasType (Γ₁ ++ Γ₂) (subst Γ₁.length s e) τ := by
+  intro h hs
+  induction e generalizing Γ₁ s τ with
+  | var k =>
+    cases h; rename_i hi; simp only [subst]
+    by_cases hlt : k < Γ₁.length
+    · simp only [hlt, if_true]
+      rw [List.getElem?_append_left hlt] at hi
+      exact .tVar _ _ _ (by rw [List.getElem?_append_left hlt]; exact hi)
+    · by_cases heq : k = Γ₁.length
+      · subst heq
+        simp only [Nat.lt_irrefl, if_false]
+        rw [List.getElem?_append_right (by omega)] at hi
+        simp only [Nat.sub_self, List.getElem?_cons_zero, Option.some.injEq] at hi
+        subst hi; exact hs
+      · simp only [hlt, if_false, heq, if_false]
+        rw [List.getElem?_append_right (by omega)] at hi
+        refine .tVar _ _ _ ?_
+        rw [List.getElem?_append_right (by omega)]
+        have e1 : k - Γ₁.length = (k - 1 - Γ₁.length) + 1 := by omega
+        rw [e1] at hi; simpa using hi
+  | lett e₁ e₂ ih₁ ih₂ =>
+    cases h; rename_i a h₁ h₂; simp only [subst]
+    refine .tLet _ _ _ a _ (ih₁ h₁ hs) ?_
+    have hws : HasType ((a :: Γ₁) ++ Γ₂) (shift 1 0 s) σ := by
+      have hw := weakening (Γ₁ := []) (σ := a) hs
+      simpa using hw
+    have hr := ih₂ (Γ₁ := a :: Γ₁) (s := shift 1 0 s) h₂ hws
+    simpa using hr
+  | num _ => cases h; exact .tNum _ _
+  | str _ => cases h; exact .tStr _ _
+  | boolLit _ => cases h; exact .tBool _ _
+  | identity => cases h; exact .tIdentity _
+  | braidLit _ => cases h; exact .tBraid _ _
+  | compose a b iha ihb =>
+    cases h; rename_i n m h₁ h₂; simp only [subst]; exact .tComposeWord _ _ _ n m (iha h₁ hs) (ihb h₂ hs)
+  | tensor a b iha ihb =>
+    cases h; rename_i n m h₁ h₂; simp only [subst]; exact .tTensorWord _ _ _ n m (iha h₁ hs) (ihb h₂ hs)
+  | pipeline a b iha ihb =>
+    cases h; rename_i hc; simp only [subst]
+    cases hc; rename_i n m h₁ h₂
+    exact .tPipeline _ _ _ _ (.tComposeWord _ _ _ n m (iha h₁ hs) (ihb h₂ hs))
+  | close a iha =>
+    cases h; rename_i n h₁; simp only [subst]; exact .tCloseWord _ _ n (iha h₁ hs)
+  | add a b iha ihb =>
+    cases h; rename_i h₁ h₂; simp only [subst]; exact .tAddNum _ _ _ (iha h₁ hs) (ihb h₂ hs)
+  | eq a b iha ihb =>
+    cases h <;> simp only [subst]
+    · rename_i n h₁ h₂; exact .tEqWord _ _ _ n (iha h₁ hs) (ihb h₂ hs)
+    · rename_i h₁ h₂; exact .tEqNum _ _ _ (iha h₁ hs) (ihb h₂ hs)
+    · rename_i h₁ h₂; exact .tEqStr _ _ _ (iha h₁ hs) (ihb h₂ hs)
+  | echoClose a iha =>
+    cases h; rename_i n h₁; simp only [subst]; exact .tEchoClose _ _ n (iha h₁ hs)
+  | lower a iha =>
+    cases h; rename_i ρ h₁; simp only [subst]; exact .tLower _ _ ρ _ (iha h₁ hs)
+  | residue a iha =>
+    cases h; rename_i τ' h₁; simp only [subst]; exact .tResidue _ _ _ τ' (iha h₁ hs)
+  | echoVal a b iha ihb =>
+    cases h; rename_i ρ τ' h₁ h₂; simp only [subst]; exact .tEchoVal _ _ _ ρ τ' (iha h₁ hs) (ihb h₂ hs)
+  | pair a b iha ihb =>
+    cases h; rename_i α β h₁ h₂; simp only [subst]; exact .tPair _ _ _ α β (iha h₁ hs) (ihb h₂ hs)
+  | fst a iha =>
+    cases h; rename_i β h₁; simp only [subst]; exact .tFst _ _ _ β (iha h₁ hs)
+  | snd a iha =>
+    cases h; rename_i α h₁; simp only [subst]; exact .tSnd _ _ α _ (iha h₁ hs)
+  | echoAdd a b iha ihb =>
+    cases h; rename_i h₁ h₂; simp only [subst]; exact .tEchoAdd _ _ _ (iha h₁ hs) (ihb h₂ hs)
+  | echoEq a b iha ihb =>
+    cases h <;> simp only [subst]
+    · rename_i n h₁ h₂; exact .tEchoEqWord _ _ _ n (iha h₁ hs) (ihb h₂ hs)
+    · rename_i h₁ h₂; exact .tEchoEqNum _ _ _ (iha h₁ hs) (ihb h₂ hs)
+    · rename_i h₁ h₂; exact .tEchoEqStr _ _ _ (iha h₁ hs) (ihb h₂ hs)
+
+-- ═══════════════════════════════════════════════════════════════════════
 -- THEOREM 1: PROGRESS
 -- ═══════════════════════════════════════════════════════════════════════
 
 /-- **Progress**: Every well-typed closed term is either a value or can
     take a step. This is the standard progress theorem from TAPL §8. -/
 theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
+  -- Recurse structurally on the expression (the typing derivation cannot drive
+  -- structural recursion once `tLet` is present, since its body premise lives
+  -- in an extended context).  Each constructor inverts the typing hypothesis;
+  -- the recursive `progress` calls become the Expr induction hypotheses.
   intro ht
-  cases ht with
-  | tNum => left; exact .num _
-  | tStr => left; exact .str _
-  | tBool => left; exact .boolLit _
-  | tIdentity => left; exact .identity
-  | tBraid => left; exact .braidLit _
-  | tComposeWord _ _ n m h₁ h₂ =>
+  induction e generalizing τ with
+  | var k => cases ht; rename_i hi; simp at hi  -- vacuous: `[][i]? = some τ`
+  | lett e₁ e₂ ih₁ _ =>
+    cases ht; rename_i h₁ h₂
     right
-    rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
-    · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
+    rcases ih₁ h₁ with hv | ⟨e₁', hs⟩
+    · exact ⟨_, .letRed hv⟩
+    · exact ⟨_, .letStep hs⟩
+  | num _ => cases ht; left; exact .num _
+  | str _ => cases ht; left; exact .str _
+  | boolLit _ => cases ht; left; exact .boolLit _
+  | identity => cases ht; left; exact .identity
+  | braidLit _ => cases ht; left; exact .braidLit _
+  | compose a b iha ihb =>
+    cases ht; rename_i h₁ h₂
+    right
+    rcases iha h₁ with hv₁ | ⟨e₁', hs₁⟩
+    · rcases ihb h₂ with hv₂ | ⟨e₂', hs₂⟩
       · rcases canonical_word hv₁ h₁ with ⟨rfl, _⟩ | ⟨gs₁, rfl, _⟩ <;>
         rcases canonical_word hv₂ h₂ with ⟨rfl, _⟩ | ⟨gs₂, rfl, _⟩
         · exact ⟨_, .composeIdId⟩
@@ -428,10 +699,11 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
         · exact ⟨_, .composeWords⟩
       · exact ⟨_, .composeRight hv₁ hs₂⟩
     · exact ⟨_, .composeLeft hs₁⟩
-  | tTensorWord _ _ n m h₁ h₂ =>
+  | tensor a b iha ihb =>
+    cases ht; rename_i h₁ h₂
     right
-    rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
-    · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
+    rcases iha h₁ with hv₁ | ⟨e₁', hs₁⟩
+    · rcases ihb h₂ with hv₂ | ⟨e₂', hs₂⟩
       · rcases canonical_word hv₁ h₁ with ⟨rfl, _⟩ | ⟨gs₁, rfl, _⟩ <;>
         rcases canonical_word hv₂ h₂ with ⟨rfl, _⟩ | ⟨gs₂, rfl, _⟩
         · exact ⟨_, .tensorIdId⟩
@@ -440,138 +712,154 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
         · exact ⟨_, .tensorWords⟩
       · exact ⟨_, .tensorRight hv₁ hs₂⟩
     · exact ⟨_, .tensorLeft hs₁⟩
-  | tPipeline _ _ _ _ => exact .inr ⟨_, .pipeline⟩
-  | tCloseWord _ n h =>
+  | pipeline a b _ _ => cases ht; exact .inr ⟨_, .pipeline⟩
+  | close a iha =>
+    cases ht; rename_i h
     right
-    rcases progress h with hv | ⟨e', hs⟩
+    rcases iha h with hv | ⟨e', hs⟩
     · rcases canonical_word hv h with ⟨rfl, _⟩ | ⟨gs, rfl, _⟩
       · exact ⟨_, .closeId⟩
       · exact ⟨_, .closeWord⟩
     · exact ⟨_, .closeStep hs⟩
-  | tAddNum _ _ h₁ h₂ =>
+  | add a b iha ihb =>
+    cases ht; rename_i h₁ h₂
     right
-    rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
-    · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
+    rcases iha h₁ with hv₁ | ⟨e₁', hs₁⟩
+    · rcases ihb h₂ with hv₂ | ⟨e₂', hs₂⟩
       · obtain ⟨n₁, rfl⟩ := canonical_num hv₁ h₁
         obtain ⟨n₂, rfl⟩ := canonical_num hv₂ h₂
         exact ⟨_, .addNums⟩
       · exact ⟨_, .addRight hv₁ hs₂⟩
     · exact ⟨_, .addLeft hs₁⟩
-  | tEqWord _ _ n h₁ h₂ =>
+  | eq a b iha ihb =>
     right
-    rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
-    · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
-      · rcases canonical_word hv₁ h₁ with ⟨rfl, _⟩ | ⟨gs₁, rfl, _⟩ <;>
-        rcases canonical_word hv₂ h₂ with ⟨rfl, _⟩ | ⟨gs₂, rfl, _⟩
-        · exact ⟨_, .eqIdId⟩
-        · exact ⟨_, .eqIdBraid⟩
-        · exact ⟨_, .eqBraidId⟩
-        · exact ⟨_, .eqBraids⟩
-      · exact ⟨_, .eqRight hv₁ hs₂⟩
-    · exact ⟨_, .eqLeft hs₁⟩
-  | tEqNum _ _ h₁ h₂ =>
-    right
-    rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
-    · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
-      · obtain ⟨n₁, rfl⟩ := canonical_num hv₁ h₁
-        obtain ⟨n₂, rfl⟩ := canonical_num hv₂ h₂
-        exact ⟨_, .eqNums⟩
-      · exact ⟨_, .eqRight hv₁ hs₂⟩
-    · exact ⟨_, .eqLeft hs₁⟩
-  | tEqStr _ _ h₁ h₂ =>
-    right
-    rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
-    · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
-      · obtain ⟨s₁, rfl⟩ := canonical_str hv₁ h₁
-        obtain ⟨s₂, rfl⟩ := canonical_str hv₂ h₂
-        exact ⟨_, .eqStrs⟩
-      · exact ⟨_, .eqRight hv₁ hs₂⟩
-    · exact ⟨_, .eqLeft hs₁⟩
-  | tEchoClose _ n h =>
+    cases ht with
+    | tEqWord =>
+      rename_i n h₁ h₂
+      rcases iha h₁ with hv₁ | ⟨e₁', hs₁⟩
+      · rcases ihb h₂ with hv₂ | ⟨e₂', hs₂⟩
+        · rcases canonical_word hv₁ h₁ with ⟨rfl, _⟩ | ⟨gs₁, rfl, _⟩ <;>
+          rcases canonical_word hv₂ h₂ with ⟨rfl, _⟩ | ⟨gs₂, rfl, _⟩
+          · exact ⟨_, .eqIdId⟩
+          · exact ⟨_, .eqIdBraid⟩
+          · exact ⟨_, .eqBraidId⟩
+          · exact ⟨_, .eqBraids⟩
+        · exact ⟨_, .eqRight hv₁ hs₂⟩
+      · exact ⟨_, .eqLeft hs₁⟩
+    | tEqNum =>
+      rename_i h₁ h₂
+      rcases iha h₁ with hv₁ | ⟨e₁', hs₁⟩
+      · rcases ihb h₂ with hv₂ | ⟨e₂', hs₂⟩
+        · obtain ⟨n₁, rfl⟩ := canonical_num hv₁ h₁
+          obtain ⟨n₂, rfl⟩ := canonical_num hv₂ h₂
+          exact ⟨_, .eqNums⟩
+        · exact ⟨_, .eqRight hv₁ hs₂⟩
+      · exact ⟨_, .eqLeft hs₁⟩
+    | tEqStr =>
+      rename_i h₁ h₂
+      rcases iha h₁ with hv₁ | ⟨e₁', hs₁⟩
+      · rcases ihb h₂ with hv₂ | ⟨e₂', hs₂⟩
+        · obtain ⟨s₁, rfl⟩ := canonical_str hv₁ h₁
+          obtain ⟨s₂, rfl⟩ := canonical_str hv₂ h₂
+          exact ⟨_, .eqStrs⟩
+        · exact ⟨_, .eqRight hv₁ hs₂⟩
+      · exact ⟨_, .eqLeft hs₁⟩
+  | echoClose a iha =>
     -- `echoClose e` is always a redex: it reduces into a formed echo value.
+    cases ht; rename_i h
     right
-    rcases progress h with hv | ⟨e', hs⟩
+    rcases iha h with hv | ⟨e', hs⟩
     · rcases canonical_word hv h with ⟨rfl, _⟩ | ⟨gs, rfl, _⟩
       · exact ⟨_, .echoCloseId⟩
       · exact ⟨_, .echoCloseWord⟩
     · exact ⟨_, .echoCloseStep hs⟩
-  | tEchoVal _ _ ρ τ hr hv =>
-    -- `echoVal r v` is a value iff both r and v are; otherwise the relevant
-    -- component steps under `echoValLeft` / `echoValRight`.
-    rcases progress hr with hvr | ⟨r', hsr⟩
-    · rcases progress hv with hvv | ⟨v', hsv⟩
-      · exact .inl (.echoVal hvr hvv)
-      · exact .inr ⟨_, .echoValRight hvr hsv⟩
-    · exact .inr ⟨_, .echoValLeft hsr⟩
-  | tLower _ ρ τ h =>
+  | lower a iha =>
+    cases ht; rename_i h
     right
-    rcases progress h with hv | ⟨e', hs⟩
+    rcases iha h with hv | ⟨e', hs⟩
     · obtain ⟨r, v, rfl, hr, hvv⟩ := canonical_echo hv h
       exact ⟨_, .lowerVal hr hvv⟩
     · exact ⟨_, .lowerStep hs⟩
-  | tResidue _ ρ τ h =>
+  | residue a iha =>
+    cases ht; rename_i h
     right
-    rcases progress h with hv | ⟨e', hs⟩
+    rcases iha h with hv | ⟨e', hs⟩
     · obtain ⟨r, v, rfl, hr, hvv⟩ := canonical_echo hv h
       exact ⟨_, .residueVal hr hvv⟩
     · exact ⟨_, .residueStep hs⟩
-  | tPair _ _ α β ha hb =>
-    rcases progress ha with hva | ⟨a', hsa⟩
-    · rcases progress hb with hvb | ⟨b', hsb⟩
+  | echoVal r w ihr ihw =>
+    -- `echoVal r v` is a value iff both r and v are; otherwise the relevant
+    -- component steps under `echoValLeft` / `echoValRight`.
+    cases ht; rename_i hr hv
+    rcases ihr hr with hvr | ⟨r', hsr⟩
+    · rcases ihw hv with hvv | ⟨v', hsv⟩
+      · exact .inl (.echoVal hvr hvv)
+      · exact .inr ⟨_, .echoValRight hvr hsv⟩
+    · exact .inr ⟨_, .echoValLeft hsr⟩
+  | pair a b iha ihb =>
+    cases ht; rename_i ha hb
+    rcases iha ha with hva | ⟨a', hsa⟩
+    · rcases ihb hb with hvb | ⟨b', hsb⟩
       · exact .inl (.pair hva hvb)
       · exact .inr ⟨_, .pairRight hva hsb⟩
     · exact .inr ⟨_, .pairLeft hsa⟩
-  | tFst _ α β h =>
+  | fst a iha =>
+    cases ht; rename_i h
     right
-    rcases progress h with hv | ⟨e', hs⟩
+    rcases iha h with hv | ⟨e', hs⟩
     · obtain ⟨a, b, rfl, ha, hb⟩ := canonical_prod hv h
       exact ⟨_, .fstPair ha hb⟩
     · exact ⟨_, .fstStep hs⟩
-  | tSnd _ α β h =>
+  | snd a iha =>
+    cases ht; rename_i h
     right
-    rcases progress h with hv | ⟨e', hs⟩
+    rcases iha h with hv | ⟨e', hs⟩
     · obtain ⟨a, b, rfl, ha, hb⟩ := canonical_prod hv h
       exact ⟨_, .sndPair ha hb⟩
     · exact ⟨_, .sndStep hs⟩
-  | tEchoAdd _ _ h₁ h₂ =>
+  | echoAdd a b iha ihb =>
+    cases ht; rename_i h₁ h₂
     right
-    rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
-    · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
+    rcases iha h₁ with hv₁ | ⟨e₁', hs₁⟩
+    · rcases ihb h₂ with hv₂ | ⟨e₂', hs₂⟩
       · obtain ⟨n₁, rfl⟩ := canonical_num hv₁ h₁
         obtain ⟨n₂, rfl⟩ := canonical_num hv₂ h₂
         exact ⟨_, .echoAddNums⟩
       · exact ⟨_, .echoAddRight hv₁ hs₂⟩
     · exact ⟨_, .echoAddLeft hs₁⟩
-  | tEchoEqWord _ _ n h₁ h₂ =>
+  | echoEq a b iha ihb =>
     right
-    rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
-    · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
-      · rcases canonical_word hv₁ h₁ with ⟨rfl, _⟩ | ⟨gs₁, rfl, _⟩ <;>
-        rcases canonical_word hv₂ h₂ with ⟨rfl, _⟩ | ⟨gs₂, rfl, _⟩
-        · exact ⟨_, .echoEqIdId⟩
-        · exact ⟨_, .echoEqIdBraid⟩
-        · exact ⟨_, .echoEqBraidId⟩
-        · exact ⟨_, .echoEqBraids⟩
-      · exact ⟨_, .echoEqRight hv₁ hs₂⟩
-    · exact ⟨_, .echoEqLeft hs₁⟩
-  | tEchoEqNum _ _ h₁ h₂ =>
-    right
-    rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
-    · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
-      · obtain ⟨n₁, rfl⟩ := canonical_num hv₁ h₁
-        obtain ⟨n₂, rfl⟩ := canonical_num hv₂ h₂
-        exact ⟨_, .echoEqNums⟩
-      · exact ⟨_, .echoEqRight hv₁ hs₂⟩
-    · exact ⟨_, .echoEqLeft hs₁⟩
-  | tEchoEqStr _ _ h₁ h₂ =>
-    right
-    rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
-    · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
-      · obtain ⟨s₁, rfl⟩ := canonical_str hv₁ h₁
-        obtain ⟨s₂, rfl⟩ := canonical_str hv₂ h₂
-        exact ⟨_, .echoEqStrs⟩
-      · exact ⟨_, .echoEqRight hv₁ hs₂⟩
-    · exact ⟨_, .echoEqLeft hs₁⟩
+    cases ht with
+    | tEchoEqWord =>
+      rename_i n h₁ h₂
+      rcases iha h₁ with hv₁ | ⟨e₁', hs₁⟩
+      · rcases ihb h₂ with hv₂ | ⟨e₂', hs₂⟩
+        · rcases canonical_word hv₁ h₁ with ⟨rfl, _⟩ | ⟨gs₁, rfl, _⟩ <;>
+          rcases canonical_word hv₂ h₂ with ⟨rfl, _⟩ | ⟨gs₂, rfl, _⟩
+          · exact ⟨_, .echoEqIdId⟩
+          · exact ⟨_, .echoEqIdBraid⟩
+          · exact ⟨_, .echoEqBraidId⟩
+          · exact ⟨_, .echoEqBraids⟩
+        · exact ⟨_, .echoEqRight hv₁ hs₂⟩
+      · exact ⟨_, .echoEqLeft hs₁⟩
+    | tEchoEqNum =>
+      rename_i h₁ h₂
+      rcases iha h₁ with hv₁ | ⟨e₁', hs₁⟩
+      · rcases ihb h₂ with hv₂ | ⟨e₂', hs₂⟩
+        · obtain ⟨n₁, rfl⟩ := canonical_num hv₁ h₁
+          obtain ⟨n₂, rfl⟩ := canonical_num hv₂ h₂
+          exact ⟨_, .echoEqNums⟩
+        · exact ⟨_, .echoEqRight hv₁ hs₂⟩
+      · exact ⟨_, .echoEqLeft hs₁⟩
+    | tEchoEqStr =>
+      rename_i h₁ h₂
+      rcases iha h₁ with hv₁ | ⟨e₁', hs₁⟩
+      · rcases ihb h₂ with hv₂ | ⟨e₂', hs₂⟩
+        · obtain ⟨s₁, rfl⟩ := canonical_str hv₁ h₁
+          obtain ⟨s₂, rfl⟩ := canonical_str hv₂ h₂
+          exact ⟨_, .echoEqStrs⟩
+        · exact ⟨_, .echoEqRight hv₁ hs₂⟩
+      · exact ⟨_, .echoEqLeft hs₁⟩
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- THEOREM 2: PRESERVATION
@@ -583,29 +871,29 @@ theorem preservation : HasType [] e τ → Step e e' → HasType [] e' τ := by
   intro ht hs
   induction hs generalizing τ with
   | composeLeft hs ih =>
-    cases ht with | tComposeWord _ _ n m h₁ h₂ => exact .tComposeWord _ _ _ n m (ih h₁) h₂
+    cases ht with | tComposeWord _ _ _ n m h₁ h₂ => exact .tComposeWord _ _ _ n m (ih h₁) h₂
   | composeRight _ hs ih =>
-    cases ht with | tComposeWord _ _ n m h₁ h₂ => exact .tComposeWord _ _ _ n m h₁ (ih h₂)
+    cases ht with | tComposeWord _ _ _ n m h₁ h₂ => exact .tComposeWord _ _ _ n m h₁ (ih h₂)
   | composeWords =>
-    cases ht with | tComposeWord _ _ n m h₁ h₂ =>
+    cases ht with | tComposeWord _ _ _ n m h₁ h₂ =>
     cases h₁; cases h₂
     rw [← generatorWidth_append]
     exact .tBraid _ _
   | composeIdL =>
-    cases ht with | tComposeWord _ _ n m h₁ h₂ =>
+    cases ht with | tComposeWord _ _ _ n m h₁ h₂ =>
     cases h₁ with | tIdentity => simp at *; exact h₂
   | composeIdR =>
-    cases ht with | tComposeWord _ _ n m h₁ h₂ =>
+    cases ht with | tComposeWord _ _ _ n m h₁ h₂ =>
     cases h₂ with | tIdentity => simp at *; exact h₁
   | composeIdId =>
-    cases ht with | tComposeWord _ _ n m h₁ h₂ =>
+    cases ht with | tComposeWord _ _ _ n m h₁ h₂ =>
     cases h₁; cases h₂; exact .tIdentity _
   | tensorLeft hs ih =>
-    cases ht with | tTensorWord _ _ n m h₁ h₂ => exact .tTensorWord _ _ _ n m (ih h₁) h₂
+    cases ht with | tTensorWord _ _ _ n m h₁ h₂ => exact .tTensorWord _ _ _ n m (ih h₁) h₂
   | tensorRight _ hs ih =>
-    cases ht with | tTensorWord _ _ n m h₁ h₂ => exact .tTensorWord _ _ _ n m h₁ (ih h₂)
+    cases ht with | tTensorWord _ _ _ n m h₁ h₂ => exact .tTensorWord _ _ _ n m h₁ (ih h₂)
   | tensorWords =>
-    cases ht with | tTensorWord _ _ n m h₁ h₂ =>
+    cases ht with | tTensorWord _ _ _ n m h₁ h₂ =>
     cases h₁; cases h₂
     rename_i gs₁ gs₂
     have hgoal :
@@ -618,92 +906,92 @@ theorem preservation : HasType [] e τ → Step e e' → HasType [] e' τ := by
     rw [← hgoal]
     exact .tBraid _ _
   | tensorIdL =>
-    cases ht with | tTensorWord _ _ n m h₁ h₂ =>
+    cases ht with | tTensorWord _ _ _ n m h₁ h₂ =>
     cases h₁ with | tIdentity => simp at *; exact h₂
   | tensorIdR =>
-    cases ht with | tTensorWord _ _ n m h₁ h₂ =>
+    cases ht with | tTensorWord _ _ _ n m h₁ h₂ =>
     cases h₂ with | tIdentity => simp at *; exact h₁
   | tensorIdId =>
-    cases ht with | tTensorWord _ _ n m h₁ h₂ =>
+    cases ht with | tTensorWord _ _ _ n m h₁ h₂ =>
     cases h₁; cases h₂; exact .tIdentity _
-  | pipeline => cases ht with | tPipeline _ _ _ h => exact h
-  | closeStep hs ih => cases ht with | tCloseWord _ n h => exact .tCloseWord _ _ n (ih h)
+  | pipeline => cases ht with | tPipeline _ _ _ _ h => exact h
+  | closeStep hs ih => cases ht with | tCloseWord _ _ n h => exact .tCloseWord _ _ n (ih h)
   | closeWord => cases ht with | tCloseWord => exact .tIdentity _
   | closeId => cases ht with | tCloseWord => exact .tIdentity _
-  | addLeft hs ih => cases ht with | tAddNum _ _ h₁ h₂ => exact .tAddNum _ _ _ (ih h₁) h₂
-  | addRight _ hs ih => cases ht with | tAddNum _ _ h₁ h₂ => exact .tAddNum _ _ _ h₁ (ih h₂)
+  | addLeft hs ih => cases ht with | tAddNum _ _ _ h₁ h₂ => exact .tAddNum _ _ _ (ih h₁) h₂
+  | addRight _ hs ih => cases ht with | tAddNum _ _ _ h₁ h₂ => exact .tAddNum _ _ _ h₁ (ih h₂)
   | addNums => cases ht with | tAddNum => exact .tNum _ _
   | eqLeft hs ih =>
     cases ht with
-    | tEqWord _ _ n h₁ h₂ => exact .tEqWord _ _ _ n (ih h₁) h₂
-    | tEqNum _ _ h₁ h₂ => exact .tEqNum _ _ _ (ih h₁) h₂
-    | tEqStr _ _ h₁ h₂ => exact .tEqStr _ _ _ (ih h₁) h₂
+    | tEqWord _ _ _ n h₁ h₂ => exact .tEqWord _ _ _ n (ih h₁) h₂
+    | tEqNum _ _ _ h₁ h₂ => exact .tEqNum _ _ _ (ih h₁) h₂
+    | tEqStr _ _ _ h₁ h₂ => exact .tEqStr _ _ _ (ih h₁) h₂
   | eqRight _ hs ih =>
     cases ht with
-    | tEqWord _ _ n h₁ h₂ => exact .tEqWord _ _ _ n h₁ (ih h₂)
-    | tEqNum _ _ h₁ h₂ => exact .tEqNum _ _ _ h₁ (ih h₂)
-    | tEqStr _ _ h₁ h₂ => exact .tEqStr _ _ _ h₁ (ih h₂)
+    | tEqWord _ _ _ n h₁ h₂ => exact .tEqWord _ _ _ n h₁ (ih h₂)
+    | tEqNum _ _ _ h₁ h₂ => exact .tEqNum _ _ _ h₁ (ih h₂)
+    | tEqStr _ _ _ h₁ h₂ => exact .tEqStr _ _ _ h₁ (ih h₂)
   | eqNums => cases ht with
     | tEqNum => exact .tBool _ _
-    | tEqWord _ _ _ _ h₁ => cases h₁
-    | tEqStr _ _ _ h₁ => cases h₁
+    | tEqWord _ _ _ _ _ h₁ => cases h₁
+    | tEqStr _ _ _ _ h₁ => cases h₁
   | eqStrs => cases ht with
     | tEqStr => exact .tBool _ _
-    | tEqWord _ _ _ _ h₁ => cases h₁
-    | tEqNum _ _ _ h₁ => cases h₁
+    | tEqWord _ _ _ _ _ h₁ => cases h₁
+    | tEqNum _ _ _ _ h₁ => cases h₁
   | eqBraids => cases ht with
     | tEqWord => exact .tBool _ _
-    | tEqNum _ _ _ h₁ => cases h₁
-    | tEqStr _ _ _ h₁ => cases h₁
+    | tEqNum _ _ _ _ h₁ => cases h₁
+    | tEqStr _ _ _ _ h₁ => cases h₁
   | eqIdId => cases ht with
     | tEqWord => exact .tBool _ _
-    | tEqNum _ _ _ h₁ => cases h₁
-    | tEqStr _ _ _ h₁ => cases h₁
+    | tEqNum _ _ _ _ h₁ => cases h₁
+    | tEqStr _ _ _ _ h₁ => cases h₁
   | eqIdBraid => cases ht with
     | tEqWord => exact .tBool _ _
-    | tEqNum _ _ _ h₁ => cases h₁
-    | tEqStr _ _ _ h₁ => cases h₁
+    | tEqNum _ _ _ _ h₁ => cases h₁
+    | tEqStr _ _ _ _ h₁ => cases h₁
   | eqBraidId => cases ht with
     | tEqWord => exact .tBool _ _
-    | tEqNum _ _ _ h₁ => cases h₁
-    | tEqStr _ _ _ h₁ => cases h₁
+    | tEqNum _ _ _ _ h₁ => cases h₁
+    | tEqStr _ _ _ _ h₁ => cases h₁
   -- Echo congruence preserves types; `echoClose` reduces into a formed echo
   -- value `echoVal residue result`; `lower`/`residue` project off it.
   | echoCloseStep hs ih =>
-    cases ht with | tEchoClose _ n h => exact .tEchoClose _ _ n (ih h)
+    cases ht with | tEchoClose _ _ n h => exact .tEchoClose _ _ n (ih h)
   | echoCloseWord =>
-    cases ht with | tEchoClose _ n h =>
+    cases ht with | tEchoClose _ _ n h =>
     cases h with | tBraid => exact .tEchoVal _ _ _ _ _ (.tBraid _ _) (.tIdentity _)
   | echoCloseId =>
-    cases ht with | tEchoClose _ n h =>
+    cases ht with | tEchoClose _ _ n h =>
     cases h with | tIdentity => exact .tEchoVal _ _ _ _ _ (.tIdentity _) (.tIdentity _)
   | echoValLeft hs ih =>
-    cases ht with | tEchoVal _ _ _ _ hr hv => exact .tEchoVal _ _ _ _ _ (ih hr) hv
+    cases ht with | tEchoVal _ _ _ _ _ hr hv => exact .tEchoVal _ _ _ _ _ (ih hr) hv
   | echoValRight _ hs ih =>
-    cases ht with | tEchoVal _ _ _ _ hr hv => exact .tEchoVal _ _ _ _ _ hr (ih hv)
+    cases ht with | tEchoVal _ _ _ _ _ hr hv => exact .tEchoVal _ _ _ _ _ hr (ih hv)
   | lowerStep hs ih =>
-    cases ht with | tLower _ _ _ h => exact .tLower _ _ _ _ (ih h)
+    cases ht with | tLower _ _ _ _ h => exact .tLower _ _ _ _ (ih h)
   | lowerVal _ _ =>
-    cases ht with | tLower _ _ _ h =>
-    cases h with | tEchoVal _ _ _ _ hr hv => exact hv
+    cases ht with | tLower _ _ _ _ h =>
+    cases h with | tEchoVal _ _ _ _ _ hr hv => exact hv
   | residueStep hs ih =>
-    cases ht with | tResidue _ _ _ h => exact .tResidue _ _ _ _ (ih h)
+    cases ht with | tResidue _ _ _ _ h => exact .tResidue _ _ _ _ (ih h)
   | residueVal _ _ =>
-    cases ht with | tResidue _ _ _ h =>
-    cases h with | tEchoVal _ _ _ _ hr hv => exact hr
+    cases ht with | tResidue _ _ _ _ h =>
+    cases h with | tEchoVal _ _ _ _ _ hr hv => exact hr
   -- Product: congruence preserves the product type; projections recover the
   -- component types.  `echoAdd` reduces into a formed echo value whose residue
   -- is the (num, num) summand pair and whose result is the num sum.
-  | pairLeft hs ih => cases ht with | tPair _ _ α β ha hb => exact .tPair _ _ _ _ _ (ih ha) hb
-  | pairRight _ hs ih => cases ht with | tPair _ _ α β ha hb => exact .tPair _ _ _ _ _ ha (ih hb)
-  | fstStep hs ih => cases ht with | tFst _ α β h => exact .tFst _ _ _ _ (ih h)
-  | fstPair _ _ => cases ht with | tFst _ α β h => cases h with | tPair _ _ _ _ ha hb => exact ha
-  | sndStep hs ih => cases ht with | tSnd _ α β h => exact .tSnd _ _ _ _ (ih h)
-  | sndPair _ _ => cases ht with | tSnd _ α β h => cases h with | tPair _ _ _ _ ha hb => exact hb
-  | echoAddLeft hs ih => cases ht with | tEchoAdd _ _ h₁ h₂ => exact .tEchoAdd _ _ _ (ih h₁) h₂
-  | echoAddRight _ hs ih => cases ht with | tEchoAdd _ _ h₁ h₂ => exact .tEchoAdd _ _ _ h₁ (ih h₂)
+  | pairLeft hs ih => cases ht with | tPair _ _ _ α β ha hb => exact .tPair _ _ _ _ _ (ih ha) hb
+  | pairRight _ hs ih => cases ht with | tPair _ _ _ α β ha hb => exact .tPair _ _ _ _ _ ha (ih hb)
+  | fstStep hs ih => cases ht with | tFst _ _ α β h => exact .tFst _ _ _ _ (ih h)
+  | fstPair _ _ => cases ht with | tFst _ _ α β h => cases h with | tPair _ _ _ _ _ ha hb => exact ha
+  | sndStep hs ih => cases ht with | tSnd _ _ α β h => exact .tSnd _ _ _ _ (ih h)
+  | sndPair _ _ => cases ht with | tSnd _ _ α β h => cases h with | tPair _ _ _ _ _ ha hb => exact hb
+  | echoAddLeft hs ih => cases ht with | tEchoAdd _ _ _ h₁ h₂ => exact .tEchoAdd _ _ _ (ih h₁) h₂
+  | echoAddRight _ hs ih => cases ht with | tEchoAdd _ _ _ h₁ h₂ => exact .tEchoAdd _ _ _ h₁ (ih h₂)
   | echoAddNums =>
-    cases ht with | tEchoAdd _ _ h₁ h₂ =>
+    cases ht with | tEchoAdd _ _ _ h₁ h₂ =>
     exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ (.tNum _ _) (.tNum _ _)) (.tNum _ _)
   -- Echo-preserving equality: congruence rebuilds via `tEchoEq*` + `ih` (the
   -- inner type is ambiguous, so case-split on all three `tEchoEq*`); the 6
@@ -711,44 +999,51 @@ theorem preservation : HasType [] e τ → Step e e' → HasType [] e' τ := by
   -- value `echoVal (pair <ops>) (boolLit …)`, residue typed via `tPair`.
   | echoEqLeft hs ih =>
     cases ht with
-    | tEchoEqWord _ _ n h₁ h₂ => exact .tEchoEqWord _ _ _ n (ih h₁) h₂
-    | tEchoEqNum _ _ h₁ h₂ => exact .tEchoEqNum _ _ _ (ih h₁) h₂
-    | tEchoEqStr _ _ h₁ h₂ => exact .tEchoEqStr _ _ _ (ih h₁) h₂
+    | tEchoEqWord _ _ _ n h₁ h₂ => exact .tEchoEqWord _ _ _ n (ih h₁) h₂
+    | tEchoEqNum _ _ _ h₁ h₂ => exact .tEchoEqNum _ _ _ (ih h₁) h₂
+    | tEchoEqStr _ _ _ h₁ h₂ => exact .tEchoEqStr _ _ _ (ih h₁) h₂
   | echoEqRight _ hs ih =>
     cases ht with
-    | tEchoEqWord _ _ n h₁ h₂ => exact .tEchoEqWord _ _ _ n h₁ (ih h₂)
-    | tEchoEqNum _ _ h₁ h₂ => exact .tEchoEqNum _ _ _ h₁ (ih h₂)
-    | tEchoEqStr _ _ h₁ h₂ => exact .tEchoEqStr _ _ _ h₁ (ih h₂)
+    | tEchoEqWord _ _ _ n h₁ h₂ => exact .tEchoEqWord _ _ _ n h₁ (ih h₂)
+    | tEchoEqNum _ _ _ h₁ h₂ => exact .tEchoEqNum _ _ _ h₁ (ih h₂)
+    | tEchoEqStr _ _ _ h₁ h₂ => exact .tEchoEqStr _ _ _ h₁ (ih h₂)
   | echoEqNums => cases ht with
     | tEchoEqNum =>
       exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ (.tNum _ _) (.tNum _ _)) (.tBool _ _)
-    | tEchoEqWord _ _ _ _ h₁ => cases h₁
-    | tEchoEqStr _ _ _ h₁ => cases h₁
+    | tEchoEqWord _ _ _ _ _ h₁ => cases h₁
+    | tEchoEqStr _ _ _ _ h₁ => cases h₁
   | echoEqStrs => cases ht with
     | tEchoEqStr =>
       exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ (.tStr _ _) (.tStr _ _)) (.tBool _ _)
-    | tEchoEqWord _ _ _ _ h₁ => cases h₁
-    | tEchoEqNum _ _ _ h₁ => cases h₁
+    | tEchoEqWord _ _ _ _ _ h₁ => cases h₁
+    | tEchoEqNum _ _ _ _ h₁ => cases h₁
   | echoEqBraids => cases ht with
-    | tEchoEqWord _ _ n h₁ h₂ =>
+    | tEchoEqWord _ _ _ n h₁ h₂ =>
       exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ h₁ h₂) (.tBool _ _)
-    | tEchoEqNum _ _ _ h₁ => cases h₁
-    | tEchoEqStr _ _ _ h₁ => cases h₁
+    | tEchoEqNum _ _ _ _ h₁ => cases h₁
+    | tEchoEqStr _ _ _ _ h₁ => cases h₁
   | echoEqIdId => cases ht with
-    | tEchoEqWord _ _ n h₁ h₂ =>
+    | tEchoEqWord _ _ _ n h₁ h₂ =>
       exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ h₁ h₂) (.tBool _ _)
-    | tEchoEqNum _ _ _ h₁ => cases h₁
-    | tEchoEqStr _ _ _ h₁ => cases h₁
+    | tEchoEqNum _ _ _ _ h₁ => cases h₁
+    | tEchoEqStr _ _ _ _ h₁ => cases h₁
   | echoEqIdBraid => cases ht with
-    | tEchoEqWord _ _ n h₁ h₂ =>
+    | tEchoEqWord _ _ _ n h₁ h₂ =>
       exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ h₁ h₂) (.tBool _ _)
-    | tEchoEqNum _ _ _ h₁ => cases h₁
-    | tEchoEqStr _ _ _ h₁ => cases h₁
+    | tEchoEqNum _ _ _ _ h₁ => cases h₁
+    | tEchoEqStr _ _ _ _ h₁ => cases h₁
   | echoEqBraidId => cases ht with
-    | tEchoEqWord _ _ n h₁ h₂ =>
+    | tEchoEqWord _ _ _ n h₁ h₂ =>
       exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ h₁ h₂) (.tBool _ _)
-    | tEchoEqNum _ _ _ h₁ => cases h₁
-    | tEchoEqStr _ _ _ h₁ => cases h₁
+    | tEchoEqNum _ _ _ _ h₁ => cases h₁
+    | tEchoEqStr _ _ _ _ h₁ => cases h₁
+  -- Let: congruence rebuilds `tLet` via the IH on the bound expression; the
+  -- β-redex closes by the substitution lemma at the empty prefix (`Γ₁ := []`,
+  -- where `[] ++ [] = []`, so the closed-context premise `h₁` is accepted).
+  | letStep hs ih =>
+    cases ht with | tLet _ _ _ σ τ h₁ h₂ => exact .tLet _ _ _ σ τ (ih h₁) h₂
+  | letRed hv =>
+    cases ht with | tLet _ _ _ σ τ h₁ h₂ => exact subst_preserves (Γ₁ := []) h₂ h₁
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- THEOREM 3: DETERMINISM
@@ -991,6 +1286,14 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
     | echoEqLeft h => exact absurd h (value_no_step (.braidLit _))
     | echoEqRight _ h => exact absurd h (value_no_step .identity)
     | echoEqBraidId => rfl
+  -- Let: congruence is deterministic by the IH; the β-redex fires only on a
+  -- value (which cannot step), so it never races its congruence rule.
+  | letStep hs ih => cases hs₂ with
+    | letStep h => exact congrArg (Expr.lett · _) (ih h)
+    | letRed hv => exact absurd hs (value_no_step hv)
+  | letRed hv => cases hs₂ with
+    | letStep h => exact absurd h (value_no_step hv)
+    | letRed _ => rfl
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- COROLLARY: TYPE SAFETY
@@ -1105,6 +1408,11 @@ theorem echoEq_distinguishes :
 
 /-- Algorithmic type inference: total, structurally recursive on the AST. -/
 def infer (Γ : Ctx) : Expr → Option Ty
+  | .var k       => Γ[k]?
+  | .lett e₁ e₂  =>
+      match infer Γ e₁ with
+      | some σ => infer (σ :: Γ) e₂
+      | none   => none
   | .num _       => some .num
   | .str _       => some .str
   | .boolLit _   => some .bool
@@ -1185,6 +1493,11 @@ theorem infer_complete {Γ : Ctx} {e : Expr} {τ : Ty} :
 theorem infer_sound {Γ : Ctx} {e : Expr} {τ : Ty} :
     infer Γ e = some τ → HasType Γ e τ := by
   induction e generalizing Γ τ with
+  | var k => intro h; simp only [infer] at h; exact .tVar _ _ _ h
+  | lett e₁ e₂ ih₁ ih₂ =>
+      intro h; simp only [infer] at h; split at h
+      next σ he₁ => exact .tLet _ _ _ σ _ (ih₁ he₁) (ih₂ h)
+      next => simp at h
   | num _ => intro h; simp only [infer, Option.some.injEq] at h; subst h; exact .tNum _ _
   | str _ => intro h; simp only [infer, Option.some.injEq] at h; subst h; exact .tStr _ _
   | boolLit _ => intro h; simp only [infer, Option.some.injEq] at h; subst h; exact .tBool _ _
