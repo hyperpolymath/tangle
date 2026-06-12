@@ -5,13 +5,14 @@
 --   - Syntax: Expr inductive with Num, Str, Bool, Identity, BraidLit,
 --     Compose (.), Tensor (|), Pipeline (>>), Close, Add, Eq, the echo
 --     constructors EchoClose, Lower, Residue, EchoVal (structured loss), and
---     the product constructors Pair, Fst, Snd, EchoAdd
+--     the product constructors Pair, Fst, Snd, EchoAdd, EchoEq
 --   - Typing: HasType inductive relation covering T-Num, T-Str, T-Bool,
 --     T-Identity, T-Braid, T-Compose-Word, T-Tensor-Word, T-Pipeline,
 --     T-Close-Word, T-Add-Num, T-Eq-Word, T-Eq-Num, T-Eq-Str, the echo
---     rules T-Echo-Close, T-Lower, T-Residue, T-Echo-Val, and the product
---     rules T-Pair, T-Fst, T-Snd, T-Echo-Add
---   - Semantics: Small-step Step relation (47 rules incl. echo + product)
+--     rules T-Echo-Close, T-Lower, T-Residue, T-Echo-Val, the product
+--     rules T-Pair, T-Fst, T-Snd, T-Echo-Add, and the echo-equality rules
+--     T-Echo-Eq-Word, T-Echo-Eq-Num, T-Echo-Eq-Str
+--   - Semantics: Small-step Step relation (55 rules incl. echo + product)
 --
 -- Theorems proven:
 --   1. Progress:     well-typed closed terms are values or can step
@@ -26,12 +27,15 @@
 -- (hyperpolymath/echo-types: `Echo f y := Σ (x : A), f x ≡ y`) directly into
 -- the type system: closing a braid through an echo retains the residue, so the
 -- otherwise-irreversible `close` becomes reversible at the type level.  The
--- product type `Ty.prod ρ σ` carries a second lossy operation, `echoAdd`:
--- ordinary `add` discards which two numbers were summed, but `echoAdd` keeps
--- the summand pair as its residue (residue type `Num × Num`, result `Num`), so
--- distinct summands that collapse to the same sum stay distinguishable.  See the
--- §ECHO-TYPES section at the foot of the file for the residue-recovery and
--- non-injectivity theorems (both the `close` and `echoAdd` forms).
+-- product type `Ty.prod ρ σ` carries two further lossy operations, `echoAdd`
+-- and `echoEq`: ordinary `add` discards which two numbers were summed, but
+-- `echoAdd` keeps the summand pair as its residue (residue type `Num × Num`,
+-- result `Num`); ordinary `eq` discards which two operands were compared, but
+-- `echoEq` keeps the operand pair as its residue (residue type `ρ × ρ`, result
+-- `Bool`), so distinct inputs that collapse to the same sum or boolean stay
+-- distinguishable.  See the §ECHO-TYPES section at the foot of the file for the
+-- residue-recovery and non-injectivity theorems (the `close`, `echoAdd`, and
+-- `echoEq` forms).
 --
 -- Note on T-Let: the let binding requires a generalized de Bruijn substitution
 -- lemma (standard POPLmark machinery); tracked as TG-1.  The fragment here
@@ -99,6 +103,7 @@ inductive Expr where
   | fst     : Expr → Expr                   -- first projection
   | snd     : Expr → Expr                   -- second projection
   | echoAdd : Expr → Expr → Expr            -- echo-preserving addition (residue = pair of summands)
+  | echoEq : Expr → Expr → Expr          -- echo-preserving equality (residue = operand pair)
   deriving DecidableEq, Repr
 
 /-- Value predicate: fully reduced expressions. -/
@@ -197,6 +202,15 @@ inductive HasType : Ctx → Expr → Ty → Prop where
   | tEchoAdd (Γ : Ctx) (e₁ e₂ : Expr) :                     -- [T-Echo-Add]
       HasType Γ e₁ .num → HasType Γ e₂ .num →
       HasType Γ (.echoAdd e₁ e₂) (.echo (.prod .num .num) .num)
+  | tEchoEqWord (Γ : Ctx) (e₁ e₂ : Expr) (n : Nat) :       -- [T-Echo-Eq-Word]
+      HasType Γ e₁ (.word n) → HasType Γ e₂ (.word n) →
+      HasType Γ (.echoEq e₁ e₂) (.echo (.prod (.word n) (.word n)) .bool)
+  | tEchoEqNum (Γ : Ctx) (e₁ e₂ : Expr) :                  -- [T-Echo-Eq-Num]
+      HasType Γ e₁ .num → HasType Γ e₂ .num →
+      HasType Γ (.echoEq e₁ e₂) (.echo (.prod .num .num) .bool)
+  | tEchoEqStr (Γ : Ctx) (e₁ e₂ : Expr) :                  -- [T-Echo-Eq-Str]
+      HasType Γ e₁ .str → HasType Γ e₂ .str →
+      HasType Γ (.echoEq e₁ e₂) (.echo (.prod .str .str) .bool)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- SMALL-STEP SEMANTICS
@@ -267,6 +281,23 @@ inductive Step : Expr → Expr → Prop where
   | echoAddRight : IsValue e₁ → Step e₂ e₂' → Step (.echoAdd e₁ e₂) (.echoAdd e₁ e₂')
   | echoAddNums  : Step (.echoAdd (.num n₁) (.num n₂))
                         (.echoVal (.pair (.num n₁) (.num n₂)) (.num (n₁ + n₂)))
+  -- Echo-preserving equality: residue retains the operand pair; result is the
+  -- boolean.  Mirrors the 8 `eq` rules; each computation produces
+  -- `echoVal (pair <operands>) (boolLit <same bool as the matching eq rule>)`.
+  | echoEqLeft    : Step e₁ e₁' → Step (.echoEq e₁ e₂) (.echoEq e₁' e₂)
+  | echoEqRight   : IsValue e₁ → Step e₂ e₂' → Step (.echoEq e₁ e₂) (.echoEq e₁ e₂')
+  | echoEqNums    : Step (.echoEq (.num n₁) (.num n₂))
+                        (.echoVal (.pair (.num n₁) (.num n₂)) (.boolLit (n₁ == n₂)))
+  | echoEqStrs    : Step (.echoEq (.str s₁) (.str s₂))
+                        (.echoVal (.pair (.str s₁) (.str s₂)) (.boolLit (s₁ == s₂)))
+  | echoEqBraids  : Step (.echoEq (.braidLit gs₁) (.braidLit gs₂))
+                        (.echoVal (.pair (.braidLit gs₁) (.braidLit gs₂)) (.boolLit (gs₁ == gs₂)))
+  | echoEqIdId    : Step (.echoEq .identity .identity)
+                        (.echoVal (.pair .identity .identity) (.boolLit true))
+  | echoEqIdBraid : Step (.echoEq .identity (.braidLit gs))
+                        (.echoVal (.pair .identity (.braidLit gs)) (.boolLit (gs == [])))
+  | echoEqBraidId : Step (.echoEq (.braidLit gs) .identity)
+                        (.echoVal (.pair (.braidLit gs) .identity) (.boolLit (gs == [])))
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- LEMMAS
@@ -511,6 +542,36 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
         exact ⟨_, .echoAddNums⟩
       · exact ⟨_, .echoAddRight hv₁ hs₂⟩
     · exact ⟨_, .echoAddLeft hs₁⟩
+  | tEchoEqWord _ _ n h₁ h₂ =>
+    right
+    rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
+    · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
+      · rcases canonical_word hv₁ h₁ with ⟨rfl, _⟩ | ⟨gs₁, rfl, _⟩ <;>
+        rcases canonical_word hv₂ h₂ with ⟨rfl, _⟩ | ⟨gs₂, rfl, _⟩
+        · exact ⟨_, .echoEqIdId⟩
+        · exact ⟨_, .echoEqIdBraid⟩
+        · exact ⟨_, .echoEqBraidId⟩
+        · exact ⟨_, .echoEqBraids⟩
+      · exact ⟨_, .echoEqRight hv₁ hs₂⟩
+    · exact ⟨_, .echoEqLeft hs₁⟩
+  | tEchoEqNum _ _ h₁ h₂ =>
+    right
+    rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
+    · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
+      · obtain ⟨n₁, rfl⟩ := canonical_num hv₁ h₁
+        obtain ⟨n₂, rfl⟩ := canonical_num hv₂ h₂
+        exact ⟨_, .echoEqNums⟩
+      · exact ⟨_, .echoEqRight hv₁ hs₂⟩
+    · exact ⟨_, .echoEqLeft hs₁⟩
+  | tEchoEqStr _ _ h₁ h₂ =>
+    right
+    rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
+    · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
+      · obtain ⟨s₁, rfl⟩ := canonical_str hv₁ h₁
+        obtain ⟨s₂, rfl⟩ := canonical_str hv₂ h₂
+        exact ⟨_, .echoEqStrs⟩
+      · exact ⟨_, .echoEqRight hv₁ hs₂⟩
+    · exact ⟨_, .echoEqLeft hs₁⟩
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- THEOREM 2: PRESERVATION
@@ -644,6 +705,50 @@ theorem preservation : HasType [] e τ → Step e e' → HasType [] e' τ := by
   | echoAddNums =>
     cases ht with | tEchoAdd _ _ h₁ h₂ =>
     exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ (.tNum _ _) (.tNum _ _)) (.tNum _ _)
+  -- Echo-preserving equality: congruence rebuilds via `tEchoEq*` + `ih` (the
+  -- inner type is ambiguous, so case-split on all three `tEchoEq*`); the 6
+  -- computation rules invert the matching `tEchoEq*` and build the formed echo
+  -- value `echoVal (pair <ops>) (boolLit …)`, residue typed via `tPair`.
+  | echoEqLeft hs ih =>
+    cases ht with
+    | tEchoEqWord _ _ n h₁ h₂ => exact .tEchoEqWord _ _ _ n (ih h₁) h₂
+    | tEchoEqNum _ _ h₁ h₂ => exact .tEchoEqNum _ _ _ (ih h₁) h₂
+    | tEchoEqStr _ _ h₁ h₂ => exact .tEchoEqStr _ _ _ (ih h₁) h₂
+  | echoEqRight _ hs ih =>
+    cases ht with
+    | tEchoEqWord _ _ n h₁ h₂ => exact .tEchoEqWord _ _ _ n h₁ (ih h₂)
+    | tEchoEqNum _ _ h₁ h₂ => exact .tEchoEqNum _ _ _ h₁ (ih h₂)
+    | tEchoEqStr _ _ h₁ h₂ => exact .tEchoEqStr _ _ _ h₁ (ih h₂)
+  | echoEqNums => cases ht with
+    | tEchoEqNum =>
+      exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ (.tNum _ _) (.tNum _ _)) (.tBool _ _)
+    | tEchoEqWord _ _ _ _ h₁ => cases h₁
+    | tEchoEqStr _ _ _ h₁ => cases h₁
+  | echoEqStrs => cases ht with
+    | tEchoEqStr =>
+      exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ (.tStr _ _) (.tStr _ _)) (.tBool _ _)
+    | tEchoEqWord _ _ _ _ h₁ => cases h₁
+    | tEchoEqNum _ _ _ h₁ => cases h₁
+  | echoEqBraids => cases ht with
+    | tEchoEqWord _ _ n h₁ h₂ =>
+      exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ h₁ h₂) (.tBool _ _)
+    | tEchoEqNum _ _ _ h₁ => cases h₁
+    | tEchoEqStr _ _ _ h₁ => cases h₁
+  | echoEqIdId => cases ht with
+    | tEchoEqWord _ _ n h₁ h₂ =>
+      exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ h₁ h₂) (.tBool _ _)
+    | tEchoEqNum _ _ _ h₁ => cases h₁
+    | tEchoEqStr _ _ _ h₁ => cases h₁
+  | echoEqIdBraid => cases ht with
+    | tEchoEqWord _ _ n h₁ h₂ =>
+      exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ h₁ h₂) (.tBool _ _)
+    | tEchoEqNum _ _ _ h₁ => cases h₁
+    | tEchoEqStr _ _ _ h₁ => cases h₁
+  | echoEqBraidId => cases ht with
+    | tEchoEqWord _ _ n h₁ h₂ =>
+      exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ h₁ h₂) (.tBool _ _)
+    | tEchoEqNum _ _ _ h₁ => cases h₁
+    | tEchoEqStr _ _ _ h₁ => cases h₁
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- THEOREM 3: DETERMINISM
@@ -841,6 +946,51 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
     | echoAddLeft h => exact absurd h (value_no_step (.num _))
     | echoAddRight _ h => exact absurd h (value_no_step (.num _))
     | echoAddNums => rfl
+  -- Echo-preserving equality: same shape as `eq` determinism — congruence is
+  -- deterministic by IH; computations discharge congruence races via
+  -- `value_no_step` on the atomic operand values; same-rule → `rfl`.
+  | echoEqLeft hs ih => cases hs₂ with
+    | echoEqLeft h => rw [ih h]
+    | echoEqRight hv _ => exact absurd hs (value_no_step hv)
+    | echoEqNums => exact absurd hs (value_no_step (.num _))
+    | echoEqStrs => exact absurd hs (value_no_step (.str _))
+    | echoEqBraids => exact absurd hs (value_no_step (.braidLit _))
+    | echoEqIdId => exact absurd hs (value_no_step .identity)
+    | echoEqIdBraid => exact absurd hs (value_no_step .identity)
+    | echoEqBraidId => exact absurd hs (value_no_step (.braidLit _))
+  | echoEqRight hv hs ih => cases hs₂ with
+    | echoEqLeft h => exact absurd h (value_no_step hv)
+    | echoEqRight _ h => exact congrArg (Expr.echoEq _ ·) (ih h)
+    | echoEqNums => exact absurd hs (value_no_step (.num _))
+    | echoEqStrs => exact absurd hs (value_no_step (.str _))
+    | echoEqBraids => exact absurd hs (value_no_step (.braidLit _))
+    | echoEqIdId => cases hv with | identity => exact absurd hs (value_no_step .identity)
+    | echoEqIdBraid => cases hv with | identity => exact absurd hs (value_no_step (.braidLit _))
+    | echoEqBraidId => cases hv with | braidLit => exact absurd hs (value_no_step .identity)
+  | echoEqNums => cases hs₂ with
+    | echoEqLeft h => exact absurd h (value_no_step (.num _))
+    | echoEqRight _ h => exact absurd h (value_no_step (.num _))
+    | echoEqNums => rfl
+  | echoEqStrs => cases hs₂ with
+    | echoEqLeft h => exact absurd h (value_no_step (.str _))
+    | echoEqRight _ h => exact absurd h (value_no_step (.str _))
+    | echoEqStrs => rfl
+  | echoEqBraids => cases hs₂ with
+    | echoEqLeft h => exact absurd h (value_no_step (.braidLit _))
+    | echoEqRight _ h => exact absurd h (value_no_step (.braidLit _))
+    | echoEqBraids => rfl
+  | echoEqIdId => cases hs₂ with
+    | echoEqLeft h => exact absurd h (value_no_step .identity)
+    | echoEqRight _ h => exact absurd h (value_no_step .identity)
+    | echoEqIdId => rfl
+  | echoEqIdBraid => cases hs₂ with
+    | echoEqLeft h => exact absurd h (value_no_step .identity)
+    | echoEqRight _ h => exact absurd h (value_no_step (.braidLit _))
+    | echoEqIdBraid => rfl
+  | echoEqBraidId => cases hs₂ with
+    | echoEqLeft h => exact absurd h (value_no_step (.braidLit _))
+    | echoEqRight _ h => exact absurd h (value_no_step .identity)
+    | echoEqBraidId => rfl
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- COROLLARY: TYPE SAFETY
@@ -932,6 +1082,16 @@ theorem echoAdd_distinguishes :
     (Expr.pair (.num 1) (.num 3) ≠ Expr.pair (.num 2) (.num 2)) :=
   ⟨⟨echoAdd_lower_sums 1 3, echoAdd_lower_sums 2 2⟩, by decide⟩
 
+/-- **Echo distinguishes what `eq` collapses.** 1≟2 and 3≟4 both lower to
+    `false`, but their residues (the operand pairs) stay distinct. -/
+theorem echoEq_distinguishes :
+    (StepStar (.lower (.echoEq (.num 1) (.num 2))) (.boolLit (1 == 2)) ∧
+     StepStar (.lower (.echoEq (.num 3) (.num 4))) (.boolLit (3 == 4))) ∧
+    (Expr.pair (.num 1) (.num 2) ≠ Expr.pair (.num 3) (.num 4)) :=
+  ⟨⟨.head (.lowerStep .echoEqNums) (.head (.lowerVal (.pair (.num _) (.num _)) (.boolLit _)) .refl),
+    .head (.lowerStep .echoEqNums) (.head (.lowerVal (.pair (.num _) (.num _)) (.boolLit _)) .refl)⟩,
+   by decide⟩
+
 -- ═══════════════════════════════════════════════════════════════════════
 -- TG-2: DECIDABILITY OF TYPE CHECKING
 -- ═══════════════════════════════════════════════════════════════════════
@@ -1007,6 +1167,12 @@ def infer (Γ : Ctx) : Expr → Option Ty
   | .echoAdd e₁ e₂ =>
       match infer Γ e₁, infer Γ e₂ with
       | some .num, some .num => some (.echo (.prod .num .num) .num)
+      | _, _ => none
+  | .echoEq e₁ e₂ =>
+      match infer Γ e₁, infer Γ e₂ with
+      | some (.word n), some (.word m) => if n = m then some (.echo (.prod (.word n) (.word n)) .bool) else none
+      | some .num, some .num => some (.echo (.prod .num .num) .bool)
+      | some .str, some .str => some (.echo (.prod .str .str) .bool)
       | _, _ => none
 
 /-- **Completeness**: every typing derivation is computed by `infer`. -/
@@ -1092,6 +1258,17 @@ theorem infer_sound {Γ : Ctx} {e : Expr} {τ : Ty} :
   | echoAdd e₁ e₂ ih₁ ih₂ =>
       intro h; simp only [infer] at h; split at h
       next he₁ he₂ => injection h with h; subst h; exact .tEchoAdd _ _ _ (ih₁ he₁) (ih₂ he₂)
+      all_goals simp at h
+  | echoEq e₁ e₂ ih₁ ih₂ =>
+      intro h; simp only [infer] at h; split at h
+      next n m he₁ he₂ =>
+        split at h
+        next hnm =>
+          injection h with h; subst h; subst hnm
+          exact .tEchoEqWord _ _ _ _ (ih₁ he₁) (ih₂ he₂)
+        next => simp at h
+      next he₁ he₂ => injection h with h; subst h; exact .tEchoEqNum _ _ _ (ih₁ he₁) (ih₂ he₂)
+      next he₁ he₂ => injection h with h; subst h; exact .tEchoEqStr _ _ _ (ih₁ he₁) (ih₂ he₂)
       all_goals simp at h
 
 /-- **Decidability of type checking** (TG-2): `infer` decides `HasType`. -/
