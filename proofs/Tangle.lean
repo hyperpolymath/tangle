@@ -3,13 +3,15 @@
 --
 -- Models the core type system from docs/spec/FORMAL-SEMANTICS.md:
 --   - Syntax: Expr inductive with Num, Str, Bool, Identity, BraidLit,
---     Compose (.), Tensor (|), Pipeline (>>), Close, Add, Eq, and the echo
---     constructors EchoClose, Lower, Residue, EchoVal (structured loss)
+--     Compose (.), Tensor (|), Pipeline (>>), Close, Add, Eq, the echo
+--     constructors EchoClose, Lower, Residue, EchoVal (structured loss), and
+--     the product constructors Pair, Fst, Snd, EchoAdd
 --   - Typing: HasType inductive relation covering T-Num, T-Str, T-Bool,
 --     T-Identity, T-Braid, T-Compose-Word, T-Tensor-Word, T-Pipeline,
---     T-Close-Word, T-Add-Num, T-Eq-Word, T-Eq-Num, T-Eq-Str, and the echo
---     rules T-Echo-Close, T-Lower, T-Residue, T-Echo-Val
---   - Semantics: Small-step Step relation (38 rules incl. echo)
+--     T-Close-Word, T-Add-Num, T-Eq-Word, T-Eq-Num, T-Eq-Str, the echo
+--     rules T-Echo-Close, T-Lower, T-Residue, T-Echo-Val, and the product
+--     rules T-Pair, T-Fst, T-Snd, T-Echo-Add
+--   - Semantics: Small-step Step relation (47 rules incl. echo + product)
 --
 -- Theorems proven:
 --   1. Progress:     well-typed closed terms are values or can step
@@ -23,9 +25,13 @@
 -- constructors `echoClose`/`lower`/`residue` integrate echo-types
 -- (hyperpolymath/echo-types: `Echo f y := Σ (x : A), f x ≡ y`) directly into
 -- the type system: closing a braid through an echo retains the residue, so the
--- otherwise-irreversible `close` becomes reversible at the type level.  See the
+-- otherwise-irreversible `close` becomes reversible at the type level.  The
+-- product type `Ty.prod ρ σ` carries a second lossy operation, `echoAdd`:
+-- ordinary `add` discards which two numbers were summed, but `echoAdd` keeps
+-- the summand pair as its residue (residue type `Num × Num`, result `Num`), so
+-- distinct summands that collapse to the same sum stay distinguishable.  See the
 -- §ECHO-TYPES section at the foot of the file for the residue-recovery and
--- non-injectivity theorems.
+-- non-injectivity theorems (both the `close` and `echoAdd` forms).
 --
 -- Note on T-Let: the let binding requires a generalized de Bruijn substitution
 -- lemma (standard POPLmark machinery); tracked as TG-1.  The fragment here
@@ -62,6 +68,7 @@ inductive Ty where
                            --   (hyperpolymath/echo-types, Echo.agda): ρ is the
                            --   residue (domain witness x : A), τ is the result
                            --   (codomain point y).  See §ECHO-TYPES below.
+  | prod : Ty → Ty → Ty     -- product (pair) type ρ × σ; residue carrier for lossy binary ops
   deriving DecidableEq, Repr
 
 /-- Core expression AST. Mirrors the OCaml AST in compiler/lib/ast.ml.
@@ -88,6 +95,10 @@ inductive Expr where
   | lower     : Expr → Expr                 -- project an echo to its result (forget residue)
   | residue   : Expr → Expr                 -- project an echo to its residue (recover witness)
   | echoVal   : Expr → Expr → Expr          -- formed echo value: (residue, result)
+  | pair    : Expr → Expr → Expr            -- product introduction
+  | fst     : Expr → Expr                   -- first projection
+  | snd     : Expr → Expr                   -- second projection
+  | echoAdd : Expr → Expr → Expr            -- echo-preserving addition (residue = pair of summands)
   deriving DecidableEq, Repr
 
 /-- Value predicate: fully reduced expressions. -/
@@ -98,6 +109,7 @@ inductive IsValue : Expr → Prop where
   | identity : IsValue .identity
   | braidLit : ∀ gs, IsValue (.braidLit gs)
   | echoVal : ∀ {r v}, IsValue r → IsValue v → IsValue (.echoVal r v)  -- a formed echo value (residue r, result v)
+  | pair : ∀ {a b}, IsValue a → IsValue b → IsValue (.pair a b)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- WIDTH
@@ -176,6 +188,15 @@ inductive HasType : Ctx → Expr → Ty → Prop where
       HasType Γ r ρ →
       HasType Γ v τ →
       HasType Γ (.echoVal r v) (.echo ρ τ)
+  | tPair (Γ : Ctx) (a b : Expr) (α β : Ty) :               -- [T-Pair]
+      HasType Γ a α → HasType Γ b β → HasType Γ (.pair a b) (.prod α β)
+  | tFst (Γ : Ctx) (e : Expr) (α β : Ty) :                  -- [T-Fst]
+      HasType Γ e (.prod α β) → HasType Γ (.fst e) α
+  | tSnd (Γ : Ctx) (e : Expr) (α β : Ty) :                  -- [T-Snd]
+      HasType Γ e (.prod α β) → HasType Γ (.snd e) β
+  | tEchoAdd (Γ : Ctx) (e₁ e₂ : Expr) :                     -- [T-Echo-Add]
+      HasType Γ e₁ .num → HasType Γ e₂ .num →
+      HasType Γ (.echoAdd e₁ e₂) (.echo (.prod .num .num) .num)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- SMALL-STEP SEMANTICS
@@ -234,6 +255,18 @@ inductive Step : Expr → Expr → Prop where
   | lowerVal      : IsValue r → IsValue v → Step (.lower (.echoVal r v)) v
   | residueStep   : Step e e' → Step (.residue e) (.residue e')
   | residueVal    : IsValue r → IsValue v → Step (.residue (.echoVal r v)) r
+  -- Product: congruence + projections
+  | pairLeft   : Step a a' → Step (.pair a b) (.pair a' b)
+  | pairRight  : IsValue a → Step b b' → Step (.pair a b) (.pair a b')
+  | fstStep    : Step e e' → Step (.fst e) (.fst e')
+  | fstPair    : IsValue a → IsValue b → Step (.fst (.pair a b)) a
+  | sndStep    : Step e e' → Step (.snd e) (.snd e')
+  | sndPair    : IsValue a → IsValue b → Step (.snd (.pair a b)) b
+  -- Echo-preserving addition: residue retains the summand pair; result is the sum.
+  | echoAddLeft  : Step e₁ e₁' → Step (.echoAdd e₁ e₂) (.echoAdd e₁' e₂)
+  | echoAddRight : IsValue e₁ → Step e₂ e₂' → Step (.echoAdd e₁ e₂) (.echoAdd e₁ e₂')
+  | echoAddNums  : Step (.echoAdd (.num n₁) (.num n₂))
+                        (.echoVal (.pair (.num n₁) (.num n₂)) (.num (n₁ + n₂)))
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- LEMMAS
@@ -246,6 +279,9 @@ theorem value_no_step {e e' : Expr} (hv : IsValue e) (hs : Step e e') : False :=
   | echoVal _ _ ihr ihv => cases hs with
     | echoValLeft h => exact ihr h
     | echoValRight _ h => exact ihv h
+  | pair _ _ iha ihb => cases hs with
+    | pairLeft h => exact iha h
+    | pairRight _ h => exact ihb h
   | _ => cases hs
 
 /-- Canonical forms for Num. -/
@@ -267,6 +303,7 @@ theorem canonical_word : IsValue e → HasType [] e (.word n) →
   | identity => left; cases ht with | tIdentity => exact ⟨rfl, rfl⟩
   | braidLit gs => right; cases ht with | tBraid => exact ⟨gs, rfl, rfl⟩
   | echoVal _ _ => cases ht
+  | pair _ _ => cases ht
 
 /-- Canonical forms for Echo[ρ, τ]: a value of echo type is a formed echo value
     `echoVal r v` whose residue `r` and result `v` are themselves values.  This
@@ -281,6 +318,22 @@ theorem canonical_echo : IsValue e → HasType [] e (.echo ρ τ) →
   | identity => cases ht
   | braidLit => cases ht
   | echoVal hr hv => exact ⟨_, _, rfl, hr, hv⟩
+  | pair _ _ => cases ht
+
+/-- Canonical forms for products: a value of product type is a `pair a b` whose
+    components `a` and `b` are themselves values.  This is the canonical form
+    that lets `fst`/`snd` make progress. -/
+theorem canonical_prod : IsValue e → HasType [] e (.prod α β) →
+    ∃ a b, e = .pair a b ∧ IsValue a ∧ IsValue b := by
+  intro hv ht
+  cases hv with
+  | num => cases ht
+  | str => cases ht
+  | boolLit => cases ht
+  | identity => cases ht
+  | braidLit => cases ht
+  | echoVal _ _ => cases ht
+  | pair ha hb => exact ⟨_, _, rfl, ha, hb⟩
 
 -- Width distribution lemmas
 private theorem foldl_max_init (gs : List Generator) (a : Nat) :
@@ -431,6 +484,33 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
     · obtain ⟨r, v, rfl, hr, hvv⟩ := canonical_echo hv h
       exact ⟨_, .residueVal hr hvv⟩
     · exact ⟨_, .residueStep hs⟩
+  | tPair _ _ α β ha hb =>
+    rcases progress ha with hva | ⟨a', hsa⟩
+    · rcases progress hb with hvb | ⟨b', hsb⟩
+      · exact .inl (.pair hva hvb)
+      · exact .inr ⟨_, .pairRight hva hsb⟩
+    · exact .inr ⟨_, .pairLeft hsa⟩
+  | tFst _ α β h =>
+    right
+    rcases progress h with hv | ⟨e', hs⟩
+    · obtain ⟨a, b, rfl, ha, hb⟩ := canonical_prod hv h
+      exact ⟨_, .fstPair ha hb⟩
+    · exact ⟨_, .fstStep hs⟩
+  | tSnd _ α β h =>
+    right
+    rcases progress h with hv | ⟨e', hs⟩
+    · obtain ⟨a, b, rfl, ha, hb⟩ := canonical_prod hv h
+      exact ⟨_, .sndPair ha hb⟩
+    · exact ⟨_, .sndStep hs⟩
+  | tEchoAdd _ _ h₁ h₂ =>
+    right
+    rcases progress h₁ with hv₁ | ⟨e₁', hs₁⟩
+    · rcases progress h₂ with hv₂ | ⟨e₂', hs₂⟩
+      · obtain ⟨n₁, rfl⟩ := canonical_num hv₁ h₁
+        obtain ⟨n₂, rfl⟩ := canonical_num hv₂ h₂
+        exact ⟨_, .echoAddNums⟩
+      · exact ⟨_, .echoAddRight hv₁ hs₂⟩
+    · exact ⟨_, .echoAddLeft hs₁⟩
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- THEOREM 2: PRESERVATION
@@ -550,6 +630,20 @@ theorem preservation : HasType [] e τ → Step e e' → HasType [] e' τ := by
   | residueVal _ _ =>
     cases ht with | tResidue _ _ _ h =>
     cases h with | tEchoVal _ _ _ _ hr hv => exact hr
+  -- Product: congruence preserves the product type; projections recover the
+  -- component types.  `echoAdd` reduces into a formed echo value whose residue
+  -- is the (num, num) summand pair and whose result is the num sum.
+  | pairLeft hs ih => cases ht with | tPair _ _ α β ha hb => exact .tPair _ _ _ _ _ (ih ha) hb
+  | pairRight _ hs ih => cases ht with | tPair _ _ α β ha hb => exact .tPair _ _ _ _ _ ha (ih hb)
+  | fstStep hs ih => cases ht with | tFst _ α β h => exact .tFst _ _ _ _ (ih h)
+  | fstPair _ _ => cases ht with | tFst _ α β h => cases h with | tPair _ _ _ _ ha hb => exact ha
+  | sndStep hs ih => cases ht with | tSnd _ α β h => exact .tSnd _ _ _ _ (ih h)
+  | sndPair _ _ => cases ht with | tSnd _ α β h => cases h with | tPair _ _ _ _ ha hb => exact hb
+  | echoAddLeft hs ih => cases ht with | tEchoAdd _ _ h₁ h₂ => exact .tEchoAdd _ _ _ (ih h₁) h₂
+  | echoAddRight _ hs ih => cases ht with | tEchoAdd _ _ h₁ h₂ => exact .tEchoAdd _ _ _ h₁ (ih h₂)
+  | echoAddNums =>
+    cases ht with | tEchoAdd _ _ h₁ h₂ =>
+    exact .tEchoVal _ _ _ _ _ (.tPair _ _ _ _ _ (.tNum _ _) (.tNum _ _)) (.tNum _ _)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- THEOREM 3: DETERMINISM
@@ -714,6 +808,39 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
   | residueVal hr hv => cases hs₂ with
     | residueStep h => exact absurd h (value_no_step (.echoVal hr hv))
     | residueVal _ _ => rfl
+  -- Product: congruence is deterministic by IH; projections fire only on a
+  -- formed pair value, so they never race their congruence rule.  `echoAdd`
+  -- computes only on two `num` values.
+  | pairLeft hs ih => cases hs₂ with
+    | pairLeft h => exact congrArg (Expr.pair · _) (ih h)
+    | pairRight hva _ => exact absurd hs (value_no_step hva)
+  | pairRight hva hs ih => cases hs₂ with
+    | pairLeft h => exact absurd h (value_no_step hva)
+    | pairRight _ h => exact congrArg (Expr.pair _ ·) (ih h)
+  | fstStep hs ih => cases hs₂ with
+    | fstStep h => exact congrArg Expr.fst (ih h)
+    | fstPair ha hb => exact absurd hs (value_no_step (.pair ha hb))
+  | fstPair ha hb => cases hs₂ with
+    | fstStep h => exact absurd h (value_no_step (.pair ha hb))
+    | fstPair _ _ => rfl
+  | sndStep hs ih => cases hs₂ with
+    | sndStep h => exact congrArg Expr.snd (ih h)
+    | sndPair ha hb => exact absurd hs (value_no_step (.pair ha hb))
+  | sndPair ha hb => cases hs₂ with
+    | sndStep h => exact absurd h (value_no_step (.pair ha hb))
+    | sndPair _ _ => rfl
+  | echoAddLeft hs ih => cases hs₂ with
+    | echoAddLeft h => exact congrArg (Expr.echoAdd · _) (ih h)
+    | echoAddRight hv₁ _ => exact absurd hs (value_no_step hv₁)
+    | echoAddNums => exact absurd hs (value_no_step (.num _))
+  | echoAddRight hv₁ hs ih => cases hs₂ with
+    | echoAddLeft h => exact absurd h (value_no_step hv₁)
+    | echoAddRight _ h => exact congrArg (Expr.echoAdd _ ·) (ih h)
+    | echoAddNums => exact absurd hs (value_no_step (.num _))
+  | echoAddNums => cases hs₂ with
+    | echoAddLeft h => exact absurd h (value_no_step (.num _))
+    | echoAddRight _ h => exact absurd h (value_no_step (.num _))
+    | echoAddNums => rfl
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- COROLLARY: TYPE SAFETY
@@ -786,6 +913,25 @@ theorem echo_roundtrip_typed (e : Expr) (n : Nat) (h : HasType [] e (.word n)) :
     HasType [] (.lower (.echoClose e)) (.word 0) :=
   ⟨.tResidue _ _ _ _ (.tEchoClose _ _ n h), .tLower _ _ _ _ (.tEchoClose _ _ n h)⟩
 
+/-- `echoAdd` recovers the summands: `add` discards which numbers were added,
+    but the residue retains the pair. -/
+theorem echoAdd_residue_recovers (n₁ n₂ : Int) :
+    StepStar (.residue (.echoAdd (.num n₁) (.num n₂))) (.pair (.num n₁) (.num n₂)) :=
+  .head (.residueStep .echoAddNums) (.head (.residueVal (.pair (.num _) (.num _)) (.num _)) .refl)
+
+/-- `lower ∘ echoAdd` is ordinary addition (the lossy result). -/
+theorem echoAdd_lower_sums (n₁ n₂ : Int) :
+    StepStar (.lower (.echoAdd (.num n₁) (.num n₂))) (.num (n₁ + n₂)) :=
+  .head (.lowerStep .echoAddNums) (.head (.lowerVal (.pair (.num _) (.num _)) (.num _)) .refl)
+
+/-- **Echo distinguishes what `add` collapses.** 1+3 and 2+2 both lower to 4,
+    but their residues (the summand pairs) stay distinct. -/
+theorem echoAdd_distinguishes :
+    (StepStar (.lower (.echoAdd (.num 1) (.num 3))) (.num 4) ∧
+     StepStar (.lower (.echoAdd (.num 2) (.num 2))) (.num 4)) ∧
+    (Expr.pair (.num 1) (.num 3) ≠ Expr.pair (.num 2) (.num 2)) :=
+  ⟨⟨echoAdd_lower_sums 1 3, echoAdd_lower_sums 2 2⟩, by decide⟩
+
 -- ═══════════════════════════════════════════════════════════════════════
 -- TG-2: DECIDABILITY OF TYPE CHECKING
 -- ═══════════════════════════════════════════════════════════════════════
@@ -845,6 +991,22 @@ def infer (Γ : Ctx) : Expr → Option Ty
   | .echoVal r v =>
       match infer Γ r, infer Γ v with
       | some ρ, some τ => some (.echo ρ τ)
+      | _, _ => none
+  | .pair a b =>
+      match infer Γ a, infer Γ b with
+      | some α, some β => some (.prod α β)
+      | _, _ => none
+  | .fst e =>
+      match infer Γ e with
+      | some (.prod α _) => some α
+      | _ => none
+  | .snd e =>
+      match infer Γ e with
+      | some (.prod _ β) => some β
+      | _ => none
+  | .echoAdd e₁ e₂ =>
+      match infer Γ e₁, infer Γ e₂ with
+      | some .num, some .num => some (.echo (.prod .num .num) .num)
       | _, _ => none
 
 /-- **Completeness**: every typing derivation is computed by `infer`. -/
@@ -913,6 +1075,23 @@ theorem infer_sound {Γ : Ctx} {e : Expr} {τ : Ty} :
       intro h; simp only [infer] at h; split at h
       next ρ τ' he_r he_v =>
         injection h with h; subst h; exact .tEchoVal _ _ _ ρ τ' (ihr he_r) (ihv he_v)
+      all_goals simp at h
+  | pair a b iha ihb =>
+      intro h; simp only [infer] at h; split at h
+      next α β he_a he_b =>
+        injection h with h; subst h; exact .tPair _ _ _ α β (iha he_a) (ihb he_b)
+      all_goals simp at h
+  | fst e ih =>
+      intro h; simp only [infer] at h; split at h
+      next α β he => injection h with h; subst h; exact .tFst _ _ α β (ih he)
+      all_goals simp at h
+  | snd e ih =>
+      intro h; simp only [infer] at h; split at h
+      next α β he => injection h with h; subst h; exact .tSnd _ _ α β (ih he)
+      all_goals simp at h
+  | echoAdd e₁ e₂ ih₁ ih₂ =>
+      intro h; simp only [infer] at h; split at h
+      next he₁ he₂ => injection h with h; subst h; exact .tEchoAdd _ _ _ (ih₁ he₁) (ih₂ he₂)
       all_goals simp at h
 
 /-- **Decidability of type checking** (TG-2): `infer` decides `HasType`. -/
