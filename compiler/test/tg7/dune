@@ -1,0 +1,13 @@
+; SPDX-License-Identifier: MPL-2.0
+; TG-7 braid-group equivalence (Braid_equiv, Dehornoy handle reduction).
+;   dune runtest -> runs ./tg7_braid_equiv.exe --check.
+
+(executable
+ (name tg7_braid_equiv)
+ (modules tg7_braid_equiv)
+ (libraries tangle))
+
+(rule
+ (alias runtest)
+ (deps tg7_braid_equiv.exe)
+ (action (run ./tg7_braid_equiv.exe --check)))

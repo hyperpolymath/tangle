@@ -13,6 +13,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### TG-7 (non-semantic rung): out-of-band braid-group equivalence
+
+- **`compiler/lib/braid_equiv.ml`** decides braid-GROUP equivalence via Dehornoy
+  handle reduction (`equiv`, `is_trivial`, plus `writhe`/`permutation`
+  invariants). It is **out-of-band**: the language's `==` on braids (`eval.ml`
+  and the Lean `Step.eqBraids` rule) is left as list equality — no semantics
+  change. Routing `==` through it remains an owner decision (PROOF-NEEDS.md TG-7).
+- Tested in `compiler/test/tg7/tg7_braid_equiv.ml` (2220 assertions): the
+  defining relations (commutation, braid relation, cancellation), 400
+  randomly-constructed equivalent pairs (relation-preserving moves give ground
+  truth; writhe/permutation invariants guard the generator), and
+  invariant-distinguished negatives. Correctness is by-testing; a mechanised
+  Garside/Dehornoy proof is the research-grade rung.
+
 ### TG-5 LANDED + readiness map for TG-6/7/8
 
 - **TG-5 LANDED**: `compiler/test/tg5/tg5_invariants.ml` (189 assertions, in
