@@ -13,6 +13,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### TG-8 (template): virtual-knot dialect as a conservative extension of core
+
+- **`compiler/lib/dialect_vk.ml`** models the virtual-knot dialect (the virtual
+  braid monoid VBₙ ⊃ Bₙ — braids plus involutive virtual crossings vᵢ) as a
+  *conservative extension* of the core braid language: a real crossing or a
+  virtual crossing, with the core (real) fragment embedding via `embed` and every
+  decision on it DELEGATED to `Braid_equiv` (TG-7). Conservativity therefore
+  holds by construction — the dialect cannot change core typing/semantics.
+- **`compiler/test/tg8/tg8_conservativity.ml`** (2311 assertions) verifies:
+  faithful embedding (`project ∘ embed = id`); the dialect decides core terms
+  exactly as the core procedure; permutation/writhe invariants agree on the real
+  fragment; proper extension (a virtual crossing is a genuinely-new non-real
+  element, `vᵢ vᵢ = ε`); and an honest partial-decision frontier (irreducible
+  mixed virtual content → `None`, never guessed).
+- Built as a separate module — no core-AST or Lean-oracle edits (avoids the
+  `Warning 8` exhaustiveness cascade). Surface-syntax integration, the other four
+  dialects, and a Lean conservativity proof are the next rungs (PROOF-NEEDS TG-8).
+
 ### TG-6 (differential rung): execute generated wasm and check it preserves semantics
 
 - **`compiler/tangle-wasm/tests/differential.rs`** adds `wasmi` (a pure-Rust wasm

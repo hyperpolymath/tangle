@@ -60,7 +60,7 @@ Cross-referenced to [PROOF-NARRATIVE.md §3](PROOF-NARRATIVE.md#3-remaining-obli
 | TG-5 | `compositional.ml` (418 LoC) rewriter preserves types | TP | OCaml property test | P2 | — | **LANDED** (`compiler/test/tg5/tg5_invariants.ml`, 189 assertions in `dune runtest`). compositional is below the Ty layer, so "preserves types" = preserves the PD-lowering structural invariants + echo residue-recovery: `OpenWord`/`ClosedDiagram`/`EchoClosed` each pinned (closedness, `\|crossings\|`=unit-length, source unit-expanded, **verbatim residue** for `EchoClose` with `expand(residue)=diagram word` and echo-diagram pdv1-identical to plain `close`), error paths, count pins. Lean IR model = optional later rung |
 | TG-6 | WASM compilation preserves semantics (source eval ≡ wasm exec) | TP / ALG | differential + Lean bisimulation | P1 | — | **RUNG LANDED (differential)**: `compiler/tangle-wasm/tests/differential.rs` EXECUTES the generated wasm with the `wasmi` interpreter (dev-dep) and checks the braid strand-permutation equals an independent reference model (trefoil, non-commuting pairs, braid-relation pairs, 5-strand weave). Validates codegen vs the permutation semantics; not a cross-binary diff against `eval.ml`, and Markov helpers untested. Full source↔wasm bisimulation (WasmCert) remains research-grade |
 | TG-7 | `Step.eqBraids` decides braid-group equivalence (not list equality) | ALG / DOM | OCaml + Lean 4 | P2 | — | **RUNG LANDED (non-semantic)**: `compiler/lib/braid_equiv.ml` decides braid-group equivalence via Dehornoy handle reduction, out-of-band (leaves `==`/`Step.eqBraids` as list equality). Tested (`compiler/test/tg7`, 2220 assertions: defining relations + 400 constructed-equivalent pairs + invariant-distinguished negatives). **Still OWNER-GATED**: whether to route `==` through it (a semantics change to eval.ml + Lean Step + proofs) is a language-design decision; Lean correctness (Garside/Dehornoy) remains research-grade |
-| TG-8 | Each dialect (braid-calculus, quantum-circuit, skein-algebra, string-diagram, virtual-knot) is a conservative extension of core | TP | Lean 4 per-dialect | P3 | 1w each | NOT STARTED |
+| TG-8 | Each dialect (braid-calculus, quantum-circuit, skein-algebra, string-diagram, virtual-knot) is a conservative extension of core | TP | OCaml model + Lean per-dialect | P3 | — | **TEMPLATE LANDED (virtual-knot)**: `compiler/lib/dialect_vk.ml` models VBₙ ⊃ Bₙ as core + a virtual layer that DELEGATES to `Braid_equiv` on the real fragment, so conservativity holds by construction; `compiler/test/tg8` (2311 assertions) verifies faithful embedding, core-delegation, invariant agreement, proper extension, virtual involution, honest undecided-frontier. Remaining: surface-syntax parser integration, the other 4 dialects (replicate the template), and a Lean conservativity proof |
 | TG-9 | LSP diagnostics are a subset of `HasType` failures (no LSP-only diagnostics) | INV | Audit + refactor | P2 | — | **LANDED** (`tangle-lsp` delegates all diagnostics to `tanglec --check` ⇒ `compiler/lib/check.ml`; hand-rolled LSP-only false positives removed. Subset holds by construction. Tests: `test_check.ml` + tangle-lsp unit/delegation tests) |
 | TG-10 | Echo-types integrated into the type system: `Echo[ρ,τ]` former + `echoClose`/`lower`/`residue`/`echoAdd`/`echoEq` + product type (`pair`/`fst`/`snd`), with Progress/Preservation/Determinism/TypeSafety extended to cover them and the non-injectivity / residue-recovery capstones proven | TP / DOM | Lean 4 | P1 | — | **LANDED** (`proofs/Tangle.lean` §ECHO-TYPES) |
 
@@ -70,12 +70,13 @@ assumptions each rests on, see PROOF-NARRATIVE.md.
 ## Scoping of the remaining obligations (2026-06-14)
 
 Concrete approach, effort, risk, and dependencies for what is left after
-TG-0/1/2/3/4/5/9/10 landed. **Landable rungs of TG-6 and TG-7 also landed**
-(2026-06-14): TG-6 now has a `wasmi` differential test executing the generated
-wasm; TG-7 has an out-of-band `braid_equiv` checker. What genuinely remains is
-**prerequisite-gated, not effort-gated**: TG-8 needs a dialect to exist as code;
-TG-7's *semantics change* needs an owner decision; TG-6's *full bisimulation*
-and TG-7's *Lean correctness proof* are research-grade.
+TG-0/1/2/3/4/5/9/10 landed. **Landable rungs of TG-6, TG-7, and TG-8 also
+landed** (2026-06-14): TG-6 a `wasmi` differential test; TG-7 an out-of-band
+`braid_equiv` checker; TG-8 a virtual-knot conservative-extension template. What
+genuinely remains is **owner-gated or research-grade**: TG-7's *semantics
+change* (decision); TG-8's *surface-syntax integration + other 4 dialects +
+Lean conservativity proof*; TG-6's *full source↔wasm bisimulation* and TG-7's
+*Lean correctness proof*.
 
 ### TG-3 — OCaml `typecheck.ml` refines Lean `HasType` — ✅ **LANDED 2026-06-14**
 - **Key lever (used):** TG-2 proves Lean `infer ≡ HasType`, so refinement
@@ -132,16 +133,24 @@ and TG-7's *Lean correctness proof* are research-grade.
   with tests, no semantic change. Lean correctness (Garside/Dehornoy) remains
   research-grade either way.
 
-### TG-8 — each dialect is a conservative extension of core — ⛔ **BLOCKED (no implementation)**
-- All five dialects (`dialects/{braid-calculus,quantum-circuit,skein-algebra,
-  string-diagram,virtual-knot}/`) are **prose + EBNF READMEs only** — zero
-  parser, typing, or evaluation code. Conservativity is a property of a formal
-  type system; there is no extended judgment/rules to state it over.
-- **Prerequisite:** implement ONE dialect end-to-end as the template — e.g.
-  virtual-knot: AST constructors (`ast.ml`), parser productions (`parser.mly`),
-  `HasType`+`Step` rules (`Tangle.lean`), eval (`eval.ml`), then a conservativity
-  test (core typed-in-core iff typed-in-dialect) mirroring the tg3/tg5 harness.
-  Only then can conservativity be proven; replicate per dialect (~1w each).
+### TG-8 — each dialect is a conservative extension of core — 🟡 **TEMPLATE LANDED (virtual-knot)**
+- ✅ **Conservativity template landed 2026-06-14**: `compiler/lib/dialect_vk.ml`
+  models the virtual-knot dialect (VBₙ ⊃ Bₙ — braids plus involutive virtual
+  crossings) as **core + a virtual layer that delegates to `Braid_equiv` (TG-7)
+  on the real fragment**, so conservativity holds *by construction* (the dialect
+  cannot change core typing/semantics). `compiler/test/tg8/tg8_conservativity.ml`
+  (2311 assertions) verifies: faithful embedding (`project∘embed=id`); the dialect
+  decides core terms exactly as the core procedure; invariant agreement
+  (permutation/writhe); proper extension (a virtual crossing is a genuinely-new
+  non-real element; vᵢvᵢ=ε); and an honest undecided-frontier (irreducible mixed
+  virtual content is reported `None`, never guessed).
+- **Honest scope:** this is the dialect's semantic core + conservativity bridge,
+  built as a separate module (no core-AST/Lean-oracle edits, avoiding the
+  `Warning 8` cascade). It is NOT yet a surface-syntax parser integration, and
+  VBₙ equivalence is a sound *partial* decider (full VBₙ word problem is
+  research-grade).
+- **Remaining:** surface syntax (`lexer`/`parser`/`ast`/`eval`); replicate the
+  template to the other four dialects; a mechanised Lean conservativity proof.
 
 ### TG-6 — WASM compilation preserves semantics — 🟡 **RUNG LANDED (differential)**
 - ✅ **Differential rung landed 2026-06-14**: `compiler/tangle-wasm/tests/differential.rs`

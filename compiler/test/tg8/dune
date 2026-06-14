@@ -1,0 +1,13 @@
+; SPDX-License-Identifier: MPL-2.0
+; TG-8 virtual-knot dialect conservativity template (Dialect_vk).
+;   dune runtest -> runs ./tg8_conservativity.exe --check.
+
+(executable
+ (name tg8_conservativity)
+ (modules tg8_conservativity)
+ (libraries tangle))
+
+(rule
+ (alias runtest)
+ (deps tg8_conservativity.exe)
+ (action (run ./tg8_conservativity.exe --check)))
