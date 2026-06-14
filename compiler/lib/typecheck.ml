@@ -584,6 +584,8 @@ and strand_type_of_ty (t : ty) : strand_type =
   | TBool -> StrandNamed "Bool"
   | TWord _ -> StrandDefault
   | TTangle _ -> StrandDefault
+  | TProd _ -> StrandDefault
+  | TEcho _ -> StrandDefault
 
 (** Convert a strand_type to a boundary element for self-crossing. *)
 and strand_to_type (st : strand_type) : strand_type = st

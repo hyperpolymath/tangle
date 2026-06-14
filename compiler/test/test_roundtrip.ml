@@ -100,6 +100,15 @@ let basic_corpus : (string * string) list = [
   ("nullary def",        "def x = identity");
   ("unary def",          "def f(a) = a");
   ("binary def",         "def f(a, b) = a + b");
+  (* Echo / structured-loss forms (PR #45) *)
+  ("echoClose",          "def x = echoClose(a)");
+  ("lower",              "def x = lower(a)");
+  ("residue",            "def x = residue(a)");
+  ("pair",               "def x = pair(a, b)");
+  ("fst",                "def x = fst(a)");
+  ("snd",                "def x = snd(a)");
+  ("echoAdd",            "def x = echoAdd(a, b)");
+  ("echoEq",             "def x = echoEq(a, b)");
 ]
 
 (* --------------------------------------------------------------------- *)
