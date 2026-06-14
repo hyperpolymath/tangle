@@ -13,6 +13,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Proof documentation catch-up (TG-1, TG-2, echo-types design note)
+
+Both TG-1 and TG-2 were already fully proved in `proofs/Tangle.lean` but not
+reflected in PROOF-NEEDS.md / PROOF-NARRATIVE.md. This entry documents the
+retrospective correction.
+
+- **TG-1 LANDED**: `weakening` + `subst_preserves` + all four theorems (Progress,
+  Preservation, Determinism, TypeSafety) extended to `var`/`let`. The "let-free
+  fragment" caveat in PROOF-NARRATIVE.md is retired.
+- **TG-2 LANDED**: `infer` (structural recursion over all 26 HasType rules),
+  `infer_sound`, `infer_complete`, `infer_iff_hasType`, `type_unique`,
+  `decidableHasType` — all in `proofs/Tangle.lean` §TG-2.
+- **echo-types grade semiring design note** (§2.8 of PROOF-NARRATIVE.md): the
+  experimental ℕ∪{∞} min-plus grade semiring in `hyperpolymath/echo-types`
+  (`f7a965f`) uses the combining/monadic direction — the same direction as
+  Tangle's `echoAdd`/`echoEq`. The splitting/comonadic direction requires a full
+  graded adjunction and is under experimental investigation (firewalled). No
+  Tangle design change required now.
+
 ### Echo types OCaml pipeline (PR #45 + #46)
 
 ### Added

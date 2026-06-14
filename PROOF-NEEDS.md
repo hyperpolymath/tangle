@@ -12,15 +12,14 @@ Owner: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 
 **Tier:** T1 — Critical.
 Tangle owns the type system. KRL and QuandleDB rest on Tangle's
-metatheory. The let-free core has been mechanised; the gap to full
-language and to implementation-refinement is the remaining work.
+metatheory. The core (including let-binding) has been mechanised; the remaining gap is implementation-refinement and WASM/dialect proofs.
 
 ## Current state
 
 - **LOC**: ~18,000 (OCaml + Rust + Tangle DSL + Lean proofs)
 - **Languages**: OCaml (compiler), Rust (tangle-wasm), Lean 4 (proofs),
   Tangle DSL (lib/stdlib + examples)
-- **Existing mechanised proofs**: `proofs/Tangle.lean` (560 LoC, 16
+- **Existing mechanised proofs**: `proofs/Tangle.lean` (~1604 LoC, 22+
   results, all `Qed`)
 - **Dangerous patterns**: None detected
 
@@ -32,17 +31,21 @@ and `proofs/Tangle.lean`:
 | ID | Result | LoC |
 |----|--------|-----|
 | T-Progress | Every well-typed closed term is a value or steps | ~80 |
-| T-Preservation | Stepping preserves types | ~85 |
-| T-Determinism | Step relation is deterministic | ~130 |
+| T-Preservation | Stepping preserves types | ~180 |
+| T-Determinism | Step relation is deterministic | ~250 |
 | T-TypeSafety | Corollary: well-typed terms never get stuck | ~3 |
-| + 12 lemmas | width-append, width-shift, canonical-num/str/word, value-no-step, … | ~150 |
+| T-Weakening | Context insertion preserves typing (TG-1) | ~70 |
+| T-SubstPreserves | Substitution preserves typing (TG-1) | ~100 |
+| `infer` + `infer_sound`/`infer_complete`/`infer_iff_hasType` | Algorithmic type inference ≡ HasType (TG-2) | ~120 |
+| `type_unique` + `decidableHasType` | Type uniqueness + Decidable instance (TG-2) | ~15 |
+| + canonical lemmas | canonical-num/str/word/echo/prod, value-no-step, width-append/shift, echo capstones, echoAdd/echoEq capstones | ~250 |
 
-**Coverage:** the **let-free fragment** of core Tangle, comprising
-`Num`, `Str`, `Bool`, `Identity`, `BraidLit`, `Compose`, `Tensor`,
-`Pipeline`, `Close`, `Add`, `Eq`, plus the **echo-types fragment**
-(`EchoClose`, `Lower`, `Residue`, `EchoAdd`, `EchoEq`) and the **product type**
-(`Pair`, `Fst`, `Snd` with type former `ρ × σ`). 26 typing rules, 57 step rules.
-All four theorems cover the echo fragment (TG-10).
+**Coverage:** the **full core fragment** of Tangle — `Num`, `Str`, `Bool`, `Identity`,
+`BraidLit`, `Compose`, `Tensor`, `Pipeline`, `Close`, `Add`, `Eq`, `Var`, `Let`,
+plus the **echo-types fragment** (`EchoClose`, `Lower`, `Residue`, `EchoAdd`,
+`EchoEq`) and the **product type** (`Pair`, `Fst`, `Snd`). 26 typing rules,
+57 step rules. All four theorems cover the full fragment including let-binding (TG-1)
+and the echo/product fragment (TG-10). Type checking is decidable (TG-2).
 
 ## What remains
 
@@ -50,8 +53,8 @@ Cross-referenced to [PROOF-NARRATIVE.md §3](PROOF-NARRATIVE.md#3-remaining-obli
 
 | # | Statement | Category | Prover | Priority | Effort | Status |
 |---|-----------|----------|--------|----------|--------|--------|
-| TG-1 | Extend Progress/Preservation/Determinism/TypeSafety to `let`-binding | TP | Lean 4 | P1 | 3d | NOT STARTED (acknowledged in Tangle.lean header) |
-| TG-2 | Type checking is decidable: define `infer : Expr → Option Ty` proven equivalent to `HasType` | ALG | Lean 4 | P1 | 1d | NOT STARTED |
+| TG-1 | Extend Progress/Preservation/Determinism/TypeSafety to `let`-binding | TP | Lean 4 | P1 | — | **LANDED** (`proofs/Tangle.lean` §METATHEORY — `weakening`, `subst_preserves`; all four theorems cover `var`/`let`) |
+| TG-2 | Type checking is decidable: define `infer : Expr → Option Ty` proven equivalent to `HasType` | ALG | Lean 4 | P1 | — | **LANDED** (`proofs/Tangle.lean` §TG-2 — `infer`, `infer_sound`, `infer_complete`, `infer_iff_hasType`, `type_unique`, `decidableHasType`) |
 | TG-3 | OCaml `typecheck.ml` refines the Lean `HasType` spec | TP | Lean 4 + translation validation | P1 | 5d | NOT STARTED |
 | TG-4 | Pretty-print/parse round-trip on closed values | INV | OCaml property test (cheap) | P2 | 4h | **LANDED** (PR #46 — OCaml property test in `compiler/test/test_roundtrip.ml`, 36 entries including 16 echo/product forms) |
 | TG-5 | `compositional.ml` (418 LoC) rewriter preserves types | TP | Lean 4 + OCaml test file | P2 | 3d | NOT STARTED (B6: no test file yet) |

@@ -91,22 +91,25 @@ See PROOF-NARRATIVE §2.5.
 | **T-Determinism** | The step relation is deterministic: `e → e₁ ∧ e → e₂ ⟹ e₁ = e₂`. | `Tangle.lean:422-549` |
 | **T-TypeSafety** | Well-typed closed terms never get stuck (Progress + Preservation corollary). | `Tangle.lean:556-558` |
 
-Each is proven for the **let-free fragment** of the core: numerals,
-strings, booleans, identity, braid literals, composition, tensor,
-pipeline, close, addition, and equality.
+Each is proven for the **full core fragment**: numerals, strings, booleans, identity,
+braid literals, composition, tensor, pipeline, close, addition, equality, variables,
+let-binding, the complete echo/product fragment (see §2.5), and decidable type
+inference (see §2.7). The "let-free fragment" caveat is retired — TG-1 and TG-2 are both landed.
 
 ### Supporting lemmas
 
 | ID | Statement | Where |
 |----|-----------|-------|
-| T-ValueNoStep | Values are normal forms: `IsValue e ⟹ ¬ Step e e'`. | `Tangle.lean:189` |
-| T-CanonicalNum | A typed-Num value is `.num n` for some `n`. | `Tangle.lean:193-194` |
-| T-CanonicalStr | A typed-Str value is `.str s` for some `s`. | `Tangle.lean:197-198` |
-| T-CanonicalWord | A typed-Word[n] value is `.identity` (n=0) or `.braidLit gs` (n = width gs). | `Tangle.lean:201-209` |
-| T-WidthAppend | `width(gs₁ ++ gs₂) = max(width gs₁, width gs₂)`. | `Tangle.lean:219-221` |
-| T-WidthShift | `width(shift gs n) = if gs=[] then 0 else width gs + n`. | `Tangle.lean:235-238` |
-| T-FoldlMaxInit (private) | Algebraic identity for the width fold. | `Tangle.lean:212-217` |
-| T-FoldlShiftInit (private) | Algebraic identity for the shifted width fold. | `Tangle.lean:223-233` |
+| T-ValueNoStep | Values are normal forms: `IsValue e ⟹ ¬ Step e e'`. | `Tangle.lean:394` |
+| T-CanonicalNum | A typed-Num value is `.num n` for some `n`. | `Tangle.lean:405` |
+| T-CanonicalStr | A typed-Str value is `.str s` for some `s`. | `Tangle.lean:409` |
+| T-CanonicalWord | A typed-Word[n] value is `.identity` (n=0) or `.braidLit gs`. | `Tangle.lean:413` |
+| T-CanonicalEcho | A typed-Echo value is `.echoVal r v` for values r, v. | `Tangle.lean:428` |
+| T-CanonicalProd | A typed-Prod value is `.pair a b` for values a, b. | `Tangle.lean:443` |
+| T-WidthAppend | `width(gs₁ ++ gs₂) = max(width gs₁, width gs₂)`. | `Tangle.lean:466` |
+| T-WidthShift | `width(shift gs n) = if gs=[] then 0 else width gs + n`. | `Tangle.lean:485` |
+| **T-Weakening** | Inserting a fresh hypothesis at de Bruijn position `Γ₁.length` preserves typing (TG-1). | `Tangle.lean:521` |
+| **T-SubstPreserves** | Typing is preserved under capture-avoiding substitution of a typed term for a variable (TG-1). | `Tangle.lean:589` |
 
 ### Type-system and step-relation definitions
 
@@ -195,48 +198,106 @@ pre-PR #46 `main` did not compile due to two `Warning 8` exhaustiveness gaps
 **TG-3 gap remains**: the OCaml typechecker is not yet proven to refine `HasType`;
 the correspondence is validated by the test suite, not by a formal translation.
 
+## 2.7 Let-binding and decidability (TG-1 + TG-2)
+
+Both obligations landed in `proofs/Tangle.lean` and are documented in §TG-1 and
+§TG-2 of the remaining-obligations section below (those sections now carry LANDED
+verdicts). Key structural points:
+
+- **TG-1 (let-binding)**: `weakening` + `subst_preserves` use the de Bruijn
+  combined-context invariant — `subst_preserves` types the substitutee in
+  `Γ₁ ++ Γ₂`, not merely `Γ₂`. This is the genuine inductive invariant; the
+  `letRed` consumer uses `Γ₁ := []` where both forms coincide.
+
+- **TG-2 (decidability)**: `infer` is a single structural recursion covering all
+  26 `HasType` rules. Both soundness and completeness are proven; `type_unique`
+  follows as a corollary. The `decidableHasType` instance makes `HasType [] e τ`
+  a decidable proposition directly usable by Lean's typeclass system.
+
+## 2.8 Echo-types grade semiring — design note
+
+`hyperpolymath/echo-types` (commit `f7a965f`, 2026-06-14) added an experimental
+ℕ∪{∞} min-plus grade semiring (`experimental/echo-additive/Grade.agda`) and a
+variance gate (`VarianceGate.agda`). Key findings and their implications for Tangle:
+
+- The **combining direction** (`D_r(D_s A) → D_{r+s} A`) has **monadic** variance.
+  Tangle's `echoAdd`/`echoEq` use exactly this direction: two residues are merged
+  into a `pair` (the lax monoidal μ map). The current implementation is correct for
+  this reading.
+
+- The **splitting direction** (`D_{r+s} A → D_r(D_s A)`) has **comonadic** variance
+  and requires a full graded adjunction F_r ⊣ U_r. If Tangle ever needs to split an
+  `Echo(ρ×σ)` value back into independent `Echo(ρ)` and `Echo(σ)`, that is a
+  non-trivial structural addition — it cannot be derived from the combining map alone.
+
+- The **grade semiring** (`fin n` = information count, `inf` = total collapse) is a
+  candidate carrier for a future grade-indexed type former `Echo[n] ρ τ` in Tangle.
+  `echoAdd` would then have type `Num → Num → Echo[2] (Num×Num) Num` (2 units of
+  information retained). This is prospective; the experimental subtree is firewalled
+  until the comparative protocol (monadic vs comonadic) concludes.
+
+- **No Tangle design change is required now.** The current `Ty.echo`/`Ty.prod`
+  fragment is faithful to the monadic/combining direction and the experimental work
+  is explicitly gated (`experimental/echo-additive/` is not imported by any shipped
+  module in echo-types or Tangle).
+
 ## 3. Remaining obligations (the narrative arc)
 
 What's not yet proven, why it matters, and what assumption each rests on.
 
 ### TG-1 — Type safety extended to `let`-binding
 
-**Claim.** Type safety extends to the language fragment with `let`.
+**Status: LANDED** (`proofs/Tangle.lean` §METATHEORY, lines 492–668).
 
-**Why valuable.** The header comment of `Tangle.lean` explicitly
-parks this: "T-Let: ... a future version can add the full substitution
-machinery from e.g. Autosubst." Until then T-TypeSafety is for the
-let-free fragment only. `let` is in the surface language (`compiler/
-lib/ast.ml`), so users can write programs the proof doesn't cover.
+**Claim.** Type safety (Progress, Preservation, Determinism, TypeSafety) extends
+to the full core language including `var` and `let`.
 
-**Assumptions.**
-- [[A-TG-1.1]] Capture-avoiding substitution is well-defined on the
-  de Bruijn representation already used by `HasType`.
-- [[A-TG-1.2]] The standard "weakening" and "substitution" lemmas hold
-  for the existing `HasType` rules.
+**What was proven.**
+- `weakening` (line 521) — inserting a fresh hypothesis `σ` at de Bruijn position
+  `Γ₁.length` preserves typing, with the term shifted by `shift 1 Γ₁.length`.
+- `subst_preserves` (line 589) — typing is closed under replacing the variable at
+  `Γ₁.length` by a well-typed term `s`. The substitutee is typed in the combined
+  context `Γ₁ ++ Γ₂` (the genuine inductive invariant; the `letRed` consumer
+  instantiates `Γ₁ := []`).
+- All four main theorems (Progress, Preservation, Determinism, TypeSafety) were
+  extended with `var` and `letStep`/`letRed` cases. `Step` gained `letStep` and
+  `letRed`; `HasType` gained `tVar` and `tLet`.
 
-**How to discharge.** Add the substitution lemma, extend `Step` with
-a `let`-reduction rule, extend each cases-on-`hs` block in
-preservation. Standard POPLmark machinery; ~150 LoC.
+**Implementation notes.**
+- Variable lookup uses `List.getElem?` (not the deprecated `List.get?`); the
+  append splits go through `List.getElem?_append_left` / `_append_right`.
+- Each derivation is taken apart with `cases h; rename_i` rather than
+  `cases h with | tCtor`, because under `induction e` the binder arguments
+  unify with the context and positional arm naming doesn't align.
+- The `subst_preserves` combined-context invariant closes the `var = Γ₁.length`
+  case by `exact hs` with no separate shift-composition lemma needed.
+
+**Assumptions discharged.**
+- [[A-TG-1.1]] ✓ — `subst` is defined by structural recursion on `Expr`, covering all 22 constructors.
+- [[A-TG-1.2]] ✓ — `weakening` and `subst_preserves` both proven.
 
 ### TG-2 — Decidability of type checking
+
+**Status: LANDED** (`proofs/Tangle.lean` §TG-2, lines 1399–1604).
 
 **Claim.** There is a total function `infer : Expr → Option Ty` such
 that `infer e = some τ ↔ HasType [] e τ`.
 
-**Why valuable.** `Tangle.lean` establishes the *relation* `HasType`
-but not the *algorithm* `typecheck.ml`. Without TG-2 we have a proven
-type system but no proof that the OCaml type checker actually decides
-it.
+**What was proven.**
+- `infer` (line 1410) — total structural recursion on `Expr`; covers all 26 `HasType`
+  rules including the echo/product fragment and let-binding.
+- `infer_complete` (line 1487) — `HasType Γ e τ → infer Γ e = some τ`.
+- `infer_sound` (line 1493) — `infer Γ e = some τ → HasType Γ e τ`.
+- `infer_iff_hasType` (line 1588) — the biconditional packaging both directions.
+- `type_unique` (line 1593) — `HasType Γ e τ₁ → HasType Γ e τ₂ → τ₁ = τ₂` (follows
+  from `infer_complete` + `infer_sound`).
+- `decidableHasType` (line 1601) — `Decidable (HasType [] e τ)` instance via `infer`.
 
-**Assumptions.**
-- [[A-TG-2.1]] Type-checking proceeds by syntactic recursion on `Expr`
-  (no impredicative steps).
-- [[A-TG-2.2]] Equality on `Ty` is decidable (it is — `deriving DecidableEq`).
-
-**How to discharge.** Define `infer` in Lean as a structural recursion
-on `Expr`. Prove the `↔` by case analysis matching the structure of
-`HasType`'s rules.
+**Assumptions discharged.**
+- [[A-TG-2.1]] ✓ — `infer` is defined by structural recursion; Lean's termination
+  checker accepts it without any additional annotation.
+- [[A-TG-2.2]] ✓ — `Ty` carries `deriving DecidableEq`; `Ty` comparisons in `infer`
+  use it directly.
 
 ### TG-3 — OCaml impl refines the Lean spec
 
