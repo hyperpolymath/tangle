@@ -38,7 +38,7 @@ milestones = [
   "DONE (TG-5): compositional PD-lowering preserves structural invariants + verbatim echo residue — compiler/test/tg5/tg5_invariants.ml (189 assertions in dune runtest)",
   "BLOCKED (TG-8): dialects are README-only — need one dialect implemented (AST+parser+HasType/Step+eval) before conservativity is even stateable",
   "RUNG-DONE (TG-7): out-of-band braid_equiv (Dehornoy handle reduction) in compiler/lib/braid_equiv.ml — decides braid-group equivalence WITHOUT changing == (compiler/test/tg7, 2220 assertions). Routing == through it stays an owner decision; Lean correctness research-grade.",
-  "BLOCKED (TG-6): no wasm runtime wired in — add wasmtime/wasmer dev-dep + exec harness before differential testing; full bisimulation research-grade",
+  "RUNG-DONE (TG-6): wasm differential — compiler/tangle-wasm/tests/differential.rs executes generated wasm via wasmi (dev-dep) and checks strand permutation == reference model (trefoil, non-commuting, braid-relation, 5-strand). Codegen-vs-semantics; not a cross-binary eval.ml diff; full bisimulation research-grade.",
 ]
 
 [blockers-and-issues]
@@ -48,11 +48,11 @@ issues = []
 actions = [
   "TG-7 OWNER DECISION (rung done): out-of-band braid_equiv now exists (compiler/lib/braid_equiv.ml). Decide whether to route `==`/Step.eqBraids through it (semantics change to eval.ml + Lean + proofs) or keep them list-equality and use braid_equiv only as a tool.",
   "TG-8 prerequisite: implement one dialect end-to-end (virtual-knot suggested) as the conservativity template; dialects are currently README-only.",
-  "TG-6 prerequisite: wire a wasm runtime (wasmtime/wasmer dev-dep) + exec harness to enable differential testing.",
+  "TG-6 (rung done): optional next rungs = cross-binary differential vs eval.ml; Markov-helper coverage; Lean/WasmCert bisimulation (research-grade).",
   "TangleIR Julia: implement EchoClosed node in KRLAdapter.jl per contract (quandledb session)",
 ]
 
 [maintenance-status]
-last-run-utc = "2026-06-14T16:00:00Z"
+last-run-utc = "2026-06-14T17:00:00Z"
 last-result = "pass"               # unknown | pass | warn | fail
-notes = "dune build + dune test GREEN (incl. tg3 1008 + tg5 189 + tg7 2220 assertions); lean Tangle.lean 0 errors; proofs/check-tg3-differential.sh GREEN (496 obligations); TG-1+TG-2+TG-3+TG-5+TG-9+TG-10 LANDED; TG-7 non-semantic rung LANDED (braid_equiv, == unchanged); remaining: TG-8 blocked (dialects README-only), TG-6 blocked (no wasm runtime), TG-7 semantics change owner-gated; echo-types f7a965f grade semiring experimental (firewalled)"
+notes = "dune build + dune test GREEN (tg3 1008 + tg5 189 + tg7 2220); cargo test tangle-wasm GREEN (10 unit + 2 differential via wasmi); lean Tangle.lean 0 errors; proofs/check-tg3-differential.sh GREEN (496); LANDED: TG-1/2/3/5/9/10 + TG-6 differential rung + TG-7 non-semantic rung; remaining: TG-8 blocked (dialects README-only), TG-7 semantics change owner-gated, full WASM bisimulation research-grade; echo-types f7a965f grade semiring experimental (firewalled)"

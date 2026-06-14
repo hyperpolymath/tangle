@@ -13,6 +13,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### TG-6 (differential rung): execute generated wasm and check it preserves semantics
+
+- **`compiler/tangle-wasm/tests/differential.rs`** adds `wasmi` (a pure-Rust wasm
+  interpreter) as a dev-dependency and EXECUTES the generated wasm modules,
+  supplying reference host primitives (`tangle_rt.alloc_strands` initialises the
+  identity strand array; `tangle_rt.swap_strands` swaps two cells). It then
+  checks the executed strand permutation equals an independent in-Rust reference
+  model — over the trefoil, non-commuting pairs (`s1 s2` ≠ `s2 s1`),
+  braid-relation pairs (`s1 s2 s1` = `s2 s1 s2`), and a 5-strand weave. Run via
+  `cargo test` in `compiler/tangle-wasm`.
+- This validates the wasm **codegen** against the braid permutation semantics
+  (catches wrong crossing indices, call order, strand counts, or a
+  non-instantiable module). It is not a cross-binary diff against `eval.ml`, and
+  the Markov-move helpers are not yet exercised; full source↔wasm bisimulation
+  remains research-grade (PROOF-NEEDS.md TG-6). The shipped backend keeps no
+  runtime dependency (`wasmi` is dev-only).
+
 ### TG-7 (non-semantic rung): out-of-band braid-group equivalence
 
 - **`compiler/lib/braid_equiv.ml`** decides braid-GROUP equivalence via Dehornoy

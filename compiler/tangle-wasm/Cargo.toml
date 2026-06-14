@@ -15,3 +15,7 @@ wasm-encoder = "0.225"
 thiserror = "2"
 
 [dev-dependencies]
+# TG-6 differential rung: a pure-Rust wasm interpreter to EXECUTE the generated
+# modules and check they preserve the braid strand-permutation semantics.
+# Test-only; the shipped backend keeps no runtime dependency.
+wasmi = "0.51"

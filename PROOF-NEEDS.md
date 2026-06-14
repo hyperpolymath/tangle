@@ -58,7 +58,7 @@ Cross-referenced to [PROOF-NARRATIVE.md §3](PROOF-NARRATIVE.md#3-remaining-obli
 | TG-3 | OCaml `typecheck.ml` refines the Lean `HasType` spec | TP | Lean 4 + translation validation | P1 | — | **LANDED** (translation-validation level — [`proofs/TG3-REFINEMENT.md`](proofs/TG3-REFINEMENT.md)). Reduced via TG-2 (`infer ≡ HasType`) to "OCaml `infer_expr` ≡ Lean `infer` on the core fragment", then discharged by: (a) a closure proof (core fragment never yields `TTangle`, strengthened tree-IH); (b) 496 Lean kernel-checked obligations in [`proofs/TG3Differential.lean`](proofs/TG3Differential.lean) generated from `infer_expr` by `compiler/test/tg3/tg3_emit.ml` (`by decide`; run `proofs/check-tg3-differential.sh`); (c) 1008 OCaml `--check` assertions (`dune runtest`). Complete divergence catalogue: **D1** `close` (OCaml `Tangle[I,I]` vs Lean `word 0` — sole boundary gateway, + downstream D1b/c/d) and **D2** `bool==bool` (OCaml accepts, Lean rejects). Extra-core feature list (model-later / declare-non-core) in TG3-REFINEMENT §3. Not claimed: a universal Lean proof over all OCaml runs (would require reflecting `typecheck.ml`); refinement is OCaml→Lean only |
 | TG-4 | Pretty-print/parse round-trip on closed values | INV | OCaml property test (cheap) | P2 | 4h | **LANDED** (PR #46 — OCaml property test in `compiler/test/test_roundtrip.ml`, 26-entry corpus including 8 echo/product constructors; 52 round-trip runs) |
 | TG-5 | `compositional.ml` (418 LoC) rewriter preserves types | TP | OCaml property test | P2 | — | **LANDED** (`compiler/test/tg5/tg5_invariants.ml`, 189 assertions in `dune runtest`). compositional is below the Ty layer, so "preserves types" = preserves the PD-lowering structural invariants + echo residue-recovery: `OpenWord`/`ClosedDiagram`/`EchoClosed` each pinned (closedness, `\|crossings\|`=unit-length, source unit-expanded, **verbatim residue** for `EchoClose` with `expand(residue)=diagram word` and echo-diagram pdv1-identical to plain `close`), error paths, count pins. Lean IR model = optional later rung |
-| TG-6 | WASM compilation preserves semantics (source eval ≡ wasm exec) | TP / ALG | Lean 4 bisimulation | P1 | 3w (research-grade) | NOT STARTED |
+| TG-6 | WASM compilation preserves semantics (source eval ≡ wasm exec) | TP / ALG | differential + Lean bisimulation | P1 | — | **RUNG LANDED (differential)**: `compiler/tangle-wasm/tests/differential.rs` EXECUTES the generated wasm with the `wasmi` interpreter (dev-dep) and checks the braid strand-permutation equals an independent reference model (trefoil, non-commuting pairs, braid-relation pairs, 5-strand weave). Validates codegen vs the permutation semantics; not a cross-binary diff against `eval.ml`, and Markov helpers untested. Full source↔wasm bisimulation (WasmCert) remains research-grade |
 | TG-7 | `Step.eqBraids` decides braid-group equivalence (not list equality) | ALG / DOM | OCaml + Lean 4 | P2 | — | **RUNG LANDED (non-semantic)**: `compiler/lib/braid_equiv.ml` decides braid-group equivalence via Dehornoy handle reduction, out-of-band (leaves `==`/`Step.eqBraids` as list equality). Tested (`compiler/test/tg7`, 2220 assertions: defining relations + 400 constructed-equivalent pairs + invariant-distinguished negatives). **Still OWNER-GATED**: whether to route `==` through it (a semantics change to eval.ml + Lean Step + proofs) is a language-design decision; Lean correctness (Garside/Dehornoy) remains research-grade |
 | TG-8 | Each dialect (braid-calculus, quantum-circuit, skein-algebra, string-diagram, virtual-knot) is a conservative extension of core | TP | Lean 4 per-dialect | P3 | 1w each | NOT STARTED |
 | TG-9 | LSP diagnostics are a subset of `HasType` failures (no LSP-only diagnostics) | INV | Audit + refactor | P2 | — | **LANDED** (`tangle-lsp` delegates all diagnostics to `tanglec --check` ⇒ `compiler/lib/check.ml`; hand-rolled LSP-only false positives removed. Subset holds by construction. Tests: `test_check.ml` + tangle-lsp unit/delegation tests) |
@@ -70,11 +70,12 @@ assumptions each rests on, see PROOF-NARRATIVE.md.
 ## Scoping of the remaining obligations (2026-06-14)
 
 Concrete approach, effort, risk, and dependencies for what is left after
-TG-0/1/2/3/4/5/9/10 landed. The three that remain are each **blocked on a
-prerequisite, not on effort** (parallel readiness assessment, 2026-06-14):
-TG-8 needs a dialect to actually exist as code; TG-7 needs an owner decision on
-braid-equality semantics; TG-6 needs a wasm runtime stood up. **No further
-auto-landing without those prerequisites.**
+TG-0/1/2/3/4/5/9/10 landed. **Landable rungs of TG-6 and TG-7 also landed**
+(2026-06-14): TG-6 now has a `wasmi` differential test executing the generated
+wasm; TG-7 has an out-of-band `braid_equiv` checker. What genuinely remains is
+**prerequisite-gated, not effort-gated**: TG-8 needs a dialect to exist as code;
+TG-7's *semantics change* needs an owner decision; TG-6's *full bisimulation*
+and TG-7's *Lean correctness proof* are research-grade.
 
 ### TG-3 — OCaml `typecheck.ml` refines Lean `HasType` — ✅ **LANDED 2026-06-14**
 - **Key lever (used):** TG-2 proves Lean `infer ≡ HasType`, so refinement
@@ -142,16 +143,21 @@ auto-landing without those prerequisites.**
   test (core typed-in-core iff typed-in-dialect) mirroring the tg3/tg5 harness.
   Only then can conservativity be proven; replicate per dialect (~1w each).
 
-### TG-6 — WASM compilation preserves semantics — ⛔ **BLOCKED (no wasm runtime)**
-- `compiler/tangle-wasm` compiles Tangle→wasm but there is **no wasm runtime**
-  (no wasmtime/wasmer dependency) to execute the output, and no FFI bridge to
-  call it from the OCaml test harness. Differential testing has nothing to run.
-- **Prerequisite (smallest rung):** add `wasmtime` (or `wasmer`) as a
-  dev-dependency in `compiler/tangle-wasm/Cargo.toml`; stand up a harness that
-  compiles an expr→wasm, instantiates it with the runtime, executes, reads the
-  result from linear memory, and diffs against `eval.ml` on the same input
-  (isolated test subdir, mirroring tg3/tg5). Full bisimulation (WasmCert /
-  Wasm-spec) remains a multi-week research project on top of that.
+### TG-6 — WASM compilation preserves semantics — 🟡 **RUNG LANDED (differential)**
+- ✅ **Differential rung landed 2026-06-14**: `compiler/tangle-wasm/tests/differential.rs`
+  adds `wasmi` (pure-Rust interpreter) as a dev-dependency, EXECUTES the
+  generated wasm modules with reference host primitives (`alloc_strands` =
+  identity init, `swap_strands` = cell swap), and checks the resulting strand
+  permutation equals an independent in-Rust reference model — over trefoil,
+  non-commuting pairs (`s1s2` ≠ `s2s1`), braid-relation pairs (`s1s2s1` =
+  `s2s1s2`), and a 5-strand weave. Runs via `cargo test`.
+- **Honest scope:** validates the *codegen* against the permutation semantics
+  (catches wrong crossing indices / call order / strand count / non-instantiable
+  modules); it is NOT a cross-binary diff against `compiler/lib/eval.ml`, and the
+  Markov-move helpers are not yet exercised.
+- **Remaining (research-grade):** a full source↔wasm bisimulation proof
+  (WasmCert / Wasm-spec); and, if desired, a true cross-binary differential that
+  drives `eval.ml` and the wasm over a shared corpus.
 
 ## Proof categories
 
