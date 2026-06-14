@@ -167,7 +167,15 @@ let dump_tokens (filename : string) : unit =
      | STRING s    -> Printf.printf "STRING(%S)" s
      | IDENT s     -> Printf.printf "IDENT(%s)" s
      | GENERATOR n -> Printf.printf "GENERATOR(%d)" n
-     | EOF         -> print_string "EOF");
+     | EOF         -> print_string "EOF"
+     | ECHOCLOSE   -> print_string "ECHOCLOSE"
+     | LOWER       -> print_string "LOWER"
+     | RESIDUE     -> print_string "RESIDUE"
+     | PAIR        -> print_string "PAIR"
+     | FST         -> print_string "FST"
+     | SND         -> print_string "SND"
+     | ECHOADD     -> print_string "ECHOADD"
+     | ECHOEQ      -> print_string "ECHOEQ");
     print_newline ();
     if tok <> EOF then loop ()
   in
