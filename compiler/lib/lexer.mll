@@ -45,6 +45,15 @@
     | "cap"       -> CAP
     | "cup"       -> CUP
     | "braid"     -> BRAID
+    (* Echo / product forms — surface syntax mirrors pretty.ml output. *)
+    | "echoClose" -> ECHOCLOSE
+    | "lower"     -> LOWER
+    | "residue"   -> RESIDUE
+    | "pair"      -> PAIR
+    | "fst"       -> FST
+    | "snd"       -> SND
+    | "echoAdd"   -> ECHOADD
+    | "echoEq"    -> ECHOEQ
     | "jones"     -> JONES
     | "alexander" -> ALEXANDER
     | "homfly"    -> HOMFLY

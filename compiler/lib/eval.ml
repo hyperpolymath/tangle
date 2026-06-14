@@ -42,6 +42,9 @@ type value =
   | VFun       of string list * expr * env  (** Closure: params, body, captured env *)
   | VUnit                             (** Unit / void result *)
   | VInvariant of string * string     (** Invariant name, result string *)
+  | VEcho      of value * value       (** Formed echo: residue, result —
+                                          mirrors [echoVal] in proofs/Tangle.lean *)
+  | VPair      of value * value       (** Product value *)
 
 (** Runtime environment: association list of name-value bindings. *)
 and env = (string * value) list
@@ -77,7 +80,7 @@ let pp_braid (gens : gen list) : string =
   | _  -> "braid[" ^ String.concat ", " (List.map pp_gen gens) ^ "]"
 
 (** Pretty-print a value. *)
-let pp_value (v : value) : string =
+let rec pp_value (v : value) : string =
   match v with
   | VInt n        -> string_of_int n
   | VFloat f      -> Printf.sprintf "%g" f
@@ -89,6 +92,10 @@ let pp_value (v : value) : string =
   | VFun _        -> "<function>"
   | VUnit         -> "()"
   | VInvariant (name, result) -> Printf.sprintf "%s = %s" name result
+  | VEcho (res, result) ->
+    "echo(" ^ pp_value res ^ ", " ^ pp_value result ^ ")"
+  | VPair (a, b) ->
+    "(" ^ pp_value a ^ ", " ^ pp_value b ^ ")"
 
 (* ================================================================== *)
 (*  Environment operations                                             *)
@@ -430,12 +437,66 @@ let rec eval_expr (env : env) (e : expr) : value =
     try_arms arms
 
   (* ---- Echo types (structured loss) ----
-   * These are typed by typecheck.ml (mirroring proofs/Tangle.lean).  Runtime
-   * evaluation needs echo/product value forms and is a deliberate follow-on;
-   * the typechecker is the scoped deliverable. *)
-  | EchoClose _ | Lower _ | Residue _ | Pair _ | Fst _ | Snd _ | EchoAdd _ | EchoEq _ ->
-    eval_error "echo-type evaluation is not yet implemented (typecheck-only); \
-                see proofs/Tangle.lean for the intended small-step semantics"
+   * Mirror the small-step Step rules in proofs/Tangle.lean:
+   *   echoCloseWord : echoClose(braidLit gs) ⟶ echoVal (braidLit gs) identity
+   *   lowerVal      : lower (echoVal r v)     ⟶ v
+   *   residueVal    : residue (echoVal r v)   ⟶ r
+   *   fstPair       : fst (pair a b)          ⟶ a
+   *   sndPair       : snd (pair a b)          ⟶ b
+   *   echoAddNums   : echoAdd (num a) (num b) ⟶ echoVal (pair a b) (num (a+b))
+   *   echoEqNums    : echoEq  a       b       ⟶ echoVal (pair a b) (boolLit (a==b))
+   * The result component of a closure echo is the identity value (Word[0]),
+   * matching the [closeId]/[closeWord] reduct used elsewhere in this file. *)
+
+  | EchoClose e1 ->
+    (* echo-preserving closure: residue retains the witness; the result is the
+       identity value (Word[0]), the same point the empty/identity close yields. *)
+    let v = eval_expr env e1 in
+    VEcho (v, VBraid [])
+
+  | Lower e1 ->
+    begin match eval_expr env e1 with
+    | VEcho (_, r) -> r
+    | v -> eval_error "lower expects an echo value, got %s" (pp_value v)
+    end
+
+  | Residue e1 ->
+    begin match eval_expr env e1 with
+    | VEcho (res, _) -> res
+    | v -> eval_error "residue expects an echo value, got %s" (pp_value v)
+    end
+
+  | Pair (e1, e2) ->
+    (* Force left-to-right evaluation (Lean pairLeft reduces e1 first). *)
+    let a = eval_expr env e1 in
+    let b = eval_expr env e2 in
+    VPair (a, b)
+
+  | Fst e1 ->
+    begin match eval_expr env e1 with
+    | VPair (a, _) -> a
+    | v -> eval_error "fst expects a pair, got %s" (pp_value v)
+    end
+
+  | Snd e1 ->
+    begin match eval_expr env e1 with
+    | VPair (_, b) -> b
+    | v -> eval_error "snd expects a pair, got %s" (pp_value v)
+    end
+
+  | EchoAdd (e1, e2) ->
+    (* Residue = the summand pair; result = their sum (reuse the Add logic). *)
+    let v1 = eval_expr env e1 in
+    let v2 = eval_expr env e2 in
+    let sum = eval_binop Add v1 v2 in
+    VEcho (VPair (v1, v2), sum)
+
+  | EchoEq (e1, e2) ->
+    (* Residue = the operand pair; result = their equality (reuse the Eq logic). *)
+    let v1 = eval_expr env e1 in
+    let v2 = eval_expr env e2 in
+    let b = eval_binop Eq v1 v2 in
+    VEcho (VPair (v1, v2), b)
 
 (** Evaluate a binary operation on two values. *)
 and eval_binop (op : binop) (v1 : value) (v2 : value) : value =
