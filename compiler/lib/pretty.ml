@@ -171,6 +171,52 @@ let rec pp_expr ctx = function
     pp_expr ctx e;
     emit ctx ")"
 
+  | EchoClose e ->
+    emit ctx "echoClose(";
+    pp_expr ctx e;
+    emit ctx ")"
+
+  | Lower e ->
+    emit ctx "lower(";
+    pp_expr ctx e;
+    emit ctx ")"
+
+  | Residue e ->
+    emit ctx "residue(";
+    pp_expr ctx e;
+    emit ctx ")"
+
+  | Pair (e1, e2) ->
+    emit ctx "pair(";
+    pp_expr ctx e1;
+    emit ctx ", ";
+    pp_expr ctx e2;
+    emit ctx ")"
+
+  | Fst e ->
+    emit ctx "fst(";
+    pp_expr ctx e;
+    emit ctx ")"
+
+  | Snd e ->
+    emit ctx "snd(";
+    pp_expr ctx e;
+    emit ctx ")"
+
+  | EchoAdd (e1, e2) ->
+    emit ctx "echoAdd(";
+    pp_expr ctx e1;
+    emit ctx ", ";
+    pp_expr ctx e2;
+    emit ctx ")"
+
+  | EchoEq (e1, e2) ->
+    emit ctx "echoEq(";
+    pp_expr ctx e1;
+    emit ctx ", ";
+    pp_expr ctx e2;
+    emit ctx ")"
+
   | BraidLit gens ->
     emit ctx "braid[";
     List.iteri (fun i g ->

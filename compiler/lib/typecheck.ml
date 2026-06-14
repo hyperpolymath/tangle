@@ -41,6 +41,9 @@ type ty =
   | TNum                            (** Num — integers and floats *)
   | TBool                           (** Bool — booleans *)
   | TStr                            (** Str — strings *)
+  | TProd   of ty * ty              (** ρ × σ — product / residue carrier for lossy ops *)
+  | TEcho   of ty * ty              (** Echo[ρ, τ] — structured loss: residue ρ, result τ.
+                                        Mirrors Ty.echo in proofs/Tangle.lean. *)
 
 (** Function signature: (param_types) -> return_type. *)
 type fun_sig = {
@@ -89,12 +92,14 @@ let pp_boundary (b : boundary) : string =
     "[" ^ String.concat ", " (List.map pp_strand_type b) ^ "]"
 
 (** Pretty-print a type. *)
-let pp_ty = function
+let rec pp_ty = function
   | TWord n        -> Printf.sprintf "Word[%d]" n
   | TTangle (a, b) -> Printf.sprintf "Tangle[%s, %s]" (pp_boundary a) (pp_boundary b)
   | TNum           -> "Num"
   | TBool          -> "Bool"
   | TStr           -> "Str"
+  | TProd (a, b)   -> Printf.sprintf "(%s * %s)" (pp_ty a) (pp_ty b)
+  | TEcho (r, t)   -> Printf.sprintf "Echo[%s, %s]" (pp_ty r) (pp_ty t)
 
 (* ================================================================== *)
 (*  Environment operations                                             *)
@@ -372,6 +377,66 @@ let rec infer_expr (gamma : env) (sigma : strand_ctx) (e : expr) : ty =
           i (pp_ty ty) (pp_ty result_ty)
     ) arm_types;
     result_ty
+
+  (* ---- Echo types (structured loss) ----
+   * Mirror the HasType rules in proofs/Tangle.lean:
+   *   [T-Echo-Close] echoClose e : Echo[Word[n], Word[0]]   when e : Word[n]
+   *   [T-Lower]      lower e      : τ                        when e : Echo[ρ, τ]
+   *   [T-Residue]    residue e    : ρ                        when e : Echo[ρ, τ]
+   *   [T-Pair]/[T-Fst]/[T-Snd]    product intro + projections
+   *   [T-Echo-Add]   echoAdd a b  : Echo[Num × Num, Num]
+   *   [T-Echo-Eq]    echoEq a b   : Echo[ρ × ρ, Bool]        for ρ ∈ {Num, Str, Word[n]}
+   *)
+  | EchoClose e1 ->
+    begin match infer_expr gamma sigma e1 with
+    | TWord n -> TEcho (TWord n, TWord 0)
+    | t -> type_error "echoClose requires Word[n], got %s" (pp_ty t)
+    end
+
+  | Lower e1 ->
+    begin match infer_expr gamma sigma e1 with
+    | TEcho (_, t) -> t
+    | t -> type_error "lower requires Echo[_, _], got %s" (pp_ty t)
+    end
+
+  | Residue e1 ->
+    begin match infer_expr gamma sigma e1 with
+    | TEcho (r, _) -> r
+    | t -> type_error "residue requires Echo[_, _], got %s" (pp_ty t)
+    end
+
+  | Pair (e1, e2) ->
+    let t1 = infer_expr gamma sigma e1 in
+    let t2 = infer_expr gamma sigma e2 in
+    TProd (t1, t2)
+
+  | Fst e1 ->
+    begin match infer_expr gamma sigma e1 with
+    | TProd (a, _) -> a
+    | t -> type_error "fst requires a product, got %s" (pp_ty t)
+    end
+
+  | Snd e1 ->
+    begin match infer_expr gamma sigma e1 with
+    | TProd (_, b) -> b
+    | t -> type_error "snd requires a product, got %s" (pp_ty t)
+    end
+
+  | EchoAdd (e1, e2) ->
+    begin match infer_expr gamma sigma e1, infer_expr gamma sigma e2 with
+    | TNum, TNum -> TEcho (TProd (TNum, TNum), TNum)
+    | t1, t2 -> type_error "echoAdd requires Num, Num, got %s, %s" (pp_ty t1) (pp_ty t2)
+    end
+
+  | EchoEq (e1, e2) ->
+    begin match infer_expr gamma sigma e1, infer_expr gamma sigma e2 with
+    | TNum, TNum -> TEcho (TProd (TNum, TNum), TBool)
+    | TStr, TStr -> TEcho (TProd (TStr, TStr), TBool)
+    | TWord n, TWord m when n = m -> TEcho (TProd (TWord n, TWord n), TBool)
+    | t1, t2 ->
+      type_error "echoEq requires matching Num/Str/Word[n] operands, got %s, %s"
+        (pp_ty t1) (pp_ty t2)
+    end
 
 (** Infer the type of a binary operation given operand types.
  *  Implements rules from sections 3.4, 3.5, 3.6.
