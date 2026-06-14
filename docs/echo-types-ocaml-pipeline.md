@@ -142,11 +142,13 @@ The formal spec (`proofs/Tangle.lean`) covers the complete echo+product fragment
 | `echo_distinguishes_collapsed` | Distinct braids keep distinct residues after `lower` |
 | `echo_roundtrip_typed` | Round-trip is well-typed |
 
-The OCaml typechecker is not yet formally proven to refine `HasType` (TG-3,
-open); its `Eq` rule now enforces the same-width discipline of the Lean
-`tEqWord` rule, with `Bool == Bool` retained as an extra-core convenience.
-Correspondence is validated by the test suite (all passing; run `dune runtest`
-for the live total).
+The OCaml typechecker is proven to refine `HasType` on the core fragment at the
+translation-validation level (TG-3, **landed** — see
+[`proofs/TG3-REFINEMENT.md`](../proofs/TG3-REFINEMENT.md)): `proofs/TG3Differential.lean`
+emits 496 obligations `infer [] e = <infer_expr e> := by decide` that Lean's
+proven `infer` kernel-checks, and the echo/product ops above are all in the
+validated core. The two documented divergences are `close` (OCaml `Tangle[I,I]`
+vs Lean `Word[0]`) and `Bool == Bool` (OCaml extra-core convenience; Lean rejects).
 
 ---
 
@@ -154,6 +156,6 @@ for the live total).
 
 | Gap | Tracking |
 |-----|----------|
-| TG-3: formal OCaml–Lean refinement proof (`Eq` width discipline now aligned) | PROOF-NEEDS.md TG-3 |
+| TG-3 universal proof (reflect `typecheck.ml` in Lean) — current discharge is translation validation over a core-fragment corpus | PROOF-NEEDS.md TG-3 / TG3-REFINEMENT.md §7 |
 | TangleIR: thread echo residue into the **Julia** schema (OCaml `EchoClosed` node landed) | ECHO-TANGLEIR-THREADING.md |
 | `echoClose` in WASM backend | tangle-wasm (not yet implemented) |

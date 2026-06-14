@@ -85,3 +85,13 @@ jobs:
             exit 1
           fi
           echo "No sorry/axiom/admit/Admitted found outside comments."
+
+      - name: Verify TG-3 translation-validation obligations
+        run: |
+          set -euo pipefail
+          # TG3Differential.lean is generated from OCaml `infer_expr` (see
+          # compiler/test/tg3/tg3_emit.ml) and asserts OCaml ≡ Lean `infer`
+          # on the core fragment.  This builds Tangle to an .olean and
+          # kernel-checks every obligation (the machine-checked half of TG-3;
+          # argument half in proofs/TG3-REFINEMENT.md).
+          bash proofs/check-tg3-differential.sh

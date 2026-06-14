@@ -7,7 +7,7 @@ project = "tangle"
 version = "0.2.0-dev"
 last-updated = "2026-06-14"
 status = "active"
-session = "echo-threading EchoClosed node + adversarial audit follow-up (verbatim residue, Eq tightening, --compile-pd wiring, surface echo test coverage) — 2026-06-14"
+session = "TG-3 LANDED — OCaml typecheck.ml refines Lean HasType (translation validation): closure proof + 496 Lean-kernel-checked obligations (proofs/TG3Differential.lean, generated from infer_expr by compiler/test/tg3/tg3_emit.ml) + 1008 OCaml --check assertions; divergences D1 close / D2 bool-eq catalogued; write-up proofs/TG3-REFINEMENT.md — 2026-06-14"
 
 [project-context]
 name = "Tangle"
@@ -34,8 +34,8 @@ milestones = [
   "DONE: thread echo residue into the OCaml compositional IR — EchoClosed node (verbatim residue) in compositional.ml; echo_skein_sink + residue_blob; --compile-pd CLI; cross-repo TangleIR contract at ECHO-TANGLEIR-THREADING.md (Julia KRLAdapter.jl/quandledb still pending)",
   "DONE: full OCaml echo pipeline (ast/typecheck/eval/parser/pretty) — PR #45; build fixed PR #46",
   "DONE (TG-9): LSP diagnostics ⊆ HasType failures — tangle-lsp delegates to `tanglec --check` (compiler/lib/check.ml); hand-rolled LSP-only diagnostics removed; subset by construction",
-  "LATER (TG-3): OCaml typecheck.ml refines the Lean HasType spec",
-  "LATER (TG-5/6/7): compositional rewriter preservation; WASM semantic preservation; braid-group eqBraids",
+  "DONE (TG-3): OCaml typecheck.ml refines Lean HasType (translation validation) — closure proof + proofs/TG3Differential.lean (496 by-decide obligations generated from infer_expr) + compiler/test/tg3 (1008 --check assertions) + proofs/check-tg3-differential.sh wired into lean-proofs.yml; divergences D1 close / D2 bool-eq; proofs/TG3-REFINEMENT.md",
+  "LATER (TG-5/6/7/8): compositional rewriter preservation; WASM semantic preservation; braid-group eqBraids; dialect conservativity",
 ]
 
 [blockers-and-issues]
@@ -43,12 +43,12 @@ issues = []
 
 [critical-next-actions]
 actions = [
-  "TG-3: formal refinement proof — OCaml typecheck.ml vs Lean HasType",
+  "TG-5 (next): compositional.ml rewriter preserves types — OCaml property test over compile→PD invariants (test_compositional.ml exists)",
   "TangleIR Julia: implement EchoClosed node in KRLAdapter.jl per contract (quandledb session)",
   "echo-types grade semiring: monitor experimental/echo-additive comparative protocol; no Tangle action until protocol terminates",
 ]
 
 [maintenance-status]
-last-run-utc = "2026-06-14T03:00:00Z"
+last-run-utc = "2026-06-14T14:00:00Z"
 last-result = "pass"               # unknown | pass | warn | fail
-notes = "dune build + dune test (597/597) GREEN; lean Tangle.lean 0 errors; TG-1+TG-2 LANDED; TG-9 LANDED (LSP delegates diagnostics to tanglec --check via check.ml — subset by construction); type-error diagnostics now carry the def source line (def_line) + duplicate removed; echo-threading EchoClosed node DONE (verbatim residue, --compile-pd wired); Eq typecheck tightened to same-width words (matches tEqWord); echo-types f7a965f grade semiring experimental (firewalled)"
+notes = "dune build + dune test GREEN (incl. new compiler/test/tg3 --check: 1008 assertions); lean Tangle.lean 0 errors; proofs/check-tg3-differential.sh GREEN (496 TG3Differential.lean obligations kernel-checked, 0 errors); TG-1+TG-2+TG-3+TG-9+TG-10 LANDED; TG-3 = OCaml infer_expr refines Lean infer on the core fragment (translation validation), divergences D1 close / D2 bool-eq; echo-types f7a965f grade semiring experimental (firewalled)"

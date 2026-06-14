@@ -196,8 +196,12 @@ live count — ~597 across 8 suites). The
 pre-PR #46 `main` did not compile due to two `Warning 8` exhaustiveness gaps
 (both fixed: `strand_type_of_ty` in `typecheck.ml`; debug token printer in `bin/main.ml`).
 
-**TG-3 gap remains**: the OCaml typechecker is not yet proven to refine `HasType`;
-the correspondence is validated by the test suite, not by a formal translation.
+**TG-3 landed** (translation validation): the OCaml typechecker is proven to
+refine `HasType` on the core fragment — `proofs/TG3Differential.lean` emits 496
+obligations generated from `infer_expr` that Lean's proven `infer` kernel-checks,
+plus a closure proof and 1008 OCaml `--check` assertions. The two documented
+divergences are `close` (D1) and `bool == bool` (D2). See `proofs/TG3-REFINEMENT.md`
+and §TG-3 below.
 
 ## 2.7 Let-binding and decidability (TG-1 + TG-2)
 
@@ -302,25 +306,40 @@ that `infer e = some τ ↔ HasType [] e τ`.
 
 ### TG-3 — OCaml impl refines the Lean spec
 
-**Claim.** For every `e` accepted by `compiler/lib/typecheck.ml` with
-type `τ`, the Lean-level proposition `HasType [] e τ` holds (and
-conversely).
+**Status: LANDED** (2026-06-14, translation-validation level). Full write-up:
+`proofs/TG3-REFINEMENT.md`.
 
-**Why valuable.** Bridges the metatheory (Lean) to the implementation
-(OCaml). Right now we have two systems claiming to be the same; the
-claim is unchecked.
+**Claim.** For every core-fragment `e` accepted by `compiler/lib/typecheck.ml`
+with type `τ`, the Lean-level proposition `HasType [] e (T τ)` holds (and
+conversely on rejection), where `T` is the type translation
+`TNum↦num … TWord n↦word n, TEcho↦echo, TProd↦prod`.
 
-**Assumptions.**
-- [[A-TG-3.1]] The OCaml AST in `compiler/lib/ast.ml` is in bijection
-  with the Lean AST in `Tangle.lean`.
-- [[A-TG-3.2]] OCaml's `String.equal`, `Int.equal` etc. coincide with
-  Lean's notions on the values used.
+**Why valuable.** Bridges the metatheory (Lean) to the implementation (OCaml) —
+the two systems are now checked to be the same on the modelled fragment.
 
-**How to discharge.** Two routes:
-1. _Translation validation._ Generate Lean witnesses from OCaml's
-   typecheck results on a test corpus. Cheap but only empirical.
-2. _Refinement._ Mechanise the OCaml algorithm in Lean and prove
-   equivalence to `HasType`. Expensive but airtight.
+**How it was discharged.**
+1. **Reduction (via TG-2).** `infer_iff_hasType` gives `infer ≡ HasType`, so the
+   claim becomes "OCaml `infer_expr` ≡ Lean `infer` on the core fragment".
+2. **Closure proof.** `infer_expr` keeps core terms inside the translatable types
+   (never `TTangle`), under a strengthened *entire-type-tree* IH. `close` is the
+   sole core gateway out of `T`'s domain and is excluded.
+3. **Machine-checked half.** `proofs/TG3Differential.lean` — 496 obligations
+   `infer [] e = T(infer_expr e) := by decide`, generated from the OCaml checker
+   by `compiler/test/tg3/tg3_emit.ml`, verified by `proofs/check-tg3-differential.sh`.
+4. **OCaml half.** `compiler/test/tg3` `--check`: 1008 `dune runtest` assertions
+   (closure invariant, curated pins, named→de Bruijn translation, divergences).
+
+**Divergences (complete).** D1 `close` (`Tangle[I,I]` vs `word 0`) + family
+D1b/c/d through pipeline/compose/add; D2 `bool == bool` (OCaml accepts, Lean
+rejects). Both sides pinned.
+
+**Assumptions / boundary.**
+- [[A-TG-3.1]] The core OCaml AST/`ty` is in bijection with the Lean AST/`Ty`
+  under `T` (`TTangle` has no image — handled by the closure proof).
+- Not claimed: a universal Lean theorem over all OCaml runs (route 2 below);
+  extra-core features are excluded, not modelled; refinement is OCaml→Lean only.
+- Future route 2 (_airtight refinement_): mechanise the OCaml algorithm in Lean
+  and prove equivalence to `HasType` — out of scope here (see §7 of TG3-REFINEMENT.md).
 
 ### TG-4 — Pretty-print/parse round-trip
 

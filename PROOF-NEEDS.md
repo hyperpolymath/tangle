@@ -55,7 +55,7 @@ Cross-referenced to [PROOF-NARRATIVE.md §3](PROOF-NARRATIVE.md#3-remaining-obli
 |---|-----------|----------|--------|----------|--------|--------|
 | TG-1 | Extend Progress/Preservation/Determinism/TypeSafety to `let`-binding | TP | Lean 4 | P1 | — | **LANDED** (`proofs/Tangle.lean` §METATHEORY — `weakening`, `subst_preserves`; all four theorems cover `var`/`let`) |
 | TG-2 | Type checking is decidable: define `infer : Expr → Option Ty` proven equivalent to `HasType` | ALG | Lean 4 | P1 | — | **LANDED** (`proofs/Tangle.lean` §TG-2 — `infer`, `infer_sound`, `infer_complete`, `infer_iff_hasType`, `type_unique`, `decidableHasType`) |
-| TG-3 | OCaml `typecheck.ml` refines the Lean `HasType` spec | TP | Lean 4 + translation validation | P1 | 5d | NOT STARTED (partial alignment: `Eq` now enforces same-width words to match `tEqWord`; `Bool == Bool` is a deliberate extra-core feature outside the 26-rule fragment, like `match`/`weave`/`mirror`/`compute` — these must be excluded from or added to the modelled core before TG-3 can close) |
+| TG-3 | OCaml `typecheck.ml` refines the Lean `HasType` spec | TP | Lean 4 + translation validation | P1 | — | **LANDED** (translation-validation level — [`proofs/TG3-REFINEMENT.md`](proofs/TG3-REFINEMENT.md)). Reduced via TG-2 (`infer ≡ HasType`) to "OCaml `infer_expr` ≡ Lean `infer` on the core fragment", then discharged by: (a) a closure proof (core fragment never yields `TTangle`, strengthened tree-IH); (b) 496 Lean kernel-checked obligations in [`proofs/TG3Differential.lean`](proofs/TG3Differential.lean) generated from `infer_expr` by `compiler/test/tg3/tg3_emit.ml` (`by decide`; run `proofs/check-tg3-differential.sh`); (c) 1008 OCaml `--check` assertions (`dune runtest`). Complete divergence catalogue: **D1** `close` (OCaml `Tangle[I,I]` vs Lean `word 0` — sole boundary gateway, + downstream D1b/c/d) and **D2** `bool==bool` (OCaml accepts, Lean rejects). Extra-core feature list (model-later / declare-non-core) in TG3-REFINEMENT §3. Not claimed: a universal Lean proof over all OCaml runs (would require reflecting `typecheck.ml`); refinement is OCaml→Lean only |
 | TG-4 | Pretty-print/parse round-trip on closed values | INV | OCaml property test (cheap) | P2 | 4h | **LANDED** (PR #46 — OCaml property test in `compiler/test/test_roundtrip.ml`, 26-entry corpus including 8 echo/product constructors; 52 round-trip runs) |
 | TG-5 | `compositional.ml` (418 LoC) rewriter preserves types | TP | Lean 4 + OCaml test file | P2 | 3d | NOT STARTED (B6: no test file yet) |
 | TG-6 | WASM compilation preserves semantics (source eval ≡ wasm exec) | TP / ALG | Lean 4 bisimulation | P1 | 3w (research-grade) | NOT STARTED |
@@ -70,23 +70,25 @@ assumptions each rests on, see PROOF-NARRATIVE.md.
 ## Scoping of the remaining obligations (2026-06-14)
 
 Concrete approach, effort, risk, and dependencies for what is left after
-TG-0/1/2/4/9/10 landed. **Recommended order: TG-3 → TG-5 → TG-7 → TG-8 → TG-6.**
+TG-0/1/2/3/4/9/10 landed. **Recommended order: TG-5 → TG-7 → TG-8 → TG-6.**
 
-### TG-3 — OCaml `typecheck.ml` refines Lean `HasType` *(keystone, recommended next)*
-- **Key lever:** TG-2 already proves Lean `infer ≡ HasType`. So refinement
-  reduces to **OCaml `infer_expr` agrees with Lean `infer` on the shared core
-  fragment** — a cross-language differential check, not a fresh metatheorem.
-- **Approach:** translation-validation harness. Generate core-fragment terms,
-  type each with OCaml `infer_expr` and with Lean `infer`, assert equal types
-  (and equal accept/reject). Seed from existing corpora + a small generator.
-- **Honest boundary:** the OCaml checker is far larger than the 26-rule core
-  (match, weave, compute, cap/cup, mirror/reverse/simplify, twist, pipeline,
-  two-pass program typing, width inference, Bool-eq). Deliverable = refinement
-  validated on the core fragment + an explicit "extra-core" feature list, each
-  marked model-later or declare-non-core. A universal Lean proof is out of reach
-  without modelling the OCaml program itself.
-- **Started:** `Eq` aligned to `tEqWord` this session. **Effort:** ~3–5d.
-  **Risk:** med (scoping the fragment). **Deps:** TG-2.
+### TG-3 — OCaml `typecheck.ml` refines Lean `HasType` — ✅ **LANDED 2026-06-14**
+- **Key lever (used):** TG-2 proves Lean `infer ≡ HasType`, so refinement
+  reduced to **OCaml `infer_expr` ≡ Lean `infer` on the shared core fragment**.
+- **Delivered:** (1) closure proof — the core fragment never yields `TTangle`
+  under `infer_expr` (strengthened *entire-type-tree* IH; `close` is the sole
+  boundary gateway, excluded); (2) machine-checked half — `proofs/TG3Differential.lean`,
+  496 obligations `infer [] e = <infer_expr result> := by decide`, generated from
+  the OCaml checker by `compiler/test/tg3/tg3_emit.ml`, kernel-verified by
+  `proofs/check-tg3-differential.sh` (wired into `lean-proofs.yml`); (3) OCaml
+  side — 1008 `dune runtest` assertions (closure invariant, curated pins, de
+  Bruijn translation, divergence behaviours). Full write-up + extra-core list +
+  divergence catalogue: `proofs/TG3-REFINEMENT.md`.
+- **Divergences (complete):** D1 `close` (Tangle[I,I] vs word 0) + family
+  D1b/c/d; D2 `bool==bool` (OCaml accepts / Lean rejects). Both pinned both sides.
+- **Honest boundary:** translation validation over a broad corpus + a structural
+  argument — NOT a universal Lean theorem over all OCaml runs (needs reflecting
+  `typecheck.ml`). Extra-core features excluded, not modelled. OCaml→Lean only.
 
 ### TG-5 — `compositional.ml` rewriter preserves types *(cheap, do early)*
 - **Approach:** OCaml property test first — random compositional exprs →

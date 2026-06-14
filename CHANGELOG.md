@@ -13,6 +13,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### TG-3 LANDED: OCaml type checker refines the Lean spec (translation validation)
+
+Proof obligation TG-3 — "`compiler/lib/typecheck.ml` refines the mechanised
+`HasType` spec" — is discharged at the translation-validation level. Full
+write-up, closure argument, type translation, divergence catalogue and
+extra-core feature list: `proofs/TG3-REFINEMENT.md`.
+
+- **Reduction.** TG-2 proves Lean `infer ≡ HasType`, so TG-3 reduces to "OCaml
+  `infer_expr` ≡ Lean `infer` on the shared core fragment".
+- **Closure proof.** The core fragment (literals, let/var, compose/tensor/
+  pipeline, add, eq, and the echo/product ops — excluding `close` and the whole
+  Tangle layer) is closed under `infer_expr`: it never produces a `TTangle`,
+  under a strengthened *entire-type-tree* induction hypothesis (a Tangle must not
+  hide inside a `TProd`/`TEcho` and leak out via `fst`/`snd`/`lower`/`residue`).
+- **Machine-checked half.** `proofs/TG3Differential.lean` — 496 obligations
+  `infer [] <term> = <infer_expr result> := by decide`, **generated from the
+  OCaml checker** by `compiler/test/tg3/tg3_emit.ml` and kernel-verified by
+  Lean's *proven* `infer`. New `proofs/check-tg3-differential.sh` (builds the
+  Tangle `.olean`, checks the obligations); wired into `lean-proofs.yml`.
+- **OCaml half.** `compiler/test/tg3/` runs `tg3_emit --check` under
+  `dune runtest`: 1008 assertions over a 490-term corpus — closure invariant,
+  curated type pins, named→de Bruijn translation (incl. `let`-shadowing), and the
+  OCaml side of every divergence.
+- **Divergence catalogue (complete).** **D1** `close` (OCaml `Tangle[I,I]` vs
+  Lean `Word[0]` — the sole core boundary gateway) and its downstream vectors
+  D1b `pipeline(close,close)`, D1c `compose(braid,close)` (OCaml rejects), D1d
+  `add(close,close)`; **D2** `bool == bool` (OCaml accepts as extra-core, Lean
+  rejects). Both sides of each are pinned.
+- **Honest boundary.** Translation validation over a broad corpus plus a
+  structural argument — not a single Lean theorem quantifying over all OCaml
+  runs (that would require reflecting `typecheck.ml`). Refinement is OCaml→Lean.
+
 ### Proof documentation catch-up (TG-1, TG-2, echo-types design note)
 
 Both TG-1 and TG-2 were already fully proved in `proofs/Tangle.lean` but not
