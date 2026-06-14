@@ -13,6 +13,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### TG-5 LANDED + readiness map for TG-6/7/8
+
+- **TG-5 LANDED**: `compiler/test/tg5/tg5_invariants.ml` (189 assertions, in
+  `dune runtest`) — a structural-invariant property test for the compositional
+  PD lowering (`compiler/lib/compositional.ml`). compositional sits below the
+  type layer, so "the rewriter preserves types" is realised as preserving the
+  lowering's structural invariants + the echo residue-recovery property:
+  `OpenWord` unit-expanded; `ClosedDiagram` closed / `components=[]` / source
+  unit-expanded / `|crossings| = |source| = unit-count`; `EchoClosed` residue
+  **verbatim** (`echoClose(s1^3)` keeps `[s1^3]` while the diagram is the
+  3-crossing unit closure), `expand(residue) = diagram word`, and echo-diagram
+  pdv1-identical to plain `close`; plus error-path and crossing-count pins.
+  Asserts only invariants the lowering guarantees (no arc-balance/planarity).
+- **Readiness map (TG-6/7/8)**: a parallel assessment found each remaining
+  obligation is blocked on a *prerequisite*, not effort — recorded in
+  PROOF-NEEDS.md. **TG-8** blocked: the five dialects are prose READMEs with no
+  implementation. **TG-7** needs an owner decision: braid-group equivalence
+  changes the observable semantics of `==` on braids in both the evaluator and
+  the Lean `Step` relation. **TG-6** blocked: no wasm runtime is wired in, so
+  even differential testing has nothing to execute.
+
 ### TG-3 LANDED: OCaml type checker refines the Lean spec (translation validation)
 
 Proof obligation TG-3 — "`compiler/lib/typecheck.ml` refines the mechanised

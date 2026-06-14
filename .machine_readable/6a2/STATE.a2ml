@@ -7,7 +7,7 @@ project = "tangle"
 version = "0.2.0-dev"
 last-updated = "2026-06-14"
 status = "active"
-session = "TG-3 LANDED — OCaml typecheck.ml refines Lean HasType (translation validation): closure proof + 496 Lean-kernel-checked obligations (proofs/TG3Differential.lean, generated from infer_expr by compiler/test/tg3/tg3_emit.ml) + 1008 OCaml --check assertions; divergences D1 close / D2 bool-eq catalogued; write-up proofs/TG3-REFINEMENT.md — 2026-06-14"
+session = "TG-3 + TG-5 LANDED — TG-3: OCaml typecheck.ml refines Lean HasType (translation validation, 496 kernel-checked obligations + 1008 --check); TG-5: compositional PD-lowering structural-invariant + verbatim-residue property test (compiler/test/tg5, 189 assertions). Parallel readiness assessment: TG-6/7/8 each blocked on a prerequisite (TG-8 dialects are README-only; TG-7 needs owner decision on braid-equality semantics; TG-6 needs a wasm runtime) — 2026-06-14"
 
 [project-context]
 name = "Tangle"
@@ -35,7 +35,10 @@ milestones = [
   "DONE: full OCaml echo pipeline (ast/typecheck/eval/parser/pretty) — PR #45; build fixed PR #46",
   "DONE (TG-9): LSP diagnostics ⊆ HasType failures — tangle-lsp delegates to `tanglec --check` (compiler/lib/check.ml); hand-rolled LSP-only diagnostics removed; subset by construction",
   "DONE (TG-3): OCaml typecheck.ml refines Lean HasType (translation validation) — closure proof + proofs/TG3Differential.lean (496 by-decide obligations generated from infer_expr) + compiler/test/tg3 (1008 --check assertions) + proofs/check-tg3-differential.sh wired into lean-proofs.yml; divergences D1 close / D2 bool-eq; proofs/TG3-REFINEMENT.md",
-  "LATER (TG-5/6/7/8): compositional rewriter preservation; WASM semantic preservation; braid-group eqBraids; dialect conservativity",
+  "DONE (TG-5): compositional PD-lowering preserves structural invariants + verbatim echo residue — compiler/test/tg5/tg5_invariants.ml (189 assertions in dune runtest)",
+  "BLOCKED (TG-8): dialects are README-only — need one dialect implemented (AST+parser+HasType/Step+eval) before conservativity is even stateable",
+  "OWNER-DECISION (TG-7): braid-group eqBraids changes == semantics on braids (eval.ml + Lean Step) — decide: change semantics vs out-of-band braid_equiv checker",
+  "BLOCKED (TG-6): no wasm runtime wired in — add wasmtime/wasmer dev-dep + exec harness before differential testing; full bisimulation research-grade",
 ]
 
 [blockers-and-issues]
@@ -43,12 +46,13 @@ issues = []
 
 [critical-next-actions]
 actions = [
-  "TG-5 (next): compositional.ml rewriter preserves types — OCaml property test over compile→PD invariants (test_compositional.ml exists)",
+  "TG-7 OWNER DECISION: braid `==` semantics — change to braid-group equivalence (touches eval.ml + Lean Step + proofs) OR add out-of-band braid_equiv checker leaving == as-is. Blocks TG-7.",
+  "TG-8 prerequisite: implement one dialect end-to-end (virtual-knot suggested) as the conservativity template; dialects are currently README-only.",
+  "TG-6 prerequisite: wire a wasm runtime (wasmtime/wasmer dev-dep) + exec harness to enable differential testing.",
   "TangleIR Julia: implement EchoClosed node in KRLAdapter.jl per contract (quandledb session)",
-  "echo-types grade semiring: monitor experimental/echo-additive comparative protocol; no Tangle action until protocol terminates",
 ]
 
 [maintenance-status]
-last-run-utc = "2026-06-14T14:00:00Z"
+last-run-utc = "2026-06-14T15:00:00Z"
 last-result = "pass"               # unknown | pass | warn | fail
-notes = "dune build + dune test GREEN (incl. new compiler/test/tg3 --check: 1008 assertions); lean Tangle.lean 0 errors; proofs/check-tg3-differential.sh GREEN (496 TG3Differential.lean obligations kernel-checked, 0 errors); TG-1+TG-2+TG-3+TG-9+TG-10 LANDED; TG-3 = OCaml infer_expr refines Lean infer on the core fragment (translation validation), divergences D1 close / D2 bool-eq; echo-types f7a965f grade semiring experimental (firewalled)"
+notes = "dune build + dune test GREEN (incl. compiler/test/tg3 1008 + compiler/test/tg5 189 assertions); lean Tangle.lean 0 errors; proofs/check-tg3-differential.sh GREEN (496 obligations); TG-1+TG-2+TG-3+TG-5+TG-9+TG-10 LANDED; remaining TG-6/7/8 each blocked on a prerequisite (TG-8 dialect impl, TG-7 owner decision on braid == semantics, TG-6 wasm runtime); echo-types f7a965f grade semiring experimental (firewalled)"
