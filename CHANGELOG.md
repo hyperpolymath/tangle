@@ -32,6 +32,33 @@ retrospective correction.
   graded adjunction and is under experimental investigation (firewalled). No
   Tangle design change required now.
 
+### Echo-threading: EchoClosed compositional IR node
+
+The compositional PD compiler (`compositional.ml`) now threads the echo
+residue through the IR. This is the OCaml-side implementation of the
+cross-repo contract at `docs/spec/ECHO-TANGLEIR-THREADING.md`.
+
+- **`EchoClose of expr`** added to the `expr` type; `echo_close` builder.
+- **`EchoClosed { residue; diagram }`** added to `compiled` — carries
+  the pre-closure braid word alongside the closed planar diagram
+  (identical to the plain-`Close` output so existing consumers are
+  unaffected).
+- **`compile_echo_and_send_to_skein`** — residue-carrying Skein hook
+  that emits `echo_closed_payload` with both `residue_blob`
+  (`"s1,s2^-1,s1"` format) and the PDv1 blob.
+- **`word_of_compiled (EchoClosed _)`** returns the residue braid —
+  the pre-closure word is recoverable at the IR level.
+- Parser adapter extended: `echoClose(braid[...])` compiles to
+  `EchoClosed`.
+- Validated against `EchoProvenance.agda` (echoes distinguish
+  tag-differing records — exact analogue of distinct braids closing to
+  the same diagram) and `EchoResidue.agda` (`no-section` theorem —
+  the residue must be threaded, not recomputed after lowering).
+- 9 new tests; total: **557/557** pass.
+
+Downstream: Julia `KRLAdapter.jl` and `quandledb` implement the
+consumer side per §3–4 of the contract doc.
+
 ### Echo types OCaml pipeline (PR #45 + #46)
 
 ### Added

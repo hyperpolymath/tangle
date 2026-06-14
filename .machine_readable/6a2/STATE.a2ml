@@ -7,7 +7,7 @@ project = "tangle"
 version = "0.2.0-dev"
 last-updated = "2026-06-14"
 status = "active"
-session = "TG-1+TG-2 documented as LANDED; echo-types grade semiring design note added — 2026-06-14"
+session = "echo-threading EchoClosed IR node landed in compositional compiler — 2026-06-14"
 
 [project-context]
 name = "Tangle"
@@ -31,7 +31,7 @@ milestones = [
   "DONE (TG-2): decidability — infer ≡ HasType, type uniqueness, Decidable instance",
   "DONE: reproducible Lean toolchain bootstrap (proofs/bootstrap-lean.sh) + SessionStart hook; CI consolidated onto it",
   "DONE: generalise echo to add/eq — product type (Ty.prod), echoAdd/echoEq in Lean+OCaml (PR #45)",
-  "NEXT: thread echo residue into TangleIR (coordinate with quandledb)",
+  "DONE: thread echo residue into TangleIR — EchoClosed IR node in compositional.ml; echo_skein_sink + residue_blob; contract at ECHO-TANGLEIR-THREADING.md",
   "DONE: full OCaml echo pipeline (ast/typecheck/eval/parser/pretty) — PR #45; build fixed PR #46",
   "LATER (TG-3): OCaml typecheck.ml refines the Lean HasType spec",
   "LATER (TG-5/6/7): compositional rewriter preservation; WASM semantic preservation; braid-group eqBraids",
@@ -43,11 +43,11 @@ issues = []
 [critical-next-actions]
 actions = [
   "TG-3: formal refinement proof — OCaml typecheck.ml vs Lean HasType",
-  "TangleIR: thread echo residue into TangleIR schema; coordinate with quandledb session",
+  "TangleIR Julia: implement EchoClosed node in KRLAdapter.jl per contract (quandledb session)",
   "echo-types grade semiring: monitor experimental/echo-additive comparative protocol; no Tangle action until protocol terminates",
 ]
 
 [maintenance-status]
 last-run-utc = "2026-06-14T03:00:00Z"
 last-result = "pass"               # unknown | pass | warn | fail
-notes = "dune build + dune test (548/548) GREEN; lean Tangle.lean 0 errors; TG-1+TG-2 LANDED (documented); echo-types f7a965f grade semiring experimental (firewalled)"
+notes = "dune build + dune test (557/557) GREEN; lean Tangle.lean 0 errors; TG-1+TG-2 LANDED; echo-threading EchoClosed IR node DONE; echo-types f7a965f grade semiring experimental (firewalled)"
