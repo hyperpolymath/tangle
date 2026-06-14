@@ -145,7 +145,7 @@ The formal spec (`proofs/Tangle.lean`) covers the complete echo+product fragment
 The OCaml typechecker is not yet formally proven to refine `HasType` (TG-3,
 open); its `Eq` rule now enforces the same-width discipline of the Lean
 `tEqWord` rule, with `Bool == Bool` retained as an extra-core convenience.
-Correspondence is validated by the test suite (585/585 passing).
+Correspondence is validated by the test suite (595/595 passing).
 
 ---
 

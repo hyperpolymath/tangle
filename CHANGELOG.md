@@ -83,6 +83,28 @@ applied here:
   Lean `Step` rules — previously only parse/pretty round-trip was tested.
 - Test-suite total: **585/585** pass (was 557).
 
+### TG-9 LANDED: LSP diagnostics delegated to the compiler
+
+`tangle-lsp` previously computed diagnostics from a hand-rolled lexical
+scan that diverged from the real parser/typechecker, emitting LSP-only
+false positives (wrong comment syntax, delimiters counted inside string
+literals, "unclosed block" on every multi-def file, params flagged as
+undefined). None corresponded to a `HasType` failure — violating TG-9.
+
+- **`compiler/lib/check.ml`** (`check_source`) is now the single
+  diagnostic source: parse-with-recovery + `Typecheck.check_program`.
+- **`tanglec --check <file>`** exposes it as `SEVERITY⇥LINE⇥COL⇥MESSAGE`.
+- **`tangle-lsp`** shells out to `tanglec --check` and forwards exactly
+  those diagnostics; the lexical scan now only extracts definitions /
+  references for navigation. With the compiler absent it emits nothing
+  (`∅ ⊆ HasType failures`). The subset relation holds **by construction**.
+- Built-in operations now appear in LSP completion (reusing the
+  previously diagnostic-only `TANGLE_BUILTINS` list).
+- Tests: `compiler/test/test_check.ml` (+10) and `tangle-lsp` Rust unit
+  tests (`parse_check_line`, navigation authors no diagnostics, gated
+  end-to-end delegation against a real `tanglec`).
+- Test-suite total: **595/595** pass.
+
 ### Echo types OCaml pipeline (PR #45 + #46)
 
 ### Added

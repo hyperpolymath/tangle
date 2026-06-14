@@ -243,6 +243,19 @@ let compile_pd_file (filename : string) : unit =
     | _ -> ()
   ) prog
 
+(** Emit the combined parse + type-check diagnostics for a file, one per line in
+    the machine-readable form the LSP consumes ("SEVERITY<TAB>LINE<TAB>COL<TAB>MESSAGE").
+    Exit 1 if any error diagnostic is present, 0 otherwise.  This is the single
+    diagnostic source the LSP delegates to (TG-9). *)
+let check_file (filename : string) : unit =
+  let ic = open_in filename in
+  let n = in_channel_length ic in
+  let source = really_input_string ic n in
+  close_in ic;
+  let diags = Tangle.Check.check_source source in
+  List.iter (fun d -> print_string (Tangle.Check.format_diag d); print_newline ()) diags;
+  if Tangle.Check.has_error diags then exit 1
+
 (** Print usage information. *)
 let usage () =
   Printf.eprintf "Usage: tanglec [OPTIONS] [file.tangle]\n";
@@ -250,6 +263,7 @@ let usage () =
   Printf.eprintf "Options:\n";
   Printf.eprintf "  --dump-tokens <file>   Dump lexer tokens\n";
   Printf.eprintf "  --eval <file>          Evaluate a program\n";
+  Printf.eprintf "  --check <file>         Emit parse + type diagnostics (LSP backend)\n";
   Printf.eprintf "  --compile-pd <file>    Compile compositional defs to PD/Skein payloads\n";
   Printf.eprintf "  --repl                 Start interactive REPL\n";
   Printf.eprintf "  <file>                 Parse and pretty-print AST\n";
@@ -261,6 +275,8 @@ let () =
     dump_tokens filename
   | [_; "--eval"; filename] ->
     eval_file filename
+  | [_; "--check"; filename] ->
+    check_file filename
   | [_; "--compile-pd"; filename] ->
     compile_pd_file filename
   | [_; "--repl"] ->

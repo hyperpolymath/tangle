@@ -1,5 +1,5 @@
 ; SPDX-License-Identifier: MPL-2.0
 
 (tests
- (names test_parser test_typecheck test_eval test_e2e test_property test_compositional test_roundtrip)
+ (names test_parser test_typecheck test_eval test_e2e test_property test_compositional test_roundtrip test_check)
  (libraries tangle))

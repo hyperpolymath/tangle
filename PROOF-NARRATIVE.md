@@ -191,7 +191,7 @@ complete echo + product fragment described in §2.5:
 | `pretty.ml` | Pretty-printers for all 8 forms |
 | `test_roundtrip.ml` | TG-4 round-trip property test: 26-entry corpus including all 8 echo/product constructors |
 
-**Build oracle**: `dune build` + `dune test` (585/585) green. The
+**Build oracle**: `dune build` + `dune test` (595/595) green. The
 pre-PR #46 `main` did not compile due to two `Warning 8` exhaustiveness gaps
 (both fixed: `strand_type_of_ty` in `typecheck.ml`; debug token printer in `bin/main.ml`).
 
@@ -325,7 +325,7 @@ claim is unchecked.
 
 **Status: LANDED** (PR #46). `compiler/test/test_roundtrip.ml` is a 26-entry
 corpus including all 8 echo/product constructors (52 round-trip runs); the
-full suite is 585/585 green.
+full suite is 595/595 green.
 
 **Claim.** `parse(pretty e) = e` for every closed value `e`.
 
@@ -427,7 +427,7 @@ weakening core soundness.
 **How to discharge.** Per dialect: define `HasType_dialect` in Lean as
 `HasType` plus new rules; prove embedding preservation.
 
-### TG-9 — LSP diagnostics ⊆ `HasType` failures
+### TG-9 — LSP diagnostics ⊆ `HasType` failures — **LANDED**
 
 **Claim.** Every diagnostic emitted by `tangle-lsp` corresponds to a
 failure of the `HasType` judgment in `Tangle.lean`. (No
@@ -437,13 +437,35 @@ LSP-only diagnostics that the spec doesn't reject.)
 Without it, users get red squigglies in the editor for things that
 compile, or vice versa.
 
-**Assumptions.**
-- [[A-TG-9.1]] `tangle-lsp` shares the OCaml `typecheck.ml` as its
-  diagnostic engine (true by construction; verify after each refactor).
+**How discharged (by construction, not by proof).** The audit found the
+LSP was emitting several **LSP-only false positives** from a hand-rolled
+lexical scan: it skipped `--` comments (Tangle uses `#` / `(* *)`),
+counted delimiters inside string literals, incremented block-depth on
+every `def` (firing "unclosed block" on every multi-def file), and
+flagged function parameters as "possibly undefined". None of these
+corresponded to a `HasType` failure.
 
-**How to discharge.** Audit `tangle-lsp/src/` for any
-LSP-only diagnostic emission; route everything through `typecheck.ml`.
-Single-PR scope.
+The refactor removes all hand-rolled diagnostics and routes the LSP
+through the real compiler:
+- `compiler/lib/check.ml` (`check_source`) is the single diagnostic
+  source — parse-with-recovery + `Typecheck.check_program`.
+- `tanglec --check` exposes it as `SEVERITY⇥LINE⇥COL⇥MESSAGE`.
+- `tangle-lsp` shells out to `tanglec --check` and forwards exactly those
+  diagnostics (`run_compiler_diagnostics`); the lexical scan now only
+  extracts definitions/references for navigation. If the binary is
+  absent it emits nothing — `∅ ⊆ HasType failures`, never a false positive.
+
+So the subset relation holds *by construction*: the LSP cannot author a
+diagnostic the compiler would not produce.
+
+**Evidence.** `compiler/test/test_check.ml` (the diagnostic source is
+exactly parse + type failures) and `tangle-lsp`'s unit tests
+(`parse_check_line`, `analyze` authors no diagnostics, and a gated
+end-to-end delegation test against a real `tanglec`).
+
+**Caveat.** Type-checker diagnostics currently lack source spans, so they
+surface at the top of the file; locating them precisely is a separate
+enhancement to `typecheck.ml` and does not affect the subset property.
 
 ## 4. The "stupid proof" exclusions
 

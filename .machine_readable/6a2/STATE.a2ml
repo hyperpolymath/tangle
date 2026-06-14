@@ -33,6 +33,7 @@ milestones = [
   "DONE: generalise echo to add/eq — product type (Ty.prod), echoAdd/echoEq in Lean+OCaml (PR #45)",
   "DONE: thread echo residue into the OCaml compositional IR — EchoClosed node (verbatim residue) in compositional.ml; echo_skein_sink + residue_blob; --compile-pd CLI; cross-repo TangleIR contract at ECHO-TANGLEIR-THREADING.md (Julia KRLAdapter.jl/quandledb still pending)",
   "DONE: full OCaml echo pipeline (ast/typecheck/eval/parser/pretty) — PR #45; build fixed PR #46",
+  "DONE (TG-9): LSP diagnostics ⊆ HasType failures — tangle-lsp delegates to `tanglec --check` (compiler/lib/check.ml); hand-rolled LSP-only diagnostics removed; subset by construction",
   "LATER (TG-3): OCaml typecheck.ml refines the Lean HasType spec",
   "LATER (TG-5/6/7): compositional rewriter preservation; WASM semantic preservation; braid-group eqBraids",
 ]
@@ -50,4 +51,4 @@ actions = [
 [maintenance-status]
 last-run-utc = "2026-06-14T03:00:00Z"
 last-result = "pass"               # unknown | pass | warn | fail
-notes = "dune build + dune test (585/585) GREEN; lean Tangle.lean 0 errors; TG-1+TG-2 LANDED; echo-threading EchoClosed node DONE (verbatim residue, --compile-pd wired); Eq typecheck tightened to same-width words (matches tEqWord); surface echo typecheck/eval tests added; echo-types f7a965f grade semiring experimental (firewalled)"
+notes = "dune build + dune test (595/595) GREEN; lean Tangle.lean 0 errors; TG-1+TG-2 LANDED; TG-9 LANDED (LSP delegates diagnostics to tanglec --check via check.ml — subset by construction); echo-threading EchoClosed node DONE (verbatim residue, --compile-pd wired); Eq typecheck tightened to same-width words (matches tEqWord); echo-types f7a965f grade semiring experimental (firewalled)"

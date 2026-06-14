@@ -8,10 +8,41 @@
 //! that are pushed to the client.
 
 use dashmap::DashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
+
+/// Monotonic counter for unique per-check temp-file names (avoids collisions
+/// when concurrent documents of equal byte-length are checked at once).
+static CHECK_SEQ: AtomicU64 = AtomicU64::new(0);
+
+// ---------------------------------------------------------------------------
+// Compiler-delegated diagnostics (TG-9)
+// ---------------------------------------------------------------------------
+
+/// Resolve the `tanglec` binary: `$TANGLEC` if set, else `tanglec` on `PATH`.
+fn tanglec_binary() -> String {
+    std::env::var("TANGLEC").unwrap_or_else(|_| "tanglec".to_string())
+}
+
+/// Parse one line of `tanglec --check` output —
+/// `"SEVERITY<TAB>LINE<TAB>COL<TAB>MESSAGE"` (LINE 1-based) — into its parts.
+/// Returns `None` for unrecognised lines so malformed output is ignored rather
+/// than turned into a spurious diagnostic.
+fn parse_check_line(line: &str) -> Option<(DiagnosticSeverity, u32, u32, String)> {
+    let mut parts = line.splitn(4, '\t');
+    let severity = match parts.next()? {
+        "ERROR" => DiagnosticSeverity::ERROR,
+        "WARNING" => DiagnosticSeverity::WARNING,
+        _ => return None,
+    };
+    let line_no: u32 = parts.next()?.parse().ok()?;
+    let col: u32 = parts.next()?.parse().ok()?;
+    let message = parts.next()?.to_string();
+    Some((severity, line_no, col, message))
+}
 
 // ---------------------------------------------------------------------------
 // Document state
@@ -47,6 +78,7 @@ impl DocumentState {
             diagnostics: Vec::new(),
         };
         state.analyze();
+        state.run_compiler_diagnostics();
         state
     }
 
@@ -81,204 +113,127 @@ impl DocumentState {
     // Analysis — lightweight lexical + structural pass
     // -----------------------------------------------------------------------
 
-    /// Perform a lightweight analysis pass over the document text.
-    ///
-    /// This is intentionally a simplified lexical scan rather than a full parse
-    /// (the real OCaml parser is not linked here).  It catches common errors
-    /// and extracts definition sites for IDE navigation.
+    /// Extract definition sites and identifier references for IDE navigation
+    /// (hover, completion, go-to-definition).  This is a lightweight lexical
+    /// scan — it does NOT produce diagnostics.  Diagnostics come solely from the
+    /// real compiler via [`run_compiler_diagnostics`], so that what the LSP
+    /// reports is by construction a subset of the compiler's parse / `HasType`
+    /// failures (proof obligation TG-9).
     fn analyze(&mut self) {
         self.definitions.clear();
         self.references.clear();
-        self.diagnostics.clear();
-
-        let mut depth: i32 = 0; // nesting: weave/match/let blocks
-        let mut open_weave = false;
-        let mut paren_depth: i32 = 0;
-        let mut bracket_depth: i32 = 0;
-        let mut brace_depth: i32 = 0;
 
         for (line_idx, line) in self.source.lines().enumerate() {
             let trimmed = line.trim();
             let ln = line_idx as u32;
 
-            // Skip comments (lines starting with --)
-            if trimmed.starts_with("--") {
+            // Skip line comments (`#` and the legacy `--`).
+            if trimmed.starts_with('#') || trimmed.starts_with("--") {
                 continue;
             }
 
-            // Track bracket/paren/brace balance
-            for ch in trimmed.chars() {
-                match ch {
-                    '(' => paren_depth += 1,
-                    ')' => paren_depth -= 1,
-                    '[' => bracket_depth += 1,
-                    ']' => bracket_depth -= 1,
-                    '{' => brace_depth += 1,
-                    '}' => brace_depth -= 1,
-                    _ => {}
-                }
-            }
-
-            // ------ Definitions ------
-
             // def name(params) = body
-            if trimmed.starts_with("def ") {
-                if let Some(rest) = trimmed.strip_prefix("def ") {
-                    let name = rest
-                        .split(|c: char| !c.is_alphanumeric() && c != '_')
-                        .next()
-                        .unwrap_or("");
-                    if !name.is_empty() {
-                        let col = line.find("def ").unwrap_or(0) as u32 + 4;
-                        self.definitions.push((name.to_string(), ln, col, "Function"));
-                    }
+            if let Some(rest) = trimmed.strip_prefix("def ") {
+                let name = rest
+                    .split(|c: char| !c.is_alphanumeric() && c != '_')
+                    .next()
+                    .unwrap_or("");
+                if !name.is_empty() {
+                    let col = line.find("def ").unwrap_or(0) as u32 + 4;
+                    self.definitions.push((name.to_string(), ln, col, "Function"));
                 }
-                depth += 1;
             }
 
             // weave strands ...
             if trimmed.starts_with("weave ") {
-                open_weave = true;
-                depth += 1;
                 let col = line.find("weave ").unwrap_or(0) as u32;
                 self.definitions.push(("(weave block)".to_string(), ln, col, "Struct"));
             }
 
-            // yield strands ...
-            if trimmed.starts_with("yield ") && open_weave {
-                open_weave = false;
-                depth -= 1;
-            }
-
             // let x = ...
-            if trimmed.starts_with("let ") {
-                if let Some(rest) = trimmed.strip_prefix("let ") {
-                    let name = rest
-                        .split(|c: char| !c.is_alphanumeric() && c != '_')
-                        .next()
-                        .unwrap_or("");
-                    if !name.is_empty() {
-                        let col = line.find("let ").unwrap_or(0) as u32 + 4;
-                        self.definitions.push((name.to_string(), ln, col, "Variable"));
-                    }
+            if let Some(rest) = trimmed.strip_prefix("let ") {
+                let name = rest
+                    .split(|c: char| !c.is_alphanumeric() && c != '_')
+                    .next()
+                    .unwrap_or("");
+                if !name.is_empty() {
+                    let col = line.find("let ").unwrap_or(0) as u32 + 4;
+                    self.definitions.push((name.to_string(), ln, col, "Variable"));
                 }
             }
 
-            // match ... with
-            if trimmed.starts_with("match ") {
-                depth += 1;
-            }
-            if trimmed == "end" {
-                depth -= 1;
-            }
-
-            // Collect identifier references (simple word extraction)
+            // Collect identifier references for navigation.
             for word in trimmed.split(|c: char| !c.is_alphanumeric() && c != '_') {
                 if word.is_empty() {
                     continue;
                 }
-                if !TANGLE_KEYWORDS.contains(&word) && word.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false) {
+                if !TANGLE_KEYWORDS.contains(&word)
+                    && word.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false)
+                {
                     let col = line.find(word).unwrap_or(0) as u32;
                     self.references.push((word.to_string(), ln, col));
                 }
             }
+        }
+    }
 
-            // ------ Diagnostics ------
+    /// Populate `self.diagnostics` by delegating to the real compiler's
+    /// `tanglec --check` pass.  The LSP forwards the compiler's diagnostics
+    /// rather than computing its own, so every LSP diagnostic corresponds to a
+    /// genuine parse / `HasType` failure (TG-9).  If the compiler binary is
+    /// unavailable, no diagnostics are emitted — the empty set is trivially a
+    /// subset, never a false positive.
+    fn run_compiler_diagnostics(&mut self) {
+        self.diagnostics.clear();
 
-            // Check for unknown keywords that look like misspellings
-            if trimmed.starts_with("comput ") || trimmed.starts_with("asert ") {
+        // Write the in-memory buffer to a temp file so the compiler checks the
+        // live (possibly unsaved) text, not stale on-disk content.
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "tangle-lsp-{}-{}.tangle",
+            std::process::id(),
+            CHECK_SEQ.fetch_add(1, Ordering::Relaxed)
+        ));
+        if std::fs::write(&path, &self.source).is_err() {
+            return;
+        }
+
+        let output = std::process::Command::new(tanglec_binary())
+            .arg("--check")
+            .arg(&path)
+            .output();
+        let _ = std::fs::remove_file(&path);
+
+        let output = match output {
+            Ok(o) => o,
+            Err(_) => return, // compiler unavailable: emit nothing (∅ ⊆ failures)
+        };
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            if let Some((severity, line_no, col, message)) = parse_check_line(line) {
+                let range = self.diagnostic_range(line_no.saturating_sub(1), col);
                 self.diagnostics.push(Diagnostic {
-                    range: self.line_range(ln),
-                    severity: Some(DiagnosticSeverity::ERROR),
-                    source: Some("tangle-lsp[MISSPELLING_HINT]".into()),
-                    message: format!("Possible misspelling: `{}`", trimmed.split_whitespace().next().unwrap_or("")),
+                    range,
+                    severity: Some(severity),
+                    source: Some("tanglec".into()),
+                    message,
                     ..Default::default()
                 });
             }
         }
+    }
 
-        // Check unmatched delimiters
-        if paren_depth != 0 {
-            self.diagnostics.push(Diagnostic {
-                range: Range {
-                    start: Position::new(0, 0),
-                    end: Position::new(0, 1),
-                },
-                severity: Some(DiagnosticSeverity::ERROR),
-                source: Some("tangle-lsp[PARSE_ERROR]".into()),
-                message: format!("Unbalanced parentheses (depth: {})", paren_depth),
-                ..Default::default()
-            });
-        }
-        if bracket_depth != 0 {
-            self.diagnostics.push(Diagnostic {
-                range: Range {
-                    start: Position::new(0, 0),
-                    end: Position::new(0, 1),
-                },
-                severity: Some(DiagnosticSeverity::ERROR),
-                source: Some("tangle-lsp[PARSE_ERROR]".into()),
-                message: format!("Unbalanced brackets (depth: {})", bracket_depth),
-                ..Default::default()
-            });
-        }
-        if brace_depth != 0 {
-            self.diagnostics.push(Diagnostic {
-                range: Range {
-                    start: Position::new(0, 0),
-                    end: Position::new(0, 1),
-                },
-                severity: Some(DiagnosticSeverity::ERROR),
-                source: Some("tangle-lsp[PARSE_ERROR]".into()),
-                message: format!("Unbalanced braces (depth: {})", brace_depth),
-                ..Default::default()
-            });
-        }
-        if open_weave {
-            self.diagnostics.push(Diagnostic {
-                range: Range {
-                    start: Position::new(0, 0),
-                    end: Position::new(0, 1),
-                },
-                severity: Some(DiagnosticSeverity::WARNING),
-                source: Some("tangle-lsp[STRUCTURAL_HINT]".into()),
-                message: "Unclosed `weave` block — expected `yield strands`".into(),
-                ..Default::default()
-            });
-        }
-        if depth > 0 {
-            self.diagnostics.push(Diagnostic {
-                range: Range {
-                    start: Position::new(0, 0),
-                    end: Position::new(0, 1),
-                },
-                severity: Some(DiagnosticSeverity::WARNING),
-                source: Some("tangle-lsp[STRUCTURAL_HINT]".into()),
-                message: format!("Possible unclosed block (nesting depth: {})", depth),
-                ..Default::default()
-            });
-        }
-
-        // Check for undefined references (identifiers not matching any def)
-        let defined_names: Vec<&str> = self.definitions.iter().map(|(n, _, _, _)| n.as_str()).collect();
-        for (name, ln, col) in &self.references {
-            if !defined_names.contains(&name.as_str())
-                && !TANGLE_BUILTINS.contains(&name.as_str())
-                && !TANGLE_INVARIANTS.contains(&name.as_str())
-                && !name.starts_with('s') // generator references like s1, s2
-            {
-                // Only warn, not error — the name may be defined in an import
-                self.diagnostics.push(Diagnostic {
-                    range: Range {
-                        start: Position::new(*ln, *col),
-                        end: Position::new(*ln, *col + name.len() as u32),
-                    },
-                    severity: Some(DiagnosticSeverity::HINT),
-                    source: Some("tangle-lsp[NAME_HINT]".into()),
-                    message: format!("Possibly undefined: `{}`", name),
-                    ..Default::default()
-                });
-            }
+    /// A range starting at `(line, col)` and spanning to end of line (or the
+    /// whole line when `col` is 0), for highlighting a compiler diagnostic.
+    fn diagnostic_range(&self, line: u32, col: u32) -> Range {
+        let full = self.line_range(line);
+        let start = Position::new(line, col);
+        let end = full.end;
+        if end.line > start.line || end.character > start.character {
+            Range { start, end }
+        } else {
+            full
         }
     }
 
@@ -536,6 +491,19 @@ impl LanguageServer for TangleBackend {
             }
         }
 
+        // Built-in operations
+        for b in TANGLE_BUILTINS {
+            if b.starts_with(&prefix) || prefix.is_empty() {
+                items.push(CompletionItem {
+                    label: b.to_string(),
+                    kind: Some(CompletionItemKind::FUNCTION),
+                    detail: Some("Built-in".into()),
+                    sort_text: Some(format!("1_{}", b)),
+                    ..Default::default()
+                });
+            }
+        }
+
         // Identifiers defined in this file
         for (name, _ln, _col, kind) in &doc.definitions {
             if (name.starts_with(&prefix) || prefix.is_empty()) && name != "(weave block)" {
@@ -634,5 +602,82 @@ impl LanguageServer for TangleBackend {
             .collect();
 
         Ok(Some(DocumentSymbolResponse::Flat(symbols)))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_error_line() {
+        let (sev, line, col, msg) =
+            parse_check_line("ERROR\t3\t5\tCannot compare words of differing width").unwrap();
+        assert_eq!(sev, DiagnosticSeverity::ERROR);
+        assert_eq!(line, 3);
+        assert_eq!(col, 5);
+        assert_eq!(msg, "Cannot compare words of differing width");
+    }
+
+    #[test]
+    fn parses_warning_and_keeps_tabs_in_message() {
+        let (sev, _l, _c, msg) =
+            parse_check_line("WARNING\t1\t0\tunused\tbinding").unwrap();
+        assert_eq!(sev, DiagnosticSeverity::WARNING);
+        // Only the first three tabs are structural; the rest belongs to the message.
+        assert_eq!(msg, "unused\tbinding");
+    }
+
+    #[test]
+    fn rejects_malformed_lines() {
+        // Unknown severity, missing fields, and non-numeric positions are ignored
+        // rather than surfaced as spurious diagnostics (preserves the TG-9 subset).
+        assert!(parse_check_line("").is_none());
+        assert!(parse_check_line("INFO\t1\t0\tnot an error or warning").is_none());
+        assert!(parse_check_line("ERROR\tx\t0\tbad line number").is_none());
+        assert!(parse_check_line("ERROR\t1").is_none());
+    }
+
+    /// End-to-end delegation check, gated on a real compiler being available
+    /// via `$TANGLEC` (skipped otherwise so CI without the binary stays green).
+    /// Establishes the TG-9 subset relation concretely: a type-erroneous program
+    /// yields diagnostics sourced from `tanglec`, while a valid one yields none.
+    #[test]
+    fn delegates_to_compiler_when_available() {
+        if std::env::var("TANGLEC").is_err() {
+            eprintln!("skipping: TANGLEC not set");
+            return;
+        }
+        // Unequal-width word equality — rejected by the tightened tEqWord rule.
+        let bad = DocumentState::new("def bad = braid[s1] == braid[s1, s2]\n".to_string());
+        assert!(!bad.diagnostics.is_empty(), "type error should produce diagnostics");
+        assert!(bad.diagnostics.iter().all(|d| d.source.as_deref() == Some("tanglec")),
+            "every diagnostic must originate from the compiler");
+
+        let good = DocumentState::new("def ok = close(braid[s1, s1, s1])\n".to_string());
+        assert!(good.diagnostics.is_empty(), "valid program should produce no diagnostics");
+    }
+
+    #[test]
+    fn analyze_produces_no_diagnostics() {
+        // Navigation extraction must never emit diagnostics — those come only
+        // from the compiler. A previously-false-positive case (multiple defs,
+        // delimiters inside a string/comment) yields zero LSP-authored diagnostics.
+        let mut state = DocumentState {
+            source: "def a = braid[s1]\ndef b = \"text with ( unbalanced\"\n# (comment\n".to_string(),
+            line_starts: vec![0],
+            definitions: Vec::new(),
+            references: Vec::new(),
+            diagnostics: Vec::new(),
+        };
+        state.analyze();
+        assert!(state.diagnostics.is_empty(), "analyze() must not author diagnostics");
+        // Definitions are still extracted for navigation.
+        assert!(state.definitions.iter().any(|(n, _, _, _)| n == "a"));
+        assert!(state.definitions.iter().any(|(n, _, _, _)| n == "b"));
     }
 }
