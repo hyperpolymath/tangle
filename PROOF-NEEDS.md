@@ -67,6 +67,59 @@ Cross-referenced to [PROOF-NARRATIVE.md §3](PROOF-NARRATIVE.md#3-remaining-obli
 For full per-obligation statements, _why valuable_, and the
 assumptions each rests on, see PROOF-NARRATIVE.md.
 
+## Scoping of the remaining obligations (2026-06-14)
+
+Concrete approach, effort, risk, and dependencies for what is left after
+TG-0/1/2/4/9/10 landed. **Recommended order: TG-3 → TG-5 → TG-7 → TG-8 → TG-6.**
+
+### TG-3 — OCaml `typecheck.ml` refines Lean `HasType` *(keystone, recommended next)*
+- **Key lever:** TG-2 already proves Lean `infer ≡ HasType`. So refinement
+  reduces to **OCaml `infer_expr` agrees with Lean `infer` on the shared core
+  fragment** — a cross-language differential check, not a fresh metatheorem.
+- **Approach:** translation-validation harness. Generate core-fragment terms,
+  type each with OCaml `infer_expr` and with Lean `infer`, assert equal types
+  (and equal accept/reject). Seed from existing corpora + a small generator.
+- **Honest boundary:** the OCaml checker is far larger than the 26-rule core
+  (match, weave, compute, cap/cup, mirror/reverse/simplify, twist, pipeline,
+  two-pass program typing, width inference, Bool-eq). Deliverable = refinement
+  validated on the core fragment + an explicit "extra-core" feature list, each
+  marked model-later or declare-non-core. A universal Lean proof is out of reach
+  without modelling the OCaml program itself.
+- **Started:** `Eq` aligned to `tEqWord` this session. **Effort:** ~3–5d.
+  **Risk:** med (scoping the fragment). **Deps:** TG-2.
+
+### TG-5 — `compositional.ml` rewriter preserves types *(cheap, do early)*
+- **Approach:** OCaml property test first — random compositional exprs →
+  `compile` → assert PD invariants (arc balance, crossing-count = unit-word
+  length, closedness, residue = verbatim source for `EchoClose`). Lean model of
+  the IR + a preservation theorem is a later, optional second rung.
+- `test_compositional.ml` now exists (the old "no test file" blocker is gone).
+- **Effort:** property test ~1–2d; Lean model ~3d. **Risk:** low. **Deps:** none.
+
+### TG-7 — `eqBraids` decides braid-group equivalence *(high-value domain work)*
+- Current `Step.eqBraids` is list equality = a **soundness floor**, not
+  completeness (misses σᵢσⱼ=σⱼσᵢ for |i−j|≥2 and σᵢσᵢ₊₁σᵢ=σᵢ₊₁σᵢσᵢ₊₁).
+- **Approach:** implement Dehornoy **handle reduction** (practical braid word
+  problem) in OCaml with tests against known equivalences/trefoil; mechanize
+  correctness (Garside/Dehornoy theory) in Lean later.
+- **Effort:** OCaml ~1w; Lean proof ~2w+ (deep). **Risk:** med-high (the maths).
+  **Deps:** none (pure domain algorithm).
+
+### TG-8 — each dialect is a conservative extension of core *(mechanical, voluminous)*
+- 5 dialects (braid-calculus, quantum-circuit, skein-algebra, string-diagram,
+  virtual-knot). Conservativity = core `HasType`/`Step` unchanged; new rules
+  fire only on new syntax.
+- **Approach:** model + prove ONE dialect end-to-end as a template, replicate.
+- **Effort:** ~1w each (+1w for the first/template). **Risk:** low. **Deps:** the
+  dialect specs/impls must exist.
+
+### TG-6 — WASM compilation preserves semantics *(research-grade, plan separately)*
+- **Approach:** practical first rung = **differential testing** (source `eval`
+  vs wasm exec over a corpus, assert equal observable outputs). Full
+  bisimulation proof (WasmCert / Wasm-spec) is a multi-week research project.
+- **Effort:** differential ~1w; proof ~3w+ research. **Risk:** high (proof),
+  low (differential). **Deps:** a runnable wasm runtime to exec against.
+
 ## Proof categories
 
 | Code | Meaning | Applies? |
