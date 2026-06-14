@@ -6,7 +6,7 @@ Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 
 SPDX-License-Identifier: MPL-2.0
 
-Last updated: 2026-02-12
+Last updated: 2026-06-14
 
 This document maps language features to design decisions and formal rules.
 
@@ -43,6 +43,15 @@ This document maps language features to design decisions and formal rules.
 | Two-pass program typing | D1.13 | T-Program | §4.16 | Complete |
 | Boolean literals | — | T-True, T-False | E-True, E-False | Complete |
 | Error propagation | D1.15 | — | E-Halt-Left, E-Halt-Right | Complete |
+| Echo type former (`TEcho ρ τ`) | — | T-Echo-Close, T-Lower, T-Residue, T-Echo-Val | — | Complete |
+| Product type (`TProd α β`) | — | T-Pair, T-Fst, T-Snd | E-Pair-L/R, E-Fst-Pair, E-Snd-Pair | Complete |
+| `echoClose(e)` | — | T-Echo-Close | E-Echo-Close-Word, E-Echo-Close-Id | Complete |
+| `lower(e)` | — | T-Lower | E-Lower-Val | Complete |
+| `residue(e)` | — | T-Residue | E-Residue-Val | Complete |
+| `pair(a, b)` | — | T-Pair | E-Pair-L, E-Pair-R | Complete |
+| `fst(e)` / `snd(e)` | — | T-Fst, T-Snd | E-Fst-Step, E-Fst-Pair, E-Snd-Step, E-Snd-Pair | Complete |
+| `echoAdd(a, b)` | — | T-Echo-Add | E-EchoAdd-L/R, E-EchoAdd-Nums | Complete |
+| `echoEq(a, b)` | — | T-Echo-Eq-Word/Num/Str | E-EchoEq-L/R, E-EchoEq-{Nums,Strs,Braids,IdId,IdBraid,BraidId} | Complete |
 
 ## TANGLE-JTV Extension Features
 
@@ -63,11 +72,11 @@ This document maps language features to design decisions and formal rules.
 
 ## Coverage Summary
 
-**TANGLE Core**: 27/27 features fully specified (100%)
+**TANGLE Core**: 36/36 features fully specified (100%)
 **TANGLE-JTV**: 10/10 features fully specified (100%)
 **Total decisions referenced**: 44 (D1.1-D1.25, D2.1-D2.11)
-**Total typing rules**: 37+
-**Total evaluation rules**: 26+
+**Total typing rules**: 26 HasType rules (Lean); 37+ spec rules
+**Total evaluation rules**: 57 Step rules (Lean); 26+ spec rules
 
 All features have corresponding grammar productions in EBNF, typing rules in
 FORMAL-SEMANTICS.md, and evaluation rules where applicable.

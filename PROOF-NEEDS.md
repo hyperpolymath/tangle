@@ -40,8 +40,9 @@ and `proofs/Tangle.lean`:
 **Coverage:** the **let-free fragment** of core Tangle, comprising
 `Num`, `Str`, `Bool`, `Identity`, `BraidLit`, `Compose`, `Tensor`,
 `Pipeline`, `Close`, `Add`, `Eq`, plus the **echo-types fragment**
-(`EchoClose`, `Lower`, `Residue` with type former `Echo[ρ,τ]`). 16 typing
-rules, 31 step rules. All four theorems cover the echo fragment (TG-10).
+(`EchoClose`, `Lower`, `Residue`, `EchoAdd`, `EchoEq`) and the **product type**
+(`Pair`, `Fst`, `Snd` with type former `ρ × σ`). 26 typing rules, 57 step rules.
+All four theorems cover the echo fragment (TG-10).
 
 ## What remains
 
@@ -52,13 +53,13 @@ Cross-referenced to [PROOF-NARRATIVE.md §3](PROOF-NARRATIVE.md#3-remaining-obli
 | TG-1 | Extend Progress/Preservation/Determinism/TypeSafety to `let`-binding | TP | Lean 4 | P1 | 3d | NOT STARTED (acknowledged in Tangle.lean header) |
 | TG-2 | Type checking is decidable: define `infer : Expr → Option Ty` proven equivalent to `HasType` | ALG | Lean 4 | P1 | 1d | NOT STARTED |
 | TG-3 | OCaml `typecheck.ml` refines the Lean `HasType` spec | TP | Lean 4 + translation validation | P1 | 5d | NOT STARTED |
-| TG-4 | Pretty-print/parse round-trip on closed values | INV | OCaml property test (cheap) | P2 | 4h | NOT STARTED |
+| TG-4 | Pretty-print/parse round-trip on closed values | INV | OCaml property test (cheap) | P2 | 4h | **LANDED** (PR #46 — OCaml property test in `compiler/test/test_roundtrip.ml`, 36 entries including 16 echo/product forms) |
 | TG-5 | `compositional.ml` (418 LoC) rewriter preserves types | TP | Lean 4 + OCaml test file | P2 | 3d | NOT STARTED (B6: no test file yet) |
 | TG-6 | WASM compilation preserves semantics (source eval ≡ wasm exec) | TP / ALG | Lean 4 bisimulation | P1 | 3w (research-grade) | NOT STARTED |
 | TG-7 | `Step.eqBraids` decides braid-group equivalence (not list equality) | ALG / DOM | OCaml + Lean 4 | P2 | 2w | NOT STARTED (current impl is soundness-floor, not completeness) |
 | TG-8 | Each dialect (braid-calculus, quantum-circuit, skein-algebra, string-diagram, virtual-knot) is a conservative extension of core | TP | Lean 4 per-dialect | P3 | 1w each | NOT STARTED |
 | TG-9 | LSP diagnostics are a subset of `HasType` failures (no LSP-only diagnostics) | INV | Audit + refactor | P2 | 1d | NOT STARTED |
-| TG-10 | Echo-types integrated into the type system: `Echo[ρ,τ]` former + `echoClose`/`lower`/`residue`, with Progress/Preservation/Determinism/TypeSafety extended to cover them and the non-injectivity / residue-recovery capstones proven | TP / DOM | Lean 4 | P1 | — | **LANDED** (`proofs/Tangle.lean` §ECHO-TYPES) |
+| TG-10 | Echo-types integrated into the type system: `Echo[ρ,τ]` former + `echoClose`/`lower`/`residue`/`echoAdd`/`echoEq` + product type (`pair`/`fst`/`snd`), with Progress/Preservation/Determinism/TypeSafety extended to cover them and the non-injectivity / residue-recovery capstones proven | TP / DOM | Lean 4 | P1 | — | **LANDED** (`proofs/Tangle.lean` §ECHO-TYPES) |
 
 For full per-obligation statements, _why valuable_, and the
 assumptions each rests on, see PROOF-NARRATIVE.md.

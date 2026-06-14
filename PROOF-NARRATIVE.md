@@ -31,7 +31,7 @@ Tangle is the **semantic core** of a four-layer federated stack:
                   ▼
 ┌─────────────────────────────────────────────────────────┐
 │  Tangle CORE  (THIS REPO)                               │
-│    proofs/Tangle.lean — 16 mechanised results           │
+│    proofs/Tangle.lean — mechanised results (26 HasType, 57 Step) │
 │    compiler/lib/*.ml — OCaml implementation             │
 │    compiler/tangle-wasm — WASM backend                  │
 │    compiler/tangle-lsp — LSP server                     │
@@ -51,8 +51,8 @@ delivered slice and the remaining gap explicit.
 
 ## 2. Proven now
 
-All 16 results live in [`proofs/Tangle.lean`](proofs/Tangle.lean)
-(Lean 4, ~570 LoC, no `sorry`, no `axiom`).
+All results live in [`proofs/Tangle.lean`](proofs/Tangle.lean)
+(Lean 4, no `sorry`, no `axiom`).
 
 **Build oracle.** As of 2026-06-01 (PR closing TG-0, hyperpolymath/tangle#32),
 the file is verified at every push/PR by `.github/workflows/lean-proofs.yml`,
@@ -116,11 +116,13 @@ themselves proofs of the form "these are the rules"):
 - **`Expr`** — the AST (mirrors `compiler/lib/ast.ml`)
 - **`Ty`** — `num`, `str`, `bool`, `word n`
 - **`IsValue`** — value predicate
-- **`HasType`** — typing judgment, 16 rules (`tNum`, `tStr`, `tBool`,
+- **`HasType`** — typing judgment, 26 rules: 13 base (`tNum`, `tStr`, `tBool`,
   `tIdentity`, `tBraid`, `tComposeWord`, `tTensorWord`, `tPipeline`,
-  `tCloseWord`, `tAddNum`, `tEqWord`, `tEqNum`, `tEqStr`, plus the echo
-  rules `tEchoClose`, `tLower`, `tResidue`)
-- **`Step`** — small-step semantics, 31 rules (26 base + 5 echo)
+  `tCloseWord`, `tAddNum`, `tEqWord`, `tEqNum`, `tEqStr`); 4 echo-close
+  (`tEchoClose`, `tLower`, `tResidue`, `tEchoVal`); 7 product+echo-binary
+  (`tPair`, `tFst`, `tSnd`, `tEchoAdd`, `tEchoEqWord`, `tEchoEqNum`,
+  `tEchoEqStr`); 2 let/var (`tVar`, `tLet`)
+- **`Step`** — small-step semantics, 57 rules: 27 base, 9 echo-close/lower/residue, 6 product, 11 echoAdd/echoEq, 2 let, 2 StepStar
 
 These are the formal spec the OCaml implementation is meant to refine
 (see TG-3 below).
@@ -145,6 +147,11 @@ type system*.
 | `echoClose e` | `Word[n] → Echo (Word[n]) (Word[0])` | `echo-intro close` |
 | `lower e` | `Echo ρ τ → τ` — project to result (forget residue) | the collapse / `proj₂` |
 | `residue e` | `Echo ρ τ → ρ` — recover the witness braid | `proj₁` |
+| `pair(a, b)` | `α → β → α × β` — product introduction | `Echo.Pair` (product as residue carrier) |
+| `fst(e)` | `α × β → α` — first projection | `proj₁` |
+| `snd(e)` | `α × β → β` — second projection | `proj₂` |
+| `echoAdd(a, b)` | `Num → Num → Echo (Num × Num) Num` — addition with summand residue | `echo-intro add` |
+| `echoEq(a, b)` | `ρ → ρ → Echo (ρ × ρ) Bool` — equality with operand residue | `echo-intro eq` |
 
 **Metatheory.** Progress, Preservation, Determinism, and Type Safety all
 cover `echoClose`/`lower`/`residue` (the inductions are exhaustive over
@@ -166,6 +173,27 @@ its residue `v` is.
   a `Word[n]`, `lower` returns a `Word[0]`.
 
 Tracked as obligation **TG-10** in PROOF-NEEDS.md (landed).
+
+## 2.6 OCaml implementation completeness
+
+As of 2026-06-14 (PRs #45–#46), the OCaml pipeline (`compiler/lib/`) covers the
+complete echo + product fragment described in §2.5:
+
+| Layer | Echo/product coverage |
+|-------|-----------------------|
+| `ast.ml` | `EchoClose`, `Lower`, `Residue`, `Pair`, `Fst`, `Snd`, `EchoAdd`, `EchoEq` in `expr`; `TProd`, `TEcho` in `ty` |
+| `typecheck.ml` | 8 `infer_expr` rules matching Lean `HasType`; `pp_ty` made `rec` |
+| `eval.ml` | `VEcho`, `VPair` values; 8 `eval_expr` arms; `pp_value` made `rec` |
+| `lexer.mll` / `parser.mly` / `token.ml` | Keyword tokens + grammar productions for all 8 surface forms |
+| `pretty.ml` | Pretty-printers for all 8 forms |
+| `test_roundtrip.ml` | TG-4 round-trip property test: 36 entries including all 8 echo/product constructors |
+
+**Build oracle**: `dune build` + `dune test` (548/548) green since PR #46. The
+pre-PR #46 `main` did not compile due to two `Warning 8` exhaustiveness gaps
+(both fixed: `strand_type_of_ty` in `typecheck.ml`; debug token printer in `bin/main.ml`).
+
+**TG-3 gap remains**: the OCaml typechecker is not yet proven to refine `HasType`;
+the correspondence is validated by the test suite, not by a formal translation.
 
 ## 3. Remaining obligations (the narrative arc)
 
@@ -234,6 +262,9 @@ claim is unchecked.
 
 ### TG-4 — Pretty-print/parse round-trip
 
+**Status: LANDED** (PR #46). `compiler/test/test_roundtrip.ml` extended with
+36 entries including all 8 echo/product constructors; 548/548 tests pass.
+
 **Claim.** `parse(pretty e) = e` for every closed value `e`.
 
 **Why valuable.** Free fuzz oracle. Also the foundation of any "IR
@@ -245,7 +276,7 @@ viewer" tooling that re-parses what `pretty` emitted.
 - [[A-TG-4.2]] Lexer never strips information needed by the parser
   (e.g. whitespace within braid literals).
 
-**How to discharge.** Property test in `compiler/test/`.
+**How to discharge.** Property test in `compiler/test/` — discharged.
 
 ### TG-5 — `compositional.ml` rewriter preserves types
 

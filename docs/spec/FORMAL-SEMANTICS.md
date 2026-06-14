@@ -62,6 +62,14 @@ e  ::=  x                                    -- variable reference
      |  f(e₁, ..., eₖ)                      -- function application
      |  match e with arm₁ | ... | armₖ end  -- pattern matching
      |  let x = e₁ in e₂                    -- let binding
+     |  echoClose(e)                              -- echo-close (structured loss)
+     |  lower(e)                                  -- project to result (forget residue)
+     |  residue(e)                                -- recover the witness
+     |  pair(e₁, e₂)                             -- product introduction
+     |  fst(e)                                    -- first projection
+     |  snd(e)                                    -- second projection
+     |  echoAdd(e₁, e₂)                          -- addition with summand residue
+     |  echoEq(e₁, e₂)                           -- equality with operand residue
 ```
 
 ### 1.3 Generators
@@ -83,7 +91,19 @@ p  ::=  identity           -- matches empty word
      |  _                  -- wildcard (matches anything, binds nothing)
 ```
 
-### 1.5 Strand Declarations
+### 1.5 Types (Extended)
+
+The type language is extended with two new type formers:
+
+```
+τ  ::=  ...                           -- (all prior types)
+     |  Echo ρ τ                      -- echo type: result τ carrying witness ρ
+     |  ρ × σ                         -- product type (residue carrier for binary lossy ops)
+```
+
+`Echo ρ τ` is introduced by `echoClose`, `echoAdd`, `echoEq` and eliminated by `lower` (project result) and `residue` (recover witness). `ρ × σ` is the residue carrier type for binary operations: `echoAdd` has residue type `Num × Num`; `echoEq` has residue type `ρ × ρ`.
+
+### 1.6 Strand Declarations
 
 ```
 S  ::=  a₁:T₁, ..., aₙ:Tₙ     -- named typed strand list
@@ -601,7 +621,60 @@ result_type(linking)   = Num     -- integer or half-integer (linking number)
 MVP note: Polynomials are evaluated at fixed values, returning Num. Future versions
 may return a Polynomial type for symbolic manipulation.
 
-### 3.16 Program Typing (D1.13)
+### 3.16 Echo Types and Product Types
+
+```
+                Γ ⊢ e : Word[n]
+─────────────────────────────────────────────────  [T-Echo-Close]
+  Γ ⊢ echoClose(e) : Echo (Word[n]) (Word[0])
+
+
+        Γ ⊢ e : Echo ρ τ
+─────────────────────────────  [T-Lower]
+      Γ ⊢ lower(e) : τ
+
+
+        Γ ⊢ e : Echo ρ τ
+─────────────────────────────  [T-Residue]
+     Γ ⊢ residue(e) : ρ
+
+
+    Γ ⊢ e₁ : α    Γ ⊢ e₂ : β
+─────────────────────────────────  [T-Pair]
+    Γ ⊢ pair(e₁, e₂) : α × β
+
+
+      Γ ⊢ e : α × β
+─────────────────────────  [T-Fst]
+      Γ ⊢ fst(e) : α
+
+
+      Γ ⊢ e : α × β
+─────────────────────────  [T-Snd]
+      Γ ⊢ snd(e) : β
+
+
+    Γ ⊢ e₁ : Num    Γ ⊢ e₂ : Num
+────────────────────────────────────────────────────  [T-Echo-Add]
+   Γ ⊢ echoAdd(e₁, e₂) : Echo (Num × Num) Num
+
+
+       Γ ⊢ e₁ : Word[n]    Γ ⊢ e₂ : Word[n]
+──────────────────────────────────────────────────────────  [T-Echo-Eq-Word]
+   Γ ⊢ echoEq(e₁, e₂) : Echo (Word[n] × Word[n]) Bool
+
+         Γ ⊢ e₁ : Num    Γ ⊢ e₂ : Num
+──────────────────────────────────────────────────────  [T-Echo-Eq-Num]
+   Γ ⊢ echoEq(e₁, e₂) : Echo (Num × Num) Bool
+
+         Γ ⊢ e₁ : Str    Γ ⊢ e₂ : Str
+──────────────────────────────────────────────────────  [T-Echo-Eq-Str]
+   Γ ⊢ echoEq(e₁, e₂) : Echo (Str × Str) Bool
+```
+
+(Note: `T-Echo-Val` is an internal rule for the `echoVal(r, v)` intermediate form produced during evaluation; it does not appear in surface typing.)
+
+### 3.17 Program Typing (D1.13)
 
 A program is well-typed if all statements typecheck under the accumulated Γ.
 
@@ -854,7 +927,109 @@ tw = twist_generators(n)       -- full twist on n strands
 Where `twist_generators(n)` produces the canonical full twist braid word
 Δ² = (s₁ s₂ ... s_{n-1})ⁿ (the Garside element squared).
 
-### 4.10 Evaluation Rules — Pattern Matching
+### 4.10 Evaluation Rules — Echo Types and Product Types
+
+**Echo-close reduction:**
+
+```
+        e → e'
+─────────────────────────────────────  [E-Echo-Close-Step]
+  echoClose(e) → echoClose(e')
+
+─────────────────────────────────────────────────────────  [E-Echo-Close-Word]
+  echoClose(braid[gs]) → echoVal(braid[gs], identity)
+
+─────────────────────────────────────────────────────────  [E-Echo-Close-Id]
+  echoClose(identity) → echoVal(identity, identity)
+```
+
+**Lower / residue projection:**
+
+```
+          e → e'
+──────────────────────────  [E-Lower-Step]
+   lower(e) → lower(e')
+
+  isValue(r)  isValue(v)
+──────────────────────────  [E-Lower-Val]
+ lower(echoVal(r, v)) → v
+
+          e → e'
+─────────────────────────────  [E-Residue-Step]
+  residue(e) → residue(e')
+
+   isValue(r)  isValue(v)
+─────────────────────────────  [E-Residue-Val]
+residue(echoVal(r, v)) → r
+```
+
+**Product introduction and projection:**
+
+```
+        e₁ → e₁'
+─────────────────────────────────  [E-Pair-Left]
+  pair(e₁, e₂) → pair(e₁', e₂)
+
+    isValue(v₁)    e₂ → e₂'
+─────────────────────────────────  [E-Pair-Right]
+  pair(v₁, e₂) → pair(v₁, e₂')
+
+         e → e'
+──────────────────────────  [E-Fst-Step]
+   fst(e) → fst(e')
+
+  isValue(v₁)  isValue(v₂)
+──────────────────────────────  [E-Fst-Pair]
+  fst(pair(v₁, v₂)) → v₁
+
+         e → e'
+──────────────────────────  [E-Snd-Step]
+   snd(e) → snd(e')
+
+  isValue(v₁)  isValue(v₂)
+──────────────────────────────  [E-Snd-Pair]
+  snd(pair(v₁, v₂)) → v₂
+```
+
+**Echo-preserving addition:**
+
+```
+              e₁ → e₁'
+──────────────────────────────────────────────  [E-EchoAdd-Left]
+  echoAdd(e₁, e₂) → echoAdd(e₁', e₂)
+
+      isValue(v₁)    e₂ → e₂'
+──────────────────────────────────────────────  [E-EchoAdd-Right]
+  echoAdd(v₁, e₂) → echoAdd(v₁, e₂')
+
+──────────────────────────────────────────────────────────────────────  [E-EchoAdd-Nums]
+  echoAdd(n₁, n₂) → echoVal(pair(n₁, n₂), n₁ + n₂)
+```
+
+**Echo-preserving equality (shown for Num; analogous for Str, Word[n], identity):**
+
+```
+              e₁ → e₁'
+──────────────────────────────────────────────  [E-EchoEq-Left]
+  echoEq(e₁, e₂) → echoEq(e₁', e₂)
+
+      isValue(v₁)    e₂ → e₂'
+──────────────────────────────────────────────  [E-EchoEq-Right]
+  echoEq(v₁, e₂) → echoEq(v₁, e₂')
+
+──────────────────────────────────────────────────────────────────────────────────  [E-EchoEq-Nums]
+  echoEq(n₁, n₂) → echoVal(pair(n₁, n₂), n₁ == n₂)
+
+─────────────────────────────────────────────────────────────────────────  [E-EchoEq-Strs]
+  echoEq(s₁, s₂) → echoVal(pair(s₁, s₂), s₁ == s₂)
+
+──────────────────────────────────────────────────────────────────────────────────────────────  [E-EchoEq-Braids]
+  echoEq(braid[gs₁], braid[gs₂]) → echoVal(pair(braid[gs₁], braid[gs₂]), gs₁ == gs₂)
+```
+
+(Additional rules `E-EchoEq-IdId`, `E-EchoEq-IdBraid`, `E-EchoEq-BraidId` handle identity/braid combinations analogously.)
+
+### 4.11 Evaluation Rules — Pattern Matching
 
 **Successful match** (D1.4):
 
@@ -887,7 +1062,7 @@ match(v, x)                    = {x ↦ v}                              -- [M-Va
 match(v, _)                    = {}                                    -- [M-Wildcard]
 ```
 
-### 4.11 Evaluation Rules — Let Bindings
+### 4.12 Evaluation Rules — Let Bindings
 
 ```
 ρ ⊢ e₁ ⇓ v₁       ρ, x ↦ v₁ ⊢ e₂ ⇓ v₂
@@ -895,7 +1070,7 @@ match(v, _)                    = {}                                    -- [M-Wil
 ρ ⊢ let x = e₁ in e₂ ⇓ v₂
 ```
 
-### 4.12 Evaluation Rules — Function Application
+### 4.13 Evaluation Rules — Function Application
 
 ```
 ρ(f) = closure(x₁, ..., xₖ, body)
@@ -907,7 +1082,7 @@ match(v, _)                    = {}                                    -- [M-Wil
 
 Note: f is in ρ (recursive calls resolve to the same closure), enabling recursion (D1.3).
 
-### 4.13 Evaluation Rules — Assertions
+### 4.14 Evaluation Rules — Assertions
 
 Assertions evaluate the expression and check for truth:
 
@@ -926,7 +1101,7 @@ For `assert e₁ ~ e₂`, evaluation first reduces `e₁ ~ e₂` via [E-Isotopy]
 to `bool(b)`, then [E-Assert-Pass] or [E-Assert-Fail] applies.
 Similarly for `assert e₁ == e₂` via [E-Eq-*].
 
-### 4.14 Evaluation Rules — Invariant Computation
+### 4.15 Evaluation Rules — Invariant Computation
 
 ```
 ρ ⊢ e ⇓ v       v is closed tangle or word
@@ -937,7 +1112,7 @@ result = compute_invariant(inv, v)
 
 `compute_invariant` dispatches to the backend/plugin for the named invariant (D1.12).
 
-### 4.15 Error Propagation
+### 4.16 Error Propagation
 
 Errors propagate strictly (halt short-circuits evaluation):
 
@@ -954,7 +1129,7 @@ Errors propagate strictly (halt short-circuits evaluation):
 
 This applies uniformly to all binary operators and function arguments.
 
-### 4.16 Program Evaluation (D1.13)
+### 4.17 Program Evaluation (D1.13)
 
 ```
 ρ₀ = ·

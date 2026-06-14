@@ -5,9 +5,9 @@
 [metadata]
 project = "tangle"
 version = "0.2.0-dev"
-last-updated = "2026-06-05"
+last-updated = "2026-06-14"
 status = "active"
-session = "echo-types realignment + decidability + CI bootstrap — 2026-06-05"
+session = "echo OCaml pipeline complete (PR #45+#46) — 2026-06-14"
 
 [project-context]
 name = "Tangle"
@@ -30,27 +30,24 @@ milestones = [
   "DONE (TG-2): decidability — infer ≡ HasType, type uniqueness, Decidable instance",
   "DONE: reproducible Lean toolchain bootstrap (proofs/bootstrap-lean.sh) + SessionStart hook; CI consolidated onto it",
   "NEXT (TG-1): extend type safety to let-binding (full de Bruijn substitution)",
-  "NEXT: generalise echo to add/eq (needs a product/residue type in Ty)",
+  "DONE: generalise echo to add/eq — product type (Ty.prod), echoAdd/echoEq in Lean+OCaml (PR #45)",
   "NEXT: thread echo residue into TangleIR (coordinate with quandledb)",
-  "NEXT: full OCaml echo pipeline (ast/typecheck/eval/parser/pretty)",
+  "DONE: full OCaml echo pipeline (ast/typecheck/eval/parser/pretty) — PR #45; build fixed PR #46",
   "LATER (TG-3): OCaml typecheck.ml refines the Lean HasType spec",
   "LATER (TG-5/6/7): compositional rewriter preservation; WASM semantic preservation; braid-group eqBraids",
 ]
 
 [blockers-and-issues]
-issues = [
-  "DESIGN (open, user): echo value shape — uniform `echoVal (residue,result)` (faithful to Echo=Σ, reworks merged capstones to multi-step Step*) vs per-operation lower/residue rules. Blocks the echo generalisation to add/eq.",
-]
+issues = []
 
 [critical-next-actions]
 actions = [
-  "Resolve the echo value-shape design fork (A vs B), then add the product type",
-  "TG-1: let-binding type safety via de Bruijn substitution",
-  "Generalise echo to add/eq; thread residue into TangleIR with the quandledb session",
-  "Extend the OCaml typechecker (typecheck.ml/ast.ml) with echo types",
+  "TG-1: let-binding type safety via de Bruijn substitution (Lean 4; ~150 LoC per PROOF-NARRATIVE §TG-1)",
+  "TG-3: formal refinement proof — OCaml typecheck.ml vs Lean HasType",
+  "TangleIR: thread echo residue into TangleIR schema; coordinate with quandledb session",
 ]
 
 [maintenance-status]
-last-run-utc = "2026-06-05T00:00:00Z"
+last-run-utc = "2026-06-14T03:00:00Z"
 last-result = "pass"               # unknown | pass | warn | fail
-notes = "lean-proofs oracle GREEN (PR #34, #36 merged); Tangle.lean 0 errors, no sorry/axiom/admit"
+notes = "dune build + dune test (548/548) GREEN after PR #46; lean-proofs CI GREEN; Tangle.lean 26 HasType rules / 57 Step rules, 0 errors, no sorry/axiom/admit"
