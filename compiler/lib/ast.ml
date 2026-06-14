@@ -25,6 +25,7 @@ and definition = {
   def_name   : string;
   def_params : string list;
   def_body   : expr;
+  def_line   : int;          (** 1-based source line of the `def` keyword; 0 if synthesised *)
 }
 
 (** Weave block: [weave strands <inputs> into <body> yield strands <outputs>].

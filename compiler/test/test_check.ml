@@ -59,6 +59,14 @@ let () =
   test "parse error has a source line" (fun () ->
     let ds = check_source "def a = braid[s1]\ndef x = \n" in
     List.exists (fun d -> d.level = Error && d.line >= 1) ds);
+  test "type error is located at the def line, not the file top" (fun () ->
+    (* `def bad` is on line 2; the diagnostic must point there, not line 1. *)
+    let src = "def a = braid[s1]\ndef bad = braid[s1] == braid[s1, s2]\n" in
+    let ds = check_source src in
+    List.exists (fun d -> d.level = Error && d.line = 2) ds);
+  test "a single type error yields exactly one diagnostic (no duplicate)" (fun () ->
+    let ds = check_source "def bad = braid[s1] == braid[s1, s2]\n" in
+    List.length (List.filter (fun d -> d.level = Error) ds) = 1);
   test "format_diag is tab-separated with 4 fields" (fun () ->
     let line = format_diag { level = Error; line = 3; col = 5; message = "boom" } in
     String.split_on_char '\t' line = ["ERROR"; "3"; "5"; "boom"]);

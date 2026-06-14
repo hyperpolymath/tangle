@@ -59,11 +59,11 @@ let rgen i e = { g_index = i; g_exponent = e }
 
 (** Helper: make a simple value definition statement. *)
 let def_val name body =
-  Definition { def_name = name; def_params = []; def_body = body }
+  Definition { def_name = name; def_params = []; def_body = body; def_line = 0 }
 
 (** Helper: make a function definition statement. *)
 let def_fun name params body =
-  Definition { def_name = name; def_params = params; def_body = body }
+  Definition { def_name = name; def_params = params; def_body = body; def_line = 0 }
 
 (** Evaluate an expression in an empty environment. *)
 let eval e = eval_expr_in_env [] e

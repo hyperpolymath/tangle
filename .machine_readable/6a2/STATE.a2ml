@@ -51,4 +51,4 @@ actions = [
 [maintenance-status]
 last-run-utc = "2026-06-14T03:00:00Z"
 last-result = "pass"               # unknown | pass | warn | fail
-notes = "dune build + dune test (595/595) GREEN; lean Tangle.lean 0 errors; TG-1+TG-2 LANDED; TG-9 LANDED (LSP delegates diagnostics to tanglec --check via check.ml — subset by construction); echo-threading EchoClosed node DONE (verbatim residue, --compile-pd wired); Eq typecheck tightened to same-width words (matches tEqWord); echo-types f7a965f grade semiring experimental (firewalled)"
+notes = "dune build + dune test (597/597) GREEN; lean Tangle.lean 0 errors; TG-1+TG-2 LANDED; TG-9 LANDED (LSP delegates diagnostics to tanglec --check via check.ml — subset by construction); type-error diagnostics now carry the def source line (def_line) + duplicate removed; echo-threading EchoClosed node DONE (verbatim residue, --compile-pd wired); Eq typecheck tightened to same-width words (matches tEqWord); echo-types f7a965f grade semiring experimental (firewalled)"

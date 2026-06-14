@@ -71,10 +71,11 @@ let check_source (source : string) : diag list =
       List.map (fun (d : Typecheck.diagnostic) ->
         { level   = (match d.Typecheck.diag_level with
                      | `Error -> Error | `Warning -> Warning);
-          (* Typecheck diagnostics carry no source span yet — surface them at the
-             top of the file.  Coarse location does not affect the subset
-             property TG-9 asserts (which programs are flagged, not where). *)
-          line    = 1;
+          (* Definition-scoped diagnostics carry the `def` line; statement-level
+             ones (assertions/computations/weave) are not yet located and fall
+             back to the top of the file.  Coarse location does not affect the
+             subset property TG-9 asserts (which programs are flagged, not where). *)
+          line    = (match d.Typecheck.diag_line with Some l -> l | None -> 1);
           col     = 0;
           message = d.Typecheck.diag_message }
       ) r.Typecheck.result_diagnostics

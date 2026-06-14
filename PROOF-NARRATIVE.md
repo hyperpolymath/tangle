@@ -191,7 +191,8 @@ complete echo + product fragment described in §2.5:
 | `pretty.ml` | Pretty-printers for all 8 forms |
 | `test_roundtrip.ml` | TG-4 round-trip property test: 26-entry corpus including all 8 echo/product constructors |
 
-**Build oracle**: `dune build` + `dune test` (595/595) green. The
+**Build oracle**: `dune build` + `dune test` green (run `dune runtest` for the
+live count — ~597 across 8 suites). The
 pre-PR #46 `main` did not compile due to two `Warning 8` exhaustiveness gaps
 (both fixed: `strand_type_of_ty` in `typecheck.ml`; debug token printer in `bin/main.ml`).
 
@@ -325,7 +326,7 @@ claim is unchecked.
 
 **Status: LANDED** (PR #46). `compiler/test/test_roundtrip.ml` is a 26-entry
 corpus including all 8 echo/product constructors (52 round-trip runs); the
-full suite is 595/595 green.
+full suite is green (run `dune runtest` for the live total).
 
 **Claim.** `parse(pretty e) = e` for every closed value `e`.
 
@@ -463,9 +464,13 @@ exactly parse + type failures) and `tangle-lsp`'s unit tests
 (`parse_check_line`, `analyze` authors no diagnostics, and a gated
 end-to-end delegation test against a real `tanglec`).
 
-**Caveat.** Type-checker diagnostics currently lack source spans, so they
-surface at the top of the file; locating them precisely is a separate
-enhancement to `typecheck.ml` and does not affect the subset property.
+**Locations.** Type errors scoped to a definition now carry that `def`'s
+source line (`def_line`, threaded from the parser through `check_program`),
+and the former duplicate diagnostic (pass 1b + pass 2 both reporting a def
+error) is removed. Statement-level errors (assertions / computations /
+weave blocks) are not yet located and still surface at the file top; column
+spans for expressions remain future work. None of this affects the subset
+property — only where a diagnostic points.
 
 ## 4. The "stupid proof" exclusions
 

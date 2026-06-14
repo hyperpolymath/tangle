@@ -85,11 +85,11 @@ let sigma_inv i = gen i (-1)
 
 (** Helper: make a simple value definition statement. *)
 let def_val name body =
-  Definition { def_name = name; def_params = []; def_body = body }
+  Definition { def_name = name; def_params = []; def_body = body; def_line = 0 }
 
 (** Helper: make a function definition statement. *)
 let def_fun name params body =
-  Definition { def_name = name; def_params = params; def_body = body }
+  Definition { def_name = name; def_params = params; def_body = body; def_line = 0 }
 
 (* ================================================================== *)
 (*  1. Literal types                                                   *)

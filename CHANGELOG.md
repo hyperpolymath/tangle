@@ -81,7 +81,8 @@ applied here:
   typecheck (`test_typecheck.ml`) and eval (`test_eval.ml`) tests pinning
   the residue/result ordering of all 8 echo/product forms against the
   Lean `Step` rules — previously only parse/pretty round-trip was tested.
-- Test-suite total: **585/585** pass (was 557).
+- Adds direct typecheck/eval coverage for the 8 echo forms (suite was 557
+  before this batch; see the running total below).
 
 ### TG-9 LANDED: LSP diagnostics delegated to the compiler
 
@@ -100,10 +101,21 @@ undefined). None corresponded to a `HasType` failure — violating TG-9.
   (`∅ ⊆ HasType failures`). The subset relation holds **by construction**.
 - Built-in operations now appear in LSP completion (reusing the
   previously diagnostic-only `TANGLE_BUILTINS` list).
-- Tests: `compiler/test/test_check.ml` (+10) and `tangle-lsp` Rust unit
-  tests (`parse_check_line`, navigation authors no diagnostics, gated
+- Tests: `compiler/test/test_check.ml` and `tangle-lsp` Rust unit tests
+  (`parse_check_line`, navigation authors no diagnostics, gated
   end-to-end delegation against a real `tanglec`).
-- Test-suite total: **595/595** pass.
+
+### Type-error diagnostics carry source lines
+
+- `definition` gains a `def_line` field (set from the parser's
+  `$startpos`); `Typecheck.diagnostic` gains `diag_line`. Definition-scoped
+  type errors now point at the `def` line instead of the file top, so the
+  LSP highlights the right line.
+- Removed a duplicate diagnostic: `check_program` pass 2 no longer
+  re-checks definitions (pass 1b already does), so one type error yields
+  one diagnostic. Statement-level errors (assert/compute/weave) remain
+  unlocated for now.
+- Test-suite total: **597/597** pass.
 
 ### Echo types OCaml pipeline (PR #45 + #46)
 

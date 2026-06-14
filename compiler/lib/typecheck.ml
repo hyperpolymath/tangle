@@ -758,6 +758,7 @@ let check_statement (gamma : env) (stmt : statement) : env =
 type diagnostic = {
   diag_message : string;
   diag_level   : [`Error | `Warning];
+  diag_line    : int option;   (** 1-based source line, when known *)
 }
 
 (** Result of type-checking a program. *)
@@ -777,7 +778,11 @@ type check_result = {
  *)
 let check_program (prog : program) : check_result =
   let errors = ref [] in
-  let add_error msg = errors := { diag_message = msg; diag_level = `Error } :: !errors in
+  let add_error_at line msg =
+    let diag_line = if line > 0 then Some line else None in
+    errors := { diag_message = msg; diag_level = `Error; diag_line } :: !errors
+  in
+  let add_error msg = add_error_at 0 msg in
 
   (* Pass 1a: collect all def names with placeholder types (forward refs).
    * This gives every name a preliminary entry so later defs can reference
@@ -820,18 +825,24 @@ let check_program (prog : program) : check_result =
           env_bind_fun gamma def.def_name fsig
         end
       with Type_error msg ->
-        add_error (Printf.sprintf "In definition '%s': %s" def.def_name msg);
+        add_error_at def.def_line
+          (Printf.sprintf "In definition '%s': %s" def.def_name msg);
         gamma
       end
     | _ -> gamma
   ) gamma_placeholders prog in
 
-  (* Pass 2: type-check all statements against the complete environment *)
+  (* Pass 2: type-check the non-definition statements (assertions, computations,
+   * weave blocks).  Definitions are fully checked in pass 1b; re-checking them
+   * here would only duplicate their diagnostics. *)
   let _gamma_final = List.fold_left (fun gamma stmt ->
-    try check_statement gamma stmt
-    with Type_error msg ->
-      add_error msg;
-      gamma
+    match stmt with
+    | Definition _ -> gamma
+    | _ ->
+      try check_statement gamma stmt
+      with Type_error msg ->
+        add_error msg;
+        gamma
   ) gamma_pass1 prog in
 
   let diagnostics = List.rev !errors in

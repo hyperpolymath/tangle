@@ -87,9 +87,9 @@ statement:
 
 definition:
   | DEF name = IDENT LPAREN ps = param_list RPAREN EQ body = expr
-    { { def_name = name; def_params = ps; def_body = body } }
+    { { def_name = name; def_params = ps; def_body = body; def_line = $startpos(name).Lexing.pos_lnum } }
   | DEF name = IDENT EQ body = expr
-    { { def_name = name; def_params = []; def_body = body } }
+    { { def_name = name; def_params = []; def_body = body; def_line = $startpos(name).Lexing.pos_lnum } }
   ;
 
 param_list:
