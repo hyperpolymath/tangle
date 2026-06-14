@@ -429,6 +429,14 @@ let rec eval_expr (env : env) (e : expr) : value =
     in
     try_arms arms
 
+  (* ---- Echo types (structured loss) ----
+   * These are typed by typecheck.ml (mirroring proofs/Tangle.lean).  Runtime
+   * evaluation needs echo/product value forms and is a deliberate follow-on;
+   * the typechecker is the scoped deliverable. *)
+  | EchoClose _ | Lower _ | Residue _ | Pair _ | Fst _ | Snd _ | EchoAdd _ | EchoEq _ ->
+    eval_error "echo-type evaluation is not yet implemented (typecheck-only); \
+                see proofs/Tangle.lean for the intended small-step semantics"
+
 (** Evaluate a binary operation on two values. *)
 and eval_binop (op : binop) (v1 : value) (v2 : value) : value =
   match op with

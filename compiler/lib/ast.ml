@@ -80,6 +80,18 @@ and expr =
   | Cup       of expr * expr
   | Twist     of expr
 
+  (* ---- Echo types (structured loss) — mirror the Lean spec in
+   *      proofs/Tangle.lean (Ty.echo / Ty.prod and the echo operations).
+   *      Typed by typecheck.ml; surface parser syntax is a follow-on. ---- *)
+  | EchoClose of expr                 (* echo-preserving closure (residue-retaining close) *)
+  | Lower     of expr                 (* project an echo to its result *)
+  | Residue   of expr                 (* project an echo to its residue (recover witness) *)
+  | Pair      of expr * expr          (* product introduction *)
+  | Fst       of expr                 (* first projection *)
+  | Snd       of expr                 (* second projection *)
+  | EchoAdd   of expr * expr          (* echo-preserving addition (residue = summand pair) *)
+  | EchoEq    of expr * expr          (* echo-preserving equality (residue = operand pair) *)
+
   (* ---- Literals ---- *)
   | BraidLit  of generator list
   | Identity
