@@ -4,24 +4,6 @@ Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
 # Security Policy
 
-<!-- 
-============================================================================
-TEMPLATE INSTRUCTIONS (delete this block before publishing)
-============================================================================
-Replace all {{PLACEHOLDER}} values with your information:
-  Nextgen Languages     - Your project name
-  hyperpolymath            - GitHub username or org (e.g., hyperpolymath)
-  nextgen-languages             - Repository name
-  6759885+hyperpolymath@users.noreply.github.com   - Security contact email
-  [PGP fingerprint not set]  - Your PGP key fingerprint (40 chars, no spaces)
-  {{PGP_KEY_URL}}      - URL to your public PGP key
-  {{WEBSITE}}          - Your website/domain
-  2026     - Current year for copyright
-
-Optional: Remove sections that don't apply (e.g., PGP if you don't use it)
-============================================================================
--->
-
 We take security seriously. We appreciate your efforts to responsibly disclose vulnerabilities and will make every effort to acknowledge your contributions.
 
 ## Table of Contents
@@ -44,7 +26,7 @@ We take security seriously. We appreciate your efforts to responsibly disclose v
 
 The preferred method for reporting security vulnerabilities is through GitHub's Security Advisory feature:
 
-1. Navigate to [Report a Vulnerability](https://github.com/hyperpolymath/nextgen-languages/security/advisories/new)
+1. Navigate to [Report a Vulnerability](https://github.com/hyperpolymath/tangle/security/advisories/new)
 2. Click **"Report a vulnerability"**
 3. Complete the form with as much detail as possible
 4. Submit — we'll receive a private notification
@@ -56,26 +38,12 @@ This method ensures:
 - Coordinated disclosure tooling
 - Automatic credit when the advisory is published
 
-### Alternative: Encrypted Email
+### Alternative: Email
 
-If you cannot use GitHub Security Advisories, you may email us directly:
-
-| | |
-|---|---|
-| **Email** | 6759885+hyperpolymath@users.noreply.github.com |
-| **PGP Key** | [Download Public Key]({{PGP_KEY_URL}}) |
-| **Fingerprint** | `[PGP fingerprint not set]` |
-
-```bash
-# Import our PGP key
-curl -sSL {{PGP_KEY_URL}} | gpg --import
-
-# Verify fingerprint
-gpg --fingerprint 6759885+hyperpolymath@users.noreply.github.com
-
-# Encrypt your report
-gpg --armor --encrypt --recipient 6759885+hyperpolymath@users.noreply.github.com report.txt
-```
+If you cannot use GitHub Security Advisories, email us directly at
+6759885+hyperpolymath@users.noreply.github.com. No PGP key is currently
+published; for an encrypted channel, request one via a GitHub Security
+Advisory.
 
 > **⚠️ Important:** Do not report security vulnerabilities through public GitHub issues, pull requests, discussions, or social media.
 
@@ -207,7 +175,7 @@ If we cannot reach agreement on disclosure timing, we default to 90 days from yo
 
 The following are within scope for security research:
 
-- This repository (`hyperpolymath/nextgen-languages`) and all its code
+- This repository (`hyperpolymath/tangle`) and all its code
 - Official releases and packages published from this repository
 - Documentation that could lead to security issues
 - Build and deployment configurations in this repository
@@ -326,7 +294,7 @@ Recognition includes:
 To stay informed about security updates:
 
 - **Watch this repository**: Click "Watch" → "Custom" → Select "Security alerts"
-- **GitHub Security Advisories**: Published at [Security Advisories](https://github.com/hyperpolymath/nextgen-languages/security/advisories)
+- **GitHub Security Advisories**: Published at [Security Advisories](https://github.com/hyperpolymath/tangle/security/advisories)
 - **Release notes**: Security fixes noted in [CHANGELOG](CHANGELOG.md)
 
 ### Update Policy
@@ -352,7 +320,7 @@ To stay informed about security updates:
 
 ## Security Best Practices
 
-When using Nextgen Languages, we recommend:
+When using tangle, we recommend:
 
 ### General
 
@@ -374,8 +342,7 @@ When using Nextgen Languages, we recommend:
 
 ## Additional Resources
 
-- [Our PGP Public Key]({{PGP_KEY_URL}})
-- [Security Advisories](https://github.com/hyperpolymath/nextgen-languages/security/advisories)
+- [Security Advisories](https://github.com/hyperpolymath/tangle/security/advisories)
 - [Changelog](CHANGELOG.md)
 - [Contributing Guidelines](CONTRIBUTING.md)
 - [CVE Database](https://cve.mitre.org/)
@@ -387,8 +354,8 @@ When using Nextgen Languages, we recommend:
 
 | Purpose | Contact |
 |---------|---------|
-| **Security issues** | [Report via GitHub](https://github.com/hyperpolymath/nextgen-languages/security/advisories/new) or 6759885+hyperpolymath@users.noreply.github.com |
-| **General questions** | [GitHub Discussions](https://github.com/hyperpolymath/nextgen-languages/discussions) |
+| **Security issues** | [Report via GitHub](https://github.com/hyperpolymath/tangle/security/advisories/new) or 6759885+hyperpolymath@users.noreply.github.com |
+| **General questions** | [GitHub Discussions](https://github.com/hyperpolymath/tangle/discussions) |
 | **Other enquiries** | See [README](README.md) for contact information |
 
 ---
@@ -403,7 +370,7 @@ This security policy may be updated from time to time. Significant changes will 
 
 ---
 
-*Thank you for helping keep Nextgen Languages and its users safe.* 🛡️
+*Thank you for helping keep tangle and its users safe.* 🛡️
 
 ---
 
