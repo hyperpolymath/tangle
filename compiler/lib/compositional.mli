@@ -12,6 +12,7 @@ type expr =
   | Compose of expr * expr
   | Tensor of expr * expr
   | Close of expr
+  | EchoClose of expr
 
 type compile_error = string
 
@@ -21,6 +22,7 @@ val braid : generator list -> expr
 val compose : expr -> expr -> expr
 val tensor : expr -> expr -> expr
 val close : expr -> expr
+val echo_close : expr -> expr
 
 type crossing = {
   under_in : int;
@@ -40,6 +42,7 @@ type planar_diagram = {
 type compiled =
   | OpenWord of generator list
   | ClosedDiagram of planar_diagram
+  | EchoClosed of { residue : generator list; diagram : planar_diagram }
 
 val word_of_expr : expr -> (generator list, compile_error) result
 val expr_of_word : generator list -> expr
@@ -71,3 +74,20 @@ val send_to_skein : skein_sink -> skein_payload -> unit
 val compile_and_send_to_skein :
   skein_sink -> name:string -> expr -> (skein_payload, compile_error) result
 
+type echo_closed_payload = {
+  name : string;
+  residue_blob : string;
+  residue_word : (int * int) list;
+  pd_blob : string;
+  pd_entries : (int * int * int * int * int) list;
+  crossing_number : int;
+}
+
+type echo_skein_sink = echo_closed_payload -> unit
+
+val residue_blob_of_word : generator list -> string
+val echo_payload_of_residue_and_pd :
+  name:string -> generator list -> planar_diagram -> echo_closed_payload
+val send_to_echo_skein : echo_skein_sink -> echo_closed_payload -> unit
+val compile_echo_and_send_to_skein :
+  echo_skein_sink -> name:string -> expr -> (echo_closed_payload, compile_error) result
