@@ -206,6 +206,43 @@ let eval_file (filename : string) : unit =
     exit 1
   end
 
+(** Compile a TANGLE source file's compositional definitions to planar-diagram
+    payloads (the Skein / TangleIR ingestion path).  Each `def name = <expr>`
+    whose body is a closed or echo-closed compositional expression is lowered to
+    its canonical PDv1 blob; `echoClose` definitions additionally emit the
+    retained residue braid (the pre-closure word threaded for QuandleDB
+    provenance — see docs/spec/ECHO-TANGLEIR-THREADING.md). *)
+let compile_pd_file (filename : string) : unit =
+  let prog = parse_file filename in
+  List.iter (fun stmt ->
+    match stmt with
+    | Tangle.Ast.Definition d ->
+      begin match Tangle.Compositional.of_ast_expr d.Tangle.Ast.def_body with
+      | Error _ ->
+        Printf.printf "%s: (outside compositional subset — skipped)\n" d.Tangle.Ast.def_name
+      | Ok cexpr ->
+        begin match Tangle.Compositional.compile cexpr with
+        | Ok (Tangle.Compositional.ClosedDiagram pd) ->
+          let p = Tangle.Compositional.skein_payload_of_pd ~name:d.Tangle.Ast.def_name pd in
+          Printf.printf "%s: %s (crossings=%d)\n"
+            d.Tangle.Ast.def_name p.Tangle.Compositional.pd_blob p.Tangle.Compositional.crossing_number
+        | Ok (Tangle.Compositional.EchoClosed { residue; diagram }) ->
+          let p =
+            Tangle.Compositional.echo_payload_of_residue_and_pd
+              ~name:d.Tangle.Ast.def_name residue diagram
+          in
+          Printf.printf "%s: %s (crossings=%d) residue=%s\n"
+            d.Tangle.Ast.def_name p.Tangle.Compositional.pd_blob
+            p.Tangle.Compositional.crossing_number p.Tangle.Compositional.residue_blob
+        | Ok (Tangle.Compositional.OpenWord _) ->
+          Printf.printf "%s: (open word — not closed; no planar diagram)\n" d.Tangle.Ast.def_name
+        | Error msg ->
+          Printf.eprintf "%s: compile error: %s\n" d.Tangle.Ast.def_name msg
+        end
+      end
+    | _ -> ()
+  ) prog
+
 (** Print usage information. *)
 let usage () =
   Printf.eprintf "Usage: tanglec [OPTIONS] [file.tangle]\n";
@@ -213,6 +250,7 @@ let usage () =
   Printf.eprintf "Options:\n";
   Printf.eprintf "  --dump-tokens <file>   Dump lexer tokens\n";
   Printf.eprintf "  --eval <file>          Evaluate a program\n";
+  Printf.eprintf "  --compile-pd <file>    Compile compositional defs to PD/Skein payloads\n";
   Printf.eprintf "  --repl                 Start interactive REPL\n";
   Printf.eprintf "  <file>                 Parse and pretty-print AST\n";
   exit 1
@@ -223,6 +261,8 @@ let () =
     dump_tokens filename
   | [_; "--eval"; filename] ->
     eval_file filename
+  | [_; "--compile-pd"; filename] ->
+    compile_pd_file filename
   | [_; "--repl"] ->
     Tangle.Repl.run ()
   | [_; filename] ->

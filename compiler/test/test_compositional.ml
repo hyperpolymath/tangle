@@ -24,6 +24,14 @@ let assert_eq label expected actual =
   if expected <> actual then
     failwith ("assert_eq failed: " ^ label)
 
+(* Substring check — pins error-path tests to the *intended* rejection branch
+   rather than merely asserting some error fired. *)
+let assert_contains label needle hay =
+  let n = String.length needle and h = String.length hay in
+  let rec scan i = i + n <= h && (String.sub hay i n = needle || scan (i + 1)) in
+  if not (n = 0 || scan 0) then
+    failwith (Printf.sprintf "assert_contains failed: %s (no %S in %S)" label needle hay)
+
 let unwrap = function
   | Ok x -> x
   | Error msg -> failwith ("unexpected error: " ^ msg)
@@ -185,15 +193,23 @@ let test_echo_threading () =
     | ClosedDiagram _ -> failwith "expected EchoClosed"
     | OpenWord _ -> failwith "expected EchoClosed");
 
-  test "EchoClosed residue carries pre-closure braid word (provenance)" (fun () ->
-    (* Two distinct braids that close to the same diagram — echo distinguishes them. *)
+  test "EchoClosed residue preserves the distinct pre-closure word (provenance)" (fun () ->
+    (* Two distinct braids (a word and its mirror). They close to mirror-image
+       diagrams (opposite crossing signs), NOT the same diagram — the genuine
+       collapse-to-one-target property is proven only at the Lean level
+       (echo_distinguishes_collapsed, proofs/Tangle.lean), because this PD model
+       does not quotient by Markov/Reidemeister moves. What the IR guarantees is
+       weaker but still load-bearing: each EchoClosed retains its own distinct
+       pre-closure word verbatim, so provenance is recoverable. *)
     let braid_a = [{ index = 1; exponent = 1 }; { index = 1; exponent = 1 }] in
     let braid_b = [{ index = 1; exponent = -1 }; { index = 1; exponent = -1 }] in
     let ca = unwrap (compile (echo_close (braid braid_a))) in
     let cb = unwrap (compile (echo_close (braid braid_b))) in
     let res_a = match ca with EchoClosed { residue; _ } -> residue | _ -> failwith "expected EchoClosed" in
     let res_b = match cb with EchoClosed { residue; _ } -> residue | _ -> failwith "expected EchoClosed" in
-    assert_true "residues differ" (res_a <> res_b));
+    assert_eq "residue a = pre-closure word a" braid_a res_a;
+    assert_eq "residue b = pre-closure word b" braid_b res_b;
+    assert_true "distinct residues distinguish provenance" (res_a <> res_b));
 
   test "word_of_compiled on EchoClosed returns the residue braid" (fun () ->
     let word = [
@@ -204,6 +220,19 @@ let test_echo_threading () =
     match word_of_compiled c with
     | Some w -> assert_eq "word recovered from residue" word w
     | None -> failwith "missing residue");
+
+  test "EchoClosed residue is verbatim (exponents preserved, not unit-expanded)" (fun () ->
+    (* echoClose(braid[s1^3]): the residue keeps the multi-exponent source word
+       (length 1, exponent 3) to match the Lean spec `echo_residue_recovers` and
+       the eval interpreter; only the diagram is unit-expanded (3 crossings). *)
+    let e = echo_close (braid [{ index = 1; exponent = 3 }]) in
+    match unwrap (compile e) with
+    | EchoClosed { residue; diagram } ->
+      assert_eq "residue length (verbatim)" 1 (List.length residue);
+      assert_eq "residue exponent preserved" 3 (List.nth residue 0).exponent;
+      assert_eq "diagram crossings (expanded)" 3 (List.length diagram.crossings)
+    | ClosedDiagram _ -> failwith "expected EchoClosed"
+    | OpenWord _ -> failwith "expected EchoClosed");
 
   test "echo_closed_payload carries residue_blob and pdv1 blob" (fun () ->
     let captured = ref None in
@@ -238,7 +267,7 @@ let test_echo_threading () =
            ~name:"plain"
            (close (braid [{ index = 1; exponent = 1 }])))
     in
-    assert_true "reject plain close" (String.length msg > 0));
+    assert_contains "reject plain close" "plain close" msg);
 
   test "echo Skein hook rejects open word" (fun () ->
     let sink _ = () in
@@ -248,7 +277,7 @@ let test_echo_threading () =
            ~name:"open"
            (braid [{ index = 1; exponent = 1 }]))
     in
-    assert_true "reject open word" (String.length msg > 0));
+    assert_contains "reject open word" "open word" msg);
 
   test "parse + compile echoClose(...) expression" (fun () ->
     match unwrap (compile_source_expr "echoClose(braid[s1, s1, s1])") with

@@ -929,6 +929,68 @@ let test_permutations () =
     b' = [StrandNamed "B"; StrandNamed "C"; StrandNamed "A"])
 
 (* ================================================================== *)
+(*  Echo / product types (structured loss)                             *)
+(* ================================================================== *)
+
+(* Pins infer_expr against the Lean HasType rules tEchoClose/tLower/tResidue/
+   tPair/tFst/tSnd/tEchoAdd/tEchoEq (proofs/Tangle.lean:260-290), plus the
+   same-width tightening of plain `Eq`. *)
+let test_echo_types () =
+  Printf.printf "\n=== Echo / product types ===\n";
+
+  let raises f = try let _ = f () in false with Type_error _ -> true in
+
+  (* echoClose b : Echo[Word[n], Word[0]]  (braid[s1] has width 2) *)
+  test "T-Echo-Close" (fun () ->
+    infer [] (EchoClose (BraidLit [sigma 1])) = TEcho (TWord 2, TWord 0));
+
+  (* lower projects to the result; residue to the residue *)
+  test "T-Lower" (fun () ->
+    infer [] (Lower (EchoClose (BraidLit [sigma 1]))) = TWord 0);
+  test "T-Residue" (fun () ->
+    infer [] (Residue (EchoClose (BraidLit [sigma 1]))) = TWord 2);
+
+  (* products, in left-to-right order *)
+  test "T-Pair" (fun () ->
+    infer [] (Pair (IntLit 1, StringLit "a")) = TProd (TNum, TStr));
+  test "T-Fst" (fun () ->
+    infer [] (Fst (Pair (IntLit 1, StringLit "a"))) = TNum);
+  test "T-Snd" (fun () ->
+    infer [] (Snd (Pair (IntLit 1, StringLit "a"))) = TStr);
+
+  (* echoAdd : Echo[(Num × Num), Num] *)
+  test "T-Echo-Add" (fun () ->
+    infer [] (EchoAdd (IntLit 1, IntLit 2)) = TEcho (TProd (TNum, TNum), TNum));
+
+  (* echoEq : Echo[(τ × τ), Bool], width-matched for words *)
+  test "T-Echo-Eq-Num" (fun () ->
+    infer [] (EchoEq (IntLit 1, IntLit 2)) = TEcho (TProd (TNum, TNum), TBool));
+  test "T-Echo-Eq-Str" (fun () ->
+    infer [] (EchoEq (StringLit "a", StringLit "b")) = TEcho (TProd (TStr, TStr), TBool));
+  test "T-Echo-Eq-Word (same width)" (fun () ->
+    infer [] (EchoEq (BraidLit [sigma 1], BraidLit [sigma 1]))
+      = TEcho (TProd (TWord 2, TWord 2), TBool));
+
+  (* ill-typed echo/product forms are rejected *)
+  test "lower of non-echo rejected" (fun () ->
+    raises (fun () -> infer [] (Lower (IntLit 1))));
+  test "fst of non-pair rejected" (fun () ->
+    raises (fun () -> infer [] (Fst (IntLit 1))));
+  test "echoAdd of non-num rejected" (fun () ->
+    raises (fun () -> infer [] (EchoAdd (IntLit 1, StringLit "a"))));
+  test "echoEq of mismatched word widths rejected" (fun () ->
+    raises (fun () -> infer [] (EchoEq (BraidLit [sigma 1], BraidLit [sigma 1; sigma 2]))));
+
+  (* plain `Eq`: same-width words / Num / Str / Bool accepted;
+     unequal-width words rejected (matches Lean tEqWord) *)
+  test "Eq: same-width words ok" (fun () ->
+    infer [] (BinOp (Eq, BraidLit [sigma 1], BraidLit [sigma 1])) = TBool);
+  test "Eq: Bool == Bool ok (extra-core)" (fun () ->
+    infer [] (BinOp (Eq, BoolLit true, BoolLit false)) = TBool);
+  test "Eq: unequal-width words rejected" (fun () ->
+    raises (fun () -> infer [] (BinOp (Eq, BraidLit [sigma 1], BraidLit [sigma 1; sigma 2]))))
+
+(* ================================================================== *)
 (*  Main: run all test groups                                          *)
 (* ================================================================== *)
 
@@ -942,6 +1004,7 @@ let () =
   test_tensor ();
   test_arithmetic ();
   test_equality ();
+  test_echo_types ();
   test_isotopy ();
   test_close ();
   test_cap_cup ();

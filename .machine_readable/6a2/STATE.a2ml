@@ -7,7 +7,7 @@ project = "tangle"
 version = "0.2.0-dev"
 last-updated = "2026-06-14"
 status = "active"
-session = "echo-threading EchoClosed IR node landed in compositional compiler — 2026-06-14"
+session = "echo-threading EchoClosed node + adversarial audit follow-up (verbatim residue, Eq tightening, --compile-pd wiring, surface echo test coverage) — 2026-06-14"
 
 [project-context]
 name = "Tangle"
@@ -31,7 +31,7 @@ milestones = [
   "DONE (TG-2): decidability — infer ≡ HasType, type uniqueness, Decidable instance",
   "DONE: reproducible Lean toolchain bootstrap (proofs/bootstrap-lean.sh) + SessionStart hook; CI consolidated onto it",
   "DONE: generalise echo to add/eq — product type (Ty.prod), echoAdd/echoEq in Lean+OCaml (PR #45)",
-  "DONE: thread echo residue into TangleIR — EchoClosed IR node in compositional.ml; echo_skein_sink + residue_blob; contract at ECHO-TANGLEIR-THREADING.md",
+  "DONE: thread echo residue into the OCaml compositional IR — EchoClosed node (verbatim residue) in compositional.ml; echo_skein_sink + residue_blob; --compile-pd CLI; cross-repo TangleIR contract at ECHO-TANGLEIR-THREADING.md (Julia KRLAdapter.jl/quandledb still pending)",
   "DONE: full OCaml echo pipeline (ast/typecheck/eval/parser/pretty) — PR #45; build fixed PR #46",
   "LATER (TG-3): OCaml typecheck.ml refines the Lean HasType spec",
   "LATER (TG-5/6/7): compositional rewriter preservation; WASM semantic preservation; braid-group eqBraids",
@@ -50,4 +50,4 @@ actions = [
 [maintenance-status]
 last-run-utc = "2026-06-14T03:00:00Z"
 last-result = "pass"               # unknown | pass | warn | fail
-notes = "dune build + dune test (557/557) GREEN; lean Tangle.lean 0 errors; TG-1+TG-2 LANDED; echo-threading EchoClosed IR node DONE; echo-types f7a965f grade semiring experimental (firewalled)"
+notes = "dune build + dune test (585/585) GREEN; lean Tangle.lean 0 errors; TG-1+TG-2 LANDED; echo-threading EchoClosed node DONE (verbatim residue, --compile-pd wired); Eq typecheck tightened to same-width words (matches tEqWord); surface echo typecheck/eval tests added; echo-types f7a965f grade semiring experimental (firewalled)"

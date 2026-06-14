@@ -95,9 +95,10 @@ type value =
 ```
 
 Echo values use the **Option B** uniform shape: `VEcho(residue, result)` in all
-cases. `echoClose` produces `VEcho(braid_value, VIdentity)`. `echoAdd` produces
-`VEcho(VPair(n1, n2), VNum(n1 + n2))`. `echoEq` produces `VEcho(VPair(v1, v2),
-VBool(v1 = v2))`.
+cases. `echoClose` produces `VEcho(v, VBraid [])`, where `VBraid []` is Tangle's
+identity value (Word[0], the same point `close`/`Identity` yields). `echoAdd`
+produces `VEcho(VPair(VInt n1, VInt n2), VInt(n1 + n2))`. `echoEq` produces
+`VEcho(VPair(v1, v2), VBool(v1 = v2))`.
 
 ### 3.4 Lexer / parser / tokens
 
@@ -142,7 +143,9 @@ The formal spec (`proofs/Tangle.lean`) covers the complete echo+product fragment
 | `echo_roundtrip_typed` | Round-trip is well-typed |
 
 The OCaml typechecker is not yet formally proven to refine `HasType` (TG-3,
-open). Correspondence is validated by the test suite (548/548 passing).
+open); its `Eq` rule now enforces the same-width discipline of the Lean
+`tEqWord` rule, with `Bool == Bool` retained as an extra-core convenience.
+Correspondence is validated by the test suite (585/585 passing).
 
 ---
 
@@ -150,7 +153,6 @@ open). Correspondence is validated by the test suite (548/548 passing).
 
 | Gap | Tracking |
 |-----|----------|
-| TG-3: formal OCaml–Lean refinement proof | PROOF-NEEDS.md TG-3 |
-| TG-1: type safety extended to `let` | PROOF-NEEDS.md TG-1 |
-| TangleIR: thread echo residue into schema | ECHO-TANGLEIR-THREADING.md |
+| TG-3: formal OCaml–Lean refinement proof (`Eq` width discipline now aligned) | PROOF-NEEDS.md TG-3 |
+| TangleIR: thread echo residue into the **Julia** schema (OCaml `EchoClosed` node landed) | ECHO-TANGLEIR-THREADING.md |
 | `echoClose` in WASM backend | tangle-wasm (not yet implemented) |

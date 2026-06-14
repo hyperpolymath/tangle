@@ -44,7 +44,7 @@ and `proofs/Tangle.lean`:
 `BraidLit`, `Compose`, `Tensor`, `Pipeline`, `Close`, `Add`, `Eq`, `Var`, `Let`,
 plus the **echo-types fragment** (`EchoClose`, `Lower`, `Residue`, `EchoAdd`,
 `EchoEq`) and the **product type** (`Pair`, `Fst`, `Snd`). 26 typing rules,
-57 step rules. All four theorems cover the full fragment including let-binding (TG-1)
+55 step rules. All four theorems cover the full fragment including let-binding (TG-1)
 and the echo/product fragment (TG-10). Type checking is decidable (TG-2).
 
 ## What remains
@@ -55,8 +55,8 @@ Cross-referenced to [PROOF-NARRATIVE.md §3](PROOF-NARRATIVE.md#3-remaining-obli
 |---|-----------|----------|--------|----------|--------|--------|
 | TG-1 | Extend Progress/Preservation/Determinism/TypeSafety to `let`-binding | TP | Lean 4 | P1 | — | **LANDED** (`proofs/Tangle.lean` §METATHEORY — `weakening`, `subst_preserves`; all four theorems cover `var`/`let`) |
 | TG-2 | Type checking is decidable: define `infer : Expr → Option Ty` proven equivalent to `HasType` | ALG | Lean 4 | P1 | — | **LANDED** (`proofs/Tangle.lean` §TG-2 — `infer`, `infer_sound`, `infer_complete`, `infer_iff_hasType`, `type_unique`, `decidableHasType`) |
-| TG-3 | OCaml `typecheck.ml` refines the Lean `HasType` spec | TP | Lean 4 + translation validation | P1 | 5d | NOT STARTED |
-| TG-4 | Pretty-print/parse round-trip on closed values | INV | OCaml property test (cheap) | P2 | 4h | **LANDED** (PR #46 — OCaml property test in `compiler/test/test_roundtrip.ml`, 36 entries including 16 echo/product forms) |
+| TG-3 | OCaml `typecheck.ml` refines the Lean `HasType` spec | TP | Lean 4 + translation validation | P1 | 5d | NOT STARTED (partial alignment: `Eq` now enforces same-width words to match `tEqWord`; `Bool == Bool` is a deliberate extra-core feature outside the 26-rule fragment, like `match`/`weave`/`mirror`/`compute` — these must be excluded from or added to the modelled core before TG-3 can close) |
+| TG-4 | Pretty-print/parse round-trip on closed values | INV | OCaml property test (cheap) | P2 | 4h | **LANDED** (PR #46 — OCaml property test in `compiler/test/test_roundtrip.ml`, 26-entry corpus including 8 echo/product constructors; 52 round-trip runs) |
 | TG-5 | `compositional.ml` (418 LoC) rewriter preserves types | TP | Lean 4 + OCaml test file | P2 | 3d | NOT STARTED (B6: no test file yet) |
 | TG-6 | WASM compilation preserves semantics (source eval ≡ wasm exec) | TP / ALG | Lean 4 bisimulation | P1 | 3w (research-grade) | NOT STARTED |
 | TG-7 | `Step.eqBraids` decides braid-group equivalence (not list equality) | ALG / DOM | OCaml + Lean 4 | P2 | 2w | NOT STARTED (current impl is soundness-floor, not completeness) |

@@ -725,6 +725,53 @@ let test_pp_value () =
     pp_value VUnit = "()")
 
 (* ================================================================== *)
+(*  Echo / product types (structured loss)                             *)
+(* ================================================================== *)
+
+(* Pins the eval-level semantics against the Lean Step relation
+   (proofs/Tangle.lean:345-382): lower = result, residue = residue/operand-pair,
+   echoClose residue = braid + result = identity, echoAdd/echoEq residue = the
+   operand pair.  Catches residue/result swaps that the parse/pretty round-trip
+   corpus cannot. *)
+let test_echo_types () =
+  Printf.printf "\n=== Echo / product types ===\n";
+
+  (* lower projects to the RESULT (second component) — echoAddNums result is the sum *)
+  test "lower (echoAdd 3 4) = 7" (fun () ->
+    eval (Lower (EchoAdd (IntLit 3, IntLit 4))) = VInt 7);
+
+  (* residue projects to the RESIDUE (first component) — the retained operand pair.
+     This is the arm a residue/result swap would break. *)
+  test "residue (echoAdd 3 4) = (3, 4)" (fun () ->
+    eval (Residue (EchoAdd (IntLit 3, IntLit 4))) = VPair (VInt 3, VInt 4));
+
+  test "fst (pair 1 \"a\") = 1" (fun () ->
+    eval (Fst (Pair (IntLit 1, StringLit "a"))) = VInt 1);
+
+  test "snd (pair 1 \"a\") = \"a\"" (fun () ->
+    eval (Snd (Pair (IntLit 1, StringLit "a"))) = VString "a");
+
+  (* echoClose: residue = the braid, result = the identity value (Word[0]) *)
+  test "echoClose(braid[s1]) = echoVal (braid[s1]) identity" (fun () ->
+    eval (EchoClose (BraidLit [sigma 1])) = VEcho (VBraid [rgen 1 1], VBraid []));
+
+  test "lower (echoClose b) = identity" (fun () ->
+    eval (Lower (EchoClose (BraidLit [sigma 1]))) = VBraid []);
+
+  test "residue (echoClose b) = b" (fun () ->
+    eval (Residue (EchoClose (BraidLit [sigma 1]))) = VBraid [rgen 1 1]);
+
+  (* echoEq: residue = operand pair, result = the boolean *)
+  test "residue (echoEq 1 1) = (1, 1)" (fun () ->
+    eval (Residue (EchoEq (IntLit 1, IntLit 1))) = VPair (VInt 1, VInt 1));
+
+  test "lower (echoEq 1 1) = true" (fun () ->
+    eval (Lower (EchoEq (IntLit 1, IntLit 1))) = VBool true);
+
+  test "lower (echoEq 1 2) = false" (fun () ->
+    eval (Lower (EchoEq (IntLit 1, IntLit 2))) = VBool false)
+
+(* ================================================================== *)
 (*  Main: run all test groups                                          *)
 (* ================================================================== *)
 
@@ -745,6 +792,7 @@ let () =
   test_compute ();
   test_arithmetic ();
   test_equality ();
+  test_echo_types ();
   test_errors ();
   test_program ();
   test_pp_value ();

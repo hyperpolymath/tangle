@@ -48,16 +48,40 @@ cross-repo contract at `docs/spec/ECHO-TANGLEIR-THREADING.md`.
   (`"s1,s2^-1,s1"` format) and the PDv1 blob.
 - **`word_of_compiled (EchoClosed _)`** returns the residue braid —
   the pre-closure word is recoverable at the IR level.
-- Parser adapter extended: `echoClose(braid[...])` compiles to
-  `EchoClosed`.
+- Parser adapter (`of_ast_expr`) maps `Ast.EchoClose` to the
+  compositional `EchoClose`, reachable via the new `--compile-pd` CLI
+  flag (see below).
 - Validated against `EchoProvenance.agda` (echoes distinguish
-  tag-differing records — exact analogue of distinct braids closing to
-  the same diagram) and `EchoResidue.agda` (`no-section` theorem —
+  tag-differing records) and `EchoResidue.agda` (`no-section` theorem —
   the residue must be threaded, not recomputed after lowering).
-- 9 new tests; total: **557/557** pass.
 
 Downstream: Julia `KRLAdapter.jl` and `quandledb` implement the
 consumer side per §3–4 of the contract doc.
+
+### Audit follow-up (correctness + coverage hardening)
+
+A multi-agent adversarial audit of the echo/TG work surfaced fixes,
+applied here:
+
+- **Residue is now verbatim.** `compile (EchoClose b)` retains the
+  *unexpanded* pre-closure braid as the residue (via a new
+  `source_word_of_expr`), so `echoClose(braid[s1^3])` keeps residue
+  `s1^3` rather than the unit-expanded `s1,s1,s1`. This matches the Lean
+  `echo_residue_recovers` theorem and the eval interpreter (which were
+  already exponent-faithful); only the planar diagram is unit-expanded.
+- **`Eq` typecheck tightened to the spec.** Word equality now requires
+  equal width (`Word[n] == Word[m]` ⇒ `n = m`), matching the Lean
+  `tEqWord` rule; unequal-width comparisons are now rejected instead of
+  silently evaluating to `false`. `Bool == Bool` is retained as an
+  explicit extra-core convenience (used by `examples/braids_as_data`).
+- **`--compile-pd <file>` CLI flag** wires the compositional/Skein path
+  (previously test-only) into the shipped binary: each closed/echo-closed
+  `def` is lowered to its PDv1 blob, with the residue blob for `echoClose`.
+- **Test coverage for the surface echo pipeline.** Added direct
+  typecheck (`test_typecheck.ml`) and eval (`test_eval.ml`) tests pinning
+  the residue/result ordering of all 8 echo/product forms against the
+  Lean `Step` rules — previously only parse/pretty round-trip was tested.
+- Test-suite total: **585/585** pass (was 557).
 
 ### Echo types OCaml pipeline (PR #45 + #46)
 
@@ -68,7 +92,7 @@ consumer side per §3–4 of the contract doc.
   - `eval.ml`: `VEcho`/`VPair` value forms; 8 new `eval_expr` arms; `pp_value` made `rec`
   - `lexer.mll` + `parser.mly` + `token.ml`: keyword tokens and grammar productions for all 8 surface forms (`echoClose(e)`, `lower(e)`, `residue(e)`, `pair(a,b)`, `fst(e)`, `snd(e)`, `echoAdd(a,b)`, `echoEq(a,b)`)
   - `pretty.ml`: pretty-printers for all 8 forms; round-trips through parser
-- TG-4 (pretty-print/parse round-trip) discharged: `test_roundtrip.ml` extended with 16 new TG-4 entries covering every echo/product constructor (PR #46)
+- TG-4 (pretty-print/parse round-trip) discharged: `test_roundtrip.ml` extended with 8 new echo/product corpus entries (16 round-trip runs) covering every echo/product constructor (PR #46)
 - `docs/spec/ECHO-TANGLEIR-THREADING.md`: cross-repo contract for how echo residue threads through TangleIR to QuandleDB (PR #45)
 - Compositional PD compiler API (`compositional.ml` / `.mli`):
   `expr`, `planar_diagram`, `compiled`, `skein_payload` types

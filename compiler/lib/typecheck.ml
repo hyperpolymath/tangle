@@ -533,10 +533,18 @@ and infer_binop (op : binop) (t1 : ty) (t2 : ty) : ty =
     | _ -> type_error "Division requires Num, got %s / %s" (pp_ty t1) (pp_ty t2)
     end
 
-  (* [T-Eq-Word], [T-Eq-Num], [T-Eq-Str] *)
+  (* [T-Eq-Word] (same width), [T-Eq-Num], [T-Eq-Str].
+   * Word equality requires equal width (n = m), matching the mechanised
+   * Lean rule `tEqWord` (proofs/Tangle.lean:248) which binds one width to
+   * both operands. `Bool == Bool` is an extra-core convenience (used by
+   * examples/braids_as_data.tangle) that lives outside the 26-rule Lean
+   * fragment, like `match`/`weave`/`mirror`/etc.; recorded under TG-3 in
+   * PROOF-NEEDS.md. *)
   | Eq ->
     begin match t1, t2 with
-    | TWord _, TWord _  -> TBool
+    | TWord n, TWord m when n = m -> TBool
+    | TWord n, TWord m ->
+      type_error "Cannot compare words of differing width: Word[%d] == Word[%d]" n m
     | TNum, TNum        -> TBool
     | TStr, TStr        -> TBool
     | TBool, TBool      -> TBool

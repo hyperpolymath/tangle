@@ -76,7 +76,7 @@ This document maps language features to design decisions and formal rules.
 **TANGLE-JTV**: 10/10 features fully specified (100%)
 **Total decisions referenced**: 44 (D1.1-D1.25, D2.1-D2.11)
 **Total typing rules**: 26 HasType rules (Lean); 37+ spec rules
-**Total evaluation rules**: 57 Step rules (Lean); 26+ spec rules
+**Total evaluation rules**: 55 Step rules (Lean); 26+ spec rules
 
 All features have corresponding grammar productions in EBNF, typing rules in
 FORMAL-SEMANTICS.md, and evaluation rules where applicable.

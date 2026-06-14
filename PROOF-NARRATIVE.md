@@ -31,7 +31,7 @@ Tangle is the **semantic core** of a four-layer federated stack:
                   ▼
 ┌─────────────────────────────────────────────────────────┐
 │  Tangle CORE  (THIS REPO)                               │
-│    proofs/Tangle.lean — mechanised results (26 HasType, 57 Step) │
+│    proofs/Tangle.lean — mechanised results (26 HasType, 55 Step) │
 │    compiler/lib/*.ml — OCaml implementation             │
 │    compiler/tangle-wasm — WASM backend                  │
 │    compiler/tangle-lsp — LSP server                     │
@@ -86,10 +86,10 @@ See PROOF-NARRATIVE §2.5.
 
 | ID | Statement | Where |
 |----|-----------|-------|
-| **T-Progress** | Every well-typed closed term is either a value or can take a step. | `Tangle.lean:247-326` |
-| **T-Preservation** | Stepping preserves types: `Γ ⊢ e : τ ∧ e → e' ⟹ Γ ⊢ e' : τ`. | `Tangle.lean:333-415` |
-| **T-Determinism** | The step relation is deterministic: `e → e₁ ∧ e → e₂ ⟹ e₁ = e₂`. | `Tangle.lean:422-549` |
-| **T-TypeSafety** | Well-typed closed terms never get stuck (Progress + Preservation corollary). | `Tangle.lean:556-558` |
+| **T-Progress** | Every well-typed closed term is either a value or can take a step. | `Tangle.lean:670` |
+| **T-Preservation** | Stepping preserves types: `Γ ⊢ e : τ ∧ e → e' ⟹ Γ ⊢ e' : τ`. | `Tangle.lean:870` |
+| **T-Determinism** | The step relation is deterministic: `e → e₁ ∧ e → e₂ ⟹ e₁ = e₂`. | `Tangle.lean:1053` |
+| **T-TypeSafety** | Well-typed closed terms never get stuck (Progress + Preservation corollary). | `Tangle.lean:1303` |
 
 Each is proven for the **full core fragment**: numerals, strings, booleans, identity,
 braid literals, composition, tensor, pipeline, close, addition, equality, variables,
@@ -125,7 +125,7 @@ themselves proofs of the form "these are the rules"):
   (`tEchoClose`, `tLower`, `tResidue`, `tEchoVal`); 7 product+echo-binary
   (`tPair`, `tFst`, `tSnd`, `tEchoAdd`, `tEchoEqWord`, `tEchoEqNum`,
   `tEchoEqStr`); 2 let/var (`tVar`, `tLet`)
-- **`Step`** — small-step semantics, 57 rules: 27 base, 9 echo-close/lower/residue, 6 product, 11 echoAdd/echoEq, 2 let, 2 StepStar
+- **`Step`** — small-step semantics, 55 rules: 27 base, 9 echo-close/lower/residue, 6 product, 11 echoAdd/echoEq, 2 let (plus a separate 2-constructor `StepStar` reflexive-transitive closure: `refl`, `head`)
 
 These are the formal spec the OCaml implementation is meant to refine
 (see TG-3 below).
@@ -189,9 +189,9 @@ complete echo + product fragment described in §2.5:
 | `eval.ml` | `VEcho`, `VPair` values; 8 `eval_expr` arms; `pp_value` made `rec` |
 | `lexer.mll` / `parser.mly` / `token.ml` | Keyword tokens + grammar productions for all 8 surface forms |
 | `pretty.ml` | Pretty-printers for all 8 forms |
-| `test_roundtrip.ml` | TG-4 round-trip property test: 36 entries including all 8 echo/product constructors |
+| `test_roundtrip.ml` | TG-4 round-trip property test: 26-entry corpus including all 8 echo/product constructors |
 
-**Build oracle**: `dune build` + `dune test` (548/548) green since PR #46. The
+**Build oracle**: `dune build` + `dune test` (585/585) green. The
 pre-PR #46 `main` did not compile due to two `Warning 8` exhaustiveness gaps
 (both fixed: `strand_type_of_ty` in `typecheck.ml`; debug token printer in `bin/main.ml`).
 
@@ -323,8 +323,9 @@ claim is unchecked.
 
 ### TG-4 — Pretty-print/parse round-trip
 
-**Status: LANDED** (PR #46). `compiler/test/test_roundtrip.ml` extended with
-36 entries including all 8 echo/product constructors; 548/548 tests pass.
+**Status: LANDED** (PR #46). `compiler/test/test_roundtrip.ml` is a 26-entry
+corpus including all 8 echo/product constructors (52 round-trip runs); the
+full suite is 585/585 green.
 
 **Claim.** `parse(pretty e) = e` for every closed value `e`.
 
