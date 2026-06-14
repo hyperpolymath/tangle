@@ -52,6 +52,15 @@ and token =
   | CAP
   | CUP
   | BRAID
+  (* Echo / product forms *)
+  | ECHOCLOSE
+  | LOWER
+  | RESIDUE
+  | PAIR
+  | FST
+  | SND
+  | ECHOADD
+  | ECHOEQ
 
   (* ---- Invariant names ---- *)
   | JONES

@@ -32,6 +32,9 @@
 %token IDENTITY TRUE FALSE
 %token CLOSE MIRROR REVERSE SIMPLIFY CAP CUP BRAID
 
+(* Echo / product forms — surface syntax mirrors pretty.ml output *)
+%token ECHOCLOSE LOWER RESIDUE PAIR FST SND ECHOADD ECHOEQ
+
 (* Invariant names *)
 %token JONES ALEXANDER HOMFLY KAUFFMAN WRITHE LINKING
 
@@ -263,6 +266,18 @@ unary_expr:
     { Cap (e1, e2) }
   | CUP LPAREN e1 = expr COMMA e2 = expr RPAREN
     { Cup (e1, e2) }
+  (* ---- Echo / product forms (mirror pretty.ml output) ---- *)
+  | ECHOCLOSE LPAREN e = expr RPAREN   { EchoClose e }
+  | LOWER     LPAREN e = expr RPAREN   { Lower e }
+  | RESIDUE   LPAREN e = expr RPAREN   { Residue e }
+  | FST       LPAREN e = expr RPAREN   { Fst e }
+  | SND       LPAREN e = expr RPAREN   { Snd e }
+  | PAIR LPAREN e1 = expr COMMA e2 = expr RPAREN
+    { Pair (e1, e2) }
+  | ECHOADD LPAREN e1 = expr COMMA e2 = expr RPAREN
+    { EchoAdd (e1, e2) }
+  | ECHOEQ LPAREN e1 = expr COMMA e2 = expr RPAREN
+    { EchoEq (e1, e2) }
   | t = twist_expr                     { t }
   | MINUS e = primary_expr             { UnaryOp (Neg, e) }
   | e = primary_expr                   { e }
