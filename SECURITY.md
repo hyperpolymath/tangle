@@ -41,7 +41,7 @@ This method ensures:
 ### Alternative: Email
 
 If you cannot use GitHub Security Advisories, email us directly at
-6759885+hyperpolymath@users.noreply.github.com. No PGP key is currently
+j.d.a.jewell@open.ac.uk. No PGP key is currently
 published; for an encrypted channel, request one via a GitHub Security
 Advisory.
 
@@ -354,7 +354,7 @@ When using tangle, we recommend:
 
 | Purpose | Contact |
 |---------|---------|
-| **Security issues** | [Report via GitHub](https://github.com/hyperpolymath/tangle/security/advisories/new) or 6759885+hyperpolymath@users.noreply.github.com |
+| **Security issues** | [Report via GitHub](https://github.com/hyperpolymath/tangle/security/advisories/new) or j.d.a.jewell@open.ac.uk |
 | **General questions** | [GitHub Discussions](https://github.com/hyperpolymath/tangle/discussions) |
 | **Other enquiries** | See [README](README.md) for contact information |
 
