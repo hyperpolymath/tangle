@@ -50,7 +50,8 @@ This aligns with concepts from:
 
 == KRL — Knot Resolution Language
 
-KRL is the surface language used to interact with the system.
+KRL is the surface language used to interact with the system — a *resolution DSL*,
+*not merely* a query language.
 
 It is organised around four fundamental operations:
 
@@ -59,19 +60,23 @@ It is organised around four fundamental operations:
 |Operation |Role
 
 |Construct
-|Build structured objects (tangles, compositions)
+|Create or declare presentations, structures, claims, datasets
 
 |Transform
-|Rewrite structures (e.g. simplification, normalisation)
+|Rewrite, normalize, compose, concatenate, permute, mutate
 
 |Resolve
-|Determine equivalence classes
+|Decide / disambiguate / evaluate equivalence or identity questions
 
 |Retrieve
-|Query objects by invariants or structure
+|Inspect, fetch, project, explain, or return stored/computed results
 |===
 
-KRL is not a general-purpose language; it is a *domain language for structured objects and their equivalence*.
+KRL is not a general-purpose language; it is a *domain language for structured
+objects and their equivalence*. *Retrieve* recovers resolution-relevant artefacts
+(presentations, invariants, witnesses, equivalence classes, prior resolutions,
+explanations, provenance) — it is *not* arbitrary database querying. See krl
+`docs/decisions/0002-query-language-deferred.adoc`.
 
 ---
 
@@ -81,13 +86,13 @@ Tangle is part of a layered system:
 
 ---
 
-KRL (surface language)
+KRL (surface language — resolution DSL, not merely a query language)
 ↓
-TangleIR (canonical representation)
+TangleIR (canonical interchange representation)
 ↓
-VerisimCore (categorical abstraction)
+Tangle core (this repo — proven type-safe small-step semantics)
 ↓
-Skein / QuandleDB (storage and equivalence)
+QuandleDB + Skein.jl (persistence + invariant/equivalence; computational engine)
 -------------------------------------------
 
 * *TangleIR* is the central representation shared across layers
