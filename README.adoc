@@ -86,13 +86,13 @@ Tangle is part of a layered system:
 
 ---
 
-KRL (surface language — resolution DSL, not merely a query language)
+KRL (surface language)
 ↓
-TangleIR (canonical interchange representation)
+TangleIR (canonical representation)
 ↓
-Tangle core (this repo — proven type-safe small-step semantics)
+VerisimCore (categorical abstraction)
 ↓
-QuandleDB + Skein.jl (persistence + invariant/equivalence; computational engine)
+Skein / QuandleDB (storage and equivalence)
 -------------------------------------------
 
 * *TangleIR* is the central representation shared across layers
