@@ -1,0 +1,222 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= AFFIRMATION — tangle, as of 2026-06-19
+:toc: macro
+:toclevels: 2
+
+_the No-Bullshit file: what we affirm was true and checkable at this moment_
+
+[NOTE]
+====
+*Genre.* An *affirmation* is a solemn declaration of the truth of a statement,
+made by someone who _declines to swear an oath_ — our truth-as-best-believed at
+a stamped instant, binding on our honesty, not a claim of infallibility. It is
+not the README and not the EXPLAINME:
+
+[cols="1,3,2",options="header"]
+|===
+| File | Answers | Tense
+| `README.adoc` | _Where is this going, and why?_ — Tangle's purpose and steering | future / aspirational
+| `EXPLAINME.adoc` | _How is it built, and what's the evidence?_ | descriptive / mechanism
+| *`AFFIRMATION.adoc`* (this file) | _What can we honestly affirm was *true and checkable* at a stamped moment?_ | a frozen instant, falsifiable
+|===
+
+Every repo in the estate carries one, per the 2026-06-19 estate rule.
+====
+
+toc::[]
+
+== What this is, and how it is designed to work
+
+*What it is.* A short, dated, jointly-signed snapshot of what we can _honestly
+and verifiably_ claim about the tangle repo at one exact commit.
+
+*How it is designed to work.*
+
+. *Ground truth, not memory.* Every gate result below was produced by _running
+  the check this session_. *Material caveat (read it):* `just` is absent, so RSR/
+  contractile checks were run *as bash*; and *none of tangle's build/test/proof
+  toolchains were runnable this session* — `cargo build --offline` could not
+  resolve dependencies (no vendored crates / no network), and OCaml `dune` + Lean
+  are not installed. See <<Outstanding / not-run>>.
+. *A frozen anchor.* The file names the exact commit SHA, branch, and toolchain
+  (see <<Verifiable anchor>>).
+. *A real signature.* Authoritatively landed by the maintainer's *signed git
+  commit*. The AI engineering party *cannot* GPG-sign and does not claim to.
+
+*We are fallible.* Best honest belief, not a proof of its own correctness.
+
+== The epistemic contract
+
+This document records our *best joint belief* at the timestamp below. *No
+intentional overclaim:* where a check passed we say "PASS"; where the toolchain
+was *absent* we say "not run", never "passed".
+
+*Standing invitation to refute.* Reproduce <<reproduce>> at the stamped commit
+and tell us where the discrepancy is.
+
+== Verifiable anchor
+
+[cols="1,3"]
+|===
+| *Repo*        | `hyperpolymath/tangle` — Tangle / KRL topological programming language: the proven type-safe small-step core + canonical TangleIR
+| *Branch*      | `claude/practical-newton-9eFe2` (feature branch; *not* anchored to `main`)
+| *Commit (HEAD)* | `102499dbacb005bb5adc46736c8798fa1d365a82`
+| *Permalink*   | https://github.com/hyperpolymath/tangle/tree/102499dbacb005bb5adc46736c8798fa1d365a82
+| *Verified*    | 2026-06-19 (checks run this session; precise UTC second not captured — date, not claimed instant)
+| *Working-tree delta* | Clean — `git status --porcelain` shows only this untracked `AFFIRMATION.adoc`. (The README stack-diagram edit placing VerisimCore is *maintainer-confirmed* and is committed in the parent commit `102499d`.)
+| *Toolchain (present)* | `git`, `Agda 2.6.3`, `rustc`, `cargo`. *Absent this session:* `just`, `deno`, `julia`, `lean`, OCaml `dune`.
+| *Run method*  | RSR/contractile gate bodies as bash. `cargo build --offline` *attempted* (dep-resolution failure — not a code verdict). OCaml + Lean *not run* (absent).
+| *HEAD commit signature* | *Not signed by the AI party.* Authoritative signature is the maintainer's signed commit that lands this file.
+|===
+
+== Stack placement: VerisimCore (maintainer-confirmed 2026-06-19) [[verisimcore]]
+
+The architecture ladder in `README.adoc` was updated and *confirmed correct by
+the maintainer* on 2026-06-19. The canonical stack now reads:
+
+[literal]
+KRL (surface language)
+  ↓
+TangleIR (canonical representation)
+  ↓
+VerisimCore (categorical abstraction)
+  ↓
+Skein / QuandleDB (storage and equivalence)
+
+This *resolves the previously-parked VerisimCore-placement question* — VerisimCore
+sits between TangleIR and the storage/equivalence layer as the categorical
+abstraction. The edit is committed in the parent commit `102499d` (not
+uncommitted). It simplifies the diagram's labels; the finer estate framings (e.g.
+"KRL is not merely a query language", "Skein is the engine") continue to live in
+krl's and Skein.jl's own docs and affirmations.
+
+== Companion documents and repo metadata (cross-check)
+
+* *`README.adoc`* — title `= Tangle / KRL — Topological Programming Language`
+  (real). Now carries the maintainer-confirmed VerisimCore stack (committed,
+  parent `102499d`).
+* *`EXPLAINME.adoc`* — present, real: `= EXPLAINME: Tangle`.
+* *`0-AI-MANIFEST.a2ml`* — present.
+* *Template residue* — *5 files* still contain `{{PLACEHOLDER}}` tokens and *8
+  files* reference the `rsr-template-repo` lineage. The `Justfile` itself is
+  clean of the template name. Partial instantiation debt — noted, not hidden.
+* *GitHub repo description / topics* — *not fetched this session* (no `gh`).
+
+== The honest state (one breath)
+
+tangle is the *most rigorous repo in the estate so far*: a serious multi-language
+implementation — an OCaml compiler core (`compiler/{bin,lib,test}` +
+`dune-project`), Rust crates (`src/rust` with a committed `Cargo.lock`,
+`compiler/tangle-lsp`, `compiler/tangle-wasm`), Lean-4 type-safety proofs
+(`proofs/Tangle.lean`, `proofs/TG3Differential.lean`, `lean-toolchain`), grammars,
+and five dialects. It self-grades READINESS *C* and documents *real* formal
+verification, and its stack placement (incl. VerisimCore) is maintainer-confirmed.
+The honest gaps: some template residue remains, and — crucially — *none of its
+build/test/proof toolchains were runnable this session*, so what follows confirms
+*structure and the repo's own proof ledger*, not a fresh green build.
+
+== What is solid (and how we checked)
+
+* *MUST/TRUST-style checks — PASS.* Run as bash: LICENSE present; no banned
+  `Dockerfile`/`Makefile`; SPDX headers on a sampled 120 `.rs` files (0
+  unheadered); LICENSE carries an SPDX/MPL identifier; no `.env` /
+  `credentials.json` committed.
+* *Real, substantial, multi-language content.* OCaml compiler (`compiler/lib`,
+  `compiler/bin`, `compiler/test`, `dune-project`); 18 Rust source files with a
+  pinned `Cargo.lock`; LSP + WASM Rust crates; grammars (`src/tangle.ebnf`,
+  `src/tangle-jtv.ebnf`, `spec/grammar.ebnf`); Lean proofs; five dialects
+  (`braid-calculus`, `quantum-circuit`, `skein-algebra`, `string-diagram`,
+  `virtual-knot`).
+* *Documented formal verification (the repo's ledger, reported as such).*
+  `PROOF-NEEDS.md` records *TG-3 LANDED* at translation-validation level: *496
+  Lean kernel-checked obligations* in `TG3Differential.lean` (generated from
+  `infer_expr`, `by decide`) + *1008 OCaml `--check` assertions* (`dune
+  runtest`), reduced via TG-2 (`infer ≡ HasType`). We report this as tangle's
+  *own documented status* — we did *not* re-run Lean/OCaml this session.
+
+== Known-incomplete but honestly fenced (loud, never silent)
+
+* *READINESS grade `C`.* `READINESS.md` self-assesses *Current Grade: C* —
+  reported as-is.
+* *Template residue.* 5 `{{PLACEHOLDER}}` files + 8 `rsr-template-repo`
+  references remain to be cleaned.
+* *Proof scope is honest in the repo's own words:* TG-3 refinement is OCaml→Lean
+  *only* (not a universal Lean proof over all OCaml runs); `bool==bool` and the
+  `close` boundary are catalogued divergences (D1/D2). We do not inflate it.
+
+== Outstanding / not-run (no spin) [[Outstanding / not-run]]
+
+* *No build/test/proof toolchain was runnable this session.*
+  ** `cargo build --offline` *failed to resolve dependencies* (`serde`, … are not
+     vendored and offline mode cannot fetch them). This is an *environment*
+     limit, **not** a code verdict — `Cargo.lock` is present; a *networked*
+     `cargo build`/`cargo test` in-environment is the authoritative check.
+  ** OCaml `dune` and `lean` are *absent*, so the compiler test suite and the
+     Lean proofs were *not executed*. We affirm the proof *files exist* and
+     report the repo's *documented* TG-2/TG-3 status — we do *not* affirm, from
+     this session, a fresh green proof/build.
+
+== Reproduce it yourself [[reproduce]]
+
+From the repo root, at the commit above:
+
+[source,bash]
+----
+git rev-parse HEAD          # expect 102499dbacb005bb5adc46736c8798fa1d365a82
+git status --porcelain      # expect only this untracked AFFIRMATION.adoc
+
+# MUST / TRUST style (expect PASS):
+test -f LICENSE; test ! -f Dockerfile -a ! -f Makefile
+grep -q 'SPDX\|MPL' LICENSE; test ! -f .env
+
+# Instantiation debt (expect residue):
+grep -rl '{{'{{'}}[A-Z_]*{{'}}'}}' --include='*.adoc' --include='*.md' . | grep -v PLACEHOLDERS  # ~5 files
+grep -rl 'rsr-template-repo' . | grep -v '.git/'                                     # ~8 files
+
+# The honest gaps (NOT runnable without env/toolchain):
+#   ( cd src/rust && cargo build )        # needs network or vendored deps
+#   ( cd compiler && dune runtest )       # needs OCaml/dune
+#   bash proofs/check-tg3-differential.sh # needs Lean
+----
+
+== One-line characterisation (quote this)
+
+"Tangle is the proven type-safe small-step core + TangleIR of the KRL stack
+(KRL → TangleIR → VerisimCore → Skein/QuandleDB, maintainer-confirmed) — a
+serious multi-language implementation (OCaml compiler, Rust LSP/WASM with a
+pinned `Cargo.lock`, Lean-4 type-safety proofs, five dialects) that self-grades
+READINESS `C` and documents real formal verification (TG-3 translation-validation
+LANDED: 496 Lean obligations + 1008 OCaml assertions, per its own proof ledger).
+`MUST`/`TRUST` gates pass; honest debt: 5 placeholder files + 8 `rsr-template-repo`
+references remain, and *none* of its build/test/proof toolchains were runnable
+this session (cargo offline can't resolve deps; OCaml/dune + Lean absent) — so
+structure + the repo's proof records are confirmed, not a fresh green build. No
+intentional overclaim."
+
+== Key concern + cross-repo wiring
+
+tangle's *key concern* is *type-safe semantics + the canonical TangleIR* — the
+proven small-step core that KRL lowers into and that the categorical /
+storage / equivalence layers build on. Per the 2026-06-19 estate rule, each repo
+carries its own AFFIRMATION + scoped Must/Intend/Wish table; tangle's lives at
+`docs/identity-fabric/musts-intends-wishes.adoc`. Confirmed stack: *krl* (surface
+DSL) → *tangle* (TangleIR + type-safe core, this repo) → *VerisimCore*
+(categorical abstraction) → *Skein.jl* / *quandledb* (storage + equivalence).
+Adjacent: *echo-types* — structured-loss theory + the identity-fabric framing.
+
+== Joint attestation
+
+To the best of our joint belief at the timestamp above, every claim in this file
+is true and was checked as described — with no intentional overclaim and with the
+un-run toolchains stated rather than implied.
+
+* *Engineering party (AI):* ran the RSR/contractile checks recorded here as bash
+  on 2026-06-19, attempted the offline cargo build, committed the
+  maintainer-confirmed VerisimCore README edit, and stands behind this wording as
+  a faithful report — including the toolchain-absent caveats and explicitly *not*
+  having re-run the Lean/OCaml proofs.
+* *Owner / maintainer:* Jonathan D.A. Jewell — signs by committing this file with
+  `-S`; the signed git commit over this content, at the SHA above, is the
+  authoritative form.
+* *Signed-off-date:* (fill on signing)

@@ -1,0 +1,73 @@
+// SPDX-License-Identifier: MPL-2.0
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= tangle — Normative Scope (Must / Intend / Wish)
+:toc: preamble
+:revdate: 2026-06-19
+
+[abstract]
+Per-repo normative-scope record for tangle (the proven type-safe small-step core
++ canonical TangleIR). Estate rule (2026-06-19): every repo carries its own
+scoped table; crossover content is duplicated and marked until resolved, then
+wired into the other relevant repos. `◇` marks proposals not yet canonical.
+
+== Confirmed stack placement (2026-06-19)
+
+[literal]
+KRL (surface DSL) → TangleIR (canonical representation) → tangle core (this repo,
+proven type-safe small-step semantics) → VerisimCore (categorical abstraction)
+→ Skein.jl / QuandleDB (storage + equivalence)
+
+VerisimCore's placement (categorical abstraction, below the tangle core) is
+*maintainer-confirmed*; it resolves the previously-parked placement question.
+
+== Levels
+
+* *MUST* — required to be what it is (RFC 2119 normative).
+* *INTEND* — committed direction.
+* *WISH* — aspirational.
+
+== tangle (own)
+
+[cols="1,5", options="header"]
+|===
+| Level | tangle
+
+| *MUST*
+| Be the *proven type-safe small-step core* + the *canonical TangleIR* that KRL
+  lowers into; carry *machine-checked* type-safety at the scoped level (Lean-4
+  `HasType` / `infer`; TG-2 `infer ≡ HasType`; TG-3 OCaml→Lean translation
+  validation — *honestly scoped*, not a universal proof over all OCaml runs);
+  keep the catalogued divergences (D1 `close`, D2 `bool==bool`) visible, not
+  papered over; SPDX headers on all files.
+
+| *INTEND*
+| Finish RSR-template instantiation (clear the 5 `{{PLACEHOLDER}}` files + 8
+  `rsr-template-repo` references per `AFFIRMATION.adoc`); raise READINESS above
+  `C`; extend proof coverage to the remaining `PROOF-NEEDS` obligations beyond
+  TG-3; mature the five dialects (`braid-calculus`, `quantum-circuit`,
+  `skein-algebra`, `string-diagram`, `virtual-knot`); wire the *VerisimCore*
+  categorical-abstraction layer below the core ◇; keep the Rust LSP/WASM crates
+  and OCaml compiler in step.
+
+| *WISH*
+| An end-to-end *verified* compiler pipeline (KRL → TangleIR → core, proof-carried
+  at each lowering); a richer categorical integration with VerisimCore ◇; further
+  dialects; a universal (reflected) Lean proof over the OCaml typechecker ◇
+  (currently *not claimed* — refinement is OCaml→Lean only).
+|===
+
+== Cross-repo wiring
+
+tangle is the *type-safety waist* of the stack: KRL's surface lowers into
+TangleIR (this repo's canonical representation), the proven core gives it
+small-step semantics, and below it VerisimCore (categorical abstraction) feeds
+Skein.jl / QuandleDB (storage + equivalence). The load-bearing shared invariant
+across the stack is *equivalence-integrity* (the `a = a` idem core) — tangle
+supplies the *type-safe semantics* that make a resolved equivalence meaningful.
+
+Sibling repos' key concerns (keep in sync as crossover resolves): *krl* — the
+resolution DSL surface (lowers to TangleIR; holds the QuandleDB/KRL crossover
+duplicate); *quandledb* — equivalence / identity face (canonical crossover
+table); *Skein.jl* — computational engine; *echo-types* — structured-loss theory
++ the identity-fabric framing (Conway·Fichte / Bruner / Ricoeur). See
+`../../AFFIRMATION.adoc`.
