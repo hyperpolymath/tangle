@@ -12,7 +12,10 @@ on:
 
 permissions:
   contents: read
-  security-events: read
+  # The reusable declares security-events: write (it uploads SARIF). A called
+  # workflow cannot escalate beyond the caller's grant, so `read` here makes the
+  # whole run a startup_failure with zero jobs and no log.
+  security-events: write
 
 jobs:
   scan:
