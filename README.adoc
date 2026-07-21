@@ -2,37 +2,39 @@
 // Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 // SPDX-FileCopyrightText: 2025-2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 
-= Tangle / KRL — Topological Programming Language
+= Tangle — a general language for knot mathematics
 
 image:https://img.shields.io/badge/OpenSSF-Best_Practices-green?logo=opensourcesecurity[OpenSSF Best Practices,link="https://www.bestpractices.dev/en/projects/new?repo_url=https://github.com/hyperpolymath/tangle"]
 image:https://img.shields.io/badge/License-MPL_2.0-blue.svg[License: MPL-2.0,link="https://opensource.org/licenses/MPL-2.0"]
 image:https://api.thegreenwebfoundation.org/greencheckimage/github.com[Green Web,link="https://www.thegreenwebfoundation.org/green-web-check/?url=github.com"]
 
-A research language exploring *computation as topology*, where programs are structured objects and equivalence is defined by transformation.
+A research language for knots and their mathematics — topological, algebraic,
+geometric and logical — in which programs are structured objects and equivalence
+is defined by transformation.
 
 ---
 
 == Overview
 
-Tangle (via KRL — Knot Resolution Language) is an experimental programming language in which:
+Tangle is an experimental, Turing-complete programming language in which:
 
-> *programs are structured as tangles (braids), and program equivalence is defined by isotopy.*
+> *programs are structured as tangles (braids), and program equivalence is
+> defined by isotopy.*
 
-Rather than treating programs as sequences of instructions, Tangle treats them as *composable topological objects*.
+Rather than treating programs as sequences of instructions, Tangle treats them
+as *composable topological objects*. This allows reasoning about programs in
+terms of structure, equivalence under transformation, and invariants of
+representation.
 
-This allows reasoning about programs in terms of:
-
-* structure
-* equivalence under transformation
-* invariants of representation
+Its remit is deliberately broad: Tangle aims to be a general language for doing
+mathematics *about* knots — not a front end to any particular knot database.
 
 ---
 
-== Core Idea
+== Core idea
 
-The central idea of Tangle is:
-
-> *computation is construction of structured objects, and meaning is preserved under valid transformations.*
+> *computation is construction of structured objects, and meaning is preserved
+> under valid transformations.*
 
 In this setting:
 
@@ -40,140 +42,148 @@ In this setting:
 * execution corresponds to transformation
 * equivalence is not syntactic equality, but *structural equivalence*
 
-This aligns with concepts from:
-
-* knot theory (Reidemeister moves)
-* category theory (morphisms and composition)
-* algebraic invariants (classification via structure)
+This aligns with concepts from knot theory (Reidemeister moves), category theory
+(morphisms and composition), and algebraic invariants (classification via
+structure).
 
 ---
 
-== KRL — Knot Resolution Language
+== Relationship to KRL and QuandleDB
 
-KRL is the surface language used to interact with the system — a *resolution DSL*,
-*not merely* a query language.
-
-It is organised around four fundamental operations:
+Tangle is a *separate project* from KRL and QuandleDB. The three share a subject
+matter, not an architecture.
 
 [cols="1,3"]
 |===
-|Operation |Role
+|Project |What it is
 
-|Construct
-|Create or declare presentations, structures, claims, datasets
+|*Tangle* (this repository)
+|A general language for knot mathematics. Turing-complete. Independent of any
+ database.
 
-|Transform
-|Rewrite, normalize, compose, concatenate, permute, mutate
+|https://github.com/hyperpolymath/quandledb[*QuandleDB*]
+|A knot database — stores presentations, invariants, fingerprints, equivalence
+ classes and witnesses.
 
-|Resolve
-|Decide / disambiguate / evaluate equivalence or identity questions
-
-|Retrieve
-|Inspect, fetch, project, explain, or return stored/computed results
+|https://github.com/hyperpolymath/krl[*KRL*]
+|QuandleDB's resolution language, developed jointly with it. Specified in the
+ `krl` repository, implemented in `quandledb/server/krl/`.
 |===
 
-KRL is not a general-purpose language; it is a *domain language for structured
-objects and their equivalence*. *Retrieve* recovers resolution-relevant artefacts
-(presentations, invariants, witnesses, equivalence classes, prior resolutions,
-explanations, provenance) — it is *not* arbitrary database querying. See krl
-`docs/decisions/0002-query-language-deferred.adoc`.
+[IMPORTANT]
+====
+Earlier revisions of this README were titled *"Tangle / KRL"* and described
+Tangle as the substrate of a `KRL -> TangleIR -> Tangle core -> QuandleDB`
+stack. That was wrong on both counts.
+
+* KRL is not Tangle's surface language. It is QuandleDB's, and it neither
+  compiles to nor depends on Tangle.
+* There is no `TangleIR`. The identifier appears in *no source file* in this
+  repository, nor in the KRL implementation — it existed only in prose.
+
+The projects remain related by domain and are developed by the same author;
+what is removed here is a claimed architectural dependency that does not exist.
+====
 
 ---
 
-== Architecture
+== Formal core
 
-Tangle is part of a layered system:
+A core fragment of the language is formalised and mechanised in Lean 4.
 
----
+Verified on 2026-07-21 by running the repository's own oracle,
+`cd proofs && lean Tangle.lean` — exit 0, no errors:
 
-KRL (surface language — resolution DSL, not merely a query language)
-↓
-TangleIR (canonical interchange representation)
-↓
-Tangle core (this repo — proven type-safe small-step semantics)
-↓
-QuandleDB + Skein.jl (persistence + invariant/equivalence; computational engine)
--------------------------------------------
+[cols="2,1"]
+|===
+|Property |Status
 
-* *TangleIR* is the central representation shared across layers
-* other components provide views, transformations, or storage
+|`progress`
+|proved
 
----
+|`preservation`
+|proved
 
-== Formal Core
+|`determinism`
+|proved
 
-A core fragment of the language has been formalised and mechanised.
+|`type_safety`
+|proved
 
-This includes:
+|Decidability of type checking (`infer` == `HasType`)
+|proved
+|===
 
-* a typed core language (braid words, composition, tensor)
-* small-step operational semantics
-* mechanised proofs in Lean 4:
+The proofs are self-contained (no Mathlib dependency) and contain *zero* uses of
+`sorry` and *zero* `axiom` declarations across 2,128 lines — so "builds" and
+"proved" mean the same thing here, which is not automatic.
 
-  * progress
-  * preservation
-  * determinism
-  * type safety
-  * decidability of type checking (`infer` ≡ `HasType`)
+They cover *echo types*: structured loss as a type-system feature. `close`
+(braid closure) is the canonical lossy map, and `echoClose`/`lower`/`residue`
+make that loss recoverable at the type level — a simply-typed shadow of
+https://github.com/hyperpolymath/echo-types[echo-types]. All four safety
+theorems cover them.
 
-* *echo types* — structured loss as a type-system feature: `close` (braid
-  closure) is the canonical lossy map, and `echoClose`/`lower`/`residue` make
-  that loss recoverable at the type level (a simply-typed shadow of
-  hyperpolymath/echo-types). All four safety theorems cover them.
+See `proofs/Tangle.lean`, `proofs/README.md`, `docs/spec/FORMAL-SEMANTICS.md`,
+and `PROOF-NARRATIVE.md` / `PROOF-NEEDS.md`.
 
-See:
-
-* `proofs/Tangle.lean` (and `proofs/README.md` to build/verify)
-* `docs/spec/FORMAL-SEMANTICS.md`
-* `PROOF-NARRATIVE.md` / `PROOF-NEEDS.md`
-
-This formal core covers the *structural heart of the language*, though not all surface features.
+This formal core covers the structural heart of the language, though not all
+surface features.
 
 ---
 
-== Current Status
+== Dialects
 
-Tangle/KRL is an *active research system*.
+Tangle's breadth is expressed as dialects, each with its own grammar sketch
+under `dialects/`:
 
-At present:
-
-* grammar is defined (EBNF / PEG in progress)
-* AST and type system are partially implemented
-* compiler pipeline (AST → TangleIR) is in development
-* decompilation (IR → source) is incomplete
-* database integration (Skein / QuandleDB) is planned or partial
-
-It should be read as:
-
-> a formally grounded core with an evolving implementation and surrounding research system.
+* `braid-calculus` — braid words and their relations
+* `skein-algebra` — skein relations and invariant computation
+* `string-diagram` — monoidal-category string diagrams
+* `virtual-knot` — virtual knot theory
+* `quantum-circuit` — circuits as topological objects
 
 ---
 
-== Scope
+== Current status
 
-=== Implemented / Grounded
+Tangle is an active research system. Read it as *a formally grounded core with
+an evolving implementation around it*.
 
-* core grammar (defined)
-* AST and type structure
-* Lean formalisation of core fragment
-* partial compiler pipeline
-* example programs
+[cols="1,2"]
+|===
+|Area |State
+
+|Lean 4 formal core
+|Verified — see above
+
+|Grammars
+|`src/tangle.ebnf`, `src/tangle-jtv.ebnf`, `spec/grammar.ebnf`, plus five
+ dialect sketches
+
+|OCaml compiler (`compiler/`)
+|Lexer, parser, AST, typechecker, evaluator, pretty-printer, REPL, braid
+ equivalence, plus LSP and WASM targets. *Not built by CI*
+
+|Rust / Zig components
+|18 `.rs`, 3 `.zig`. *Not built by CI*
+
+|Database integration
+|Not implemented
+|===
+
+[NOTE]
+====
+Only the Lean proofs are gated by CI (`.github/workflows/lean-proofs.yml`).
+The OCaml compiler, the Rust components and the Zig components are not built by
+any workflow, so their state is unverified by this repository's own CI.
+====
 
 ---
 
-=== In Progress
-
-* parser and full compiler
-* IR integration across components
-* equivalence resolution via QuandleDB
-* invariant-based querying
-
----
-
-=== Research Directions
+== Research directions
 
 * richer categorical abstractions
-* deeper integration with algebraic databases
 * optimisation via equivalence classes
 * alternative evaluation models based on rewriting
 
@@ -181,36 +191,15 @@ These are not yet stable features.
 
 ---
 
-== Relationship to Other Projects
+== How to read this repository
 
-Tangle is closely connected to:
-
-* *QuandleDB* — equivalence and classification via algebraic invariants
-* *Skein.jl* — persistence and indexing of structured objects
-* *Nextgen Languages* — broader research context
-
----
-
-== How to Read This Repository
-
-Recommended entry points:
-
-* `Tangle.lean` — mechanised type safety proof
+* `proofs/Tangle.lean` — mechanised type-safety proof (the load-bearing artefact)
 * `docs/spec/FORMAL-SEMANTICS.md` — formal model
-* grammar files (`src/tangle.ebnf` or equivalent)
-* examples demonstrating composition and transformation
+* `src/tangle.ebnf` — surface grammar
+* `dialects/` — the breadth of the language
+* `compiler/lib/` — the OCaml front end
 
----
+== Licence
 
-== Summary
-
-Tangle/KRL is best understood as:
-
-> a research language that treats programs as structured objects, with meaning defined by transformation and equivalence, supported by a partially mechanised formal core and an evolving implementation.
-
-
-== License
-
-This project is licensed under the Mozilla Public License, v. 2.0. See the `LICENSE` file for details.
-
-SPDX-License-Identifier: CC-BY-SA-4.0
+This project is licensed under the Mozilla Public License, v. 2.0. See the
+`LICENSE` file for details. This document is CC-BY-SA-4.0.

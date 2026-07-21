@@ -220,3 +220,67 @@ un-run toolchains stated rather than implied.
   `-S`; the signed git commit over this content, at the SHA above, is the
   authoritative form.
 * *Signed-off-date:* (fill on signing)
+
+'''
+
+== Erratum — 2026-07-21
+
+This section corrects the affirmation above. The original text is left intact:
+an affirmation is a dated claim about a past state, and amending it in place
+would falsify a record. Two of its claims have since been shown to be wrong,
+and one of its acknowledged gaps has since been closed.
+
+=== Correction 1 — the stack does not exist
+
+The affirmation records, as *maintainer-confirmed*, the ladder:
+
+[literal]
+KRL -> TangleIR -> VerisimCore -> Skein/QuandleDB
+
+`TangleIR` does not exist. The identifier appears in *no source file* in this
+repository (0 hits across `.rs`, `.zig` and `.lean`) and in *no source file* in
+the KRL implementation at `quandledb/server/krl/`. It existed only in prose, in
+both repositories, and has been removed from `README.adoc`.
+
+Nor is KRL a surface language for Tangle. KRL is QuandleDB's resolution
+language, developed jointly with QuandleDB; it neither compiles to nor depends
+on Tangle. The three projects share a subject matter, not an architecture.
+
+The confirmation recorded on 2026-06-19 was a confirmation of the README's
+diagram, and that diagram was wrong. Nothing here suggests bad faith — the
+affirmation is careful, and states plainly which of its checks were not run.
+
+=== Correction 2 — the "one-line characterisation" should not be quoted as-is
+
+The characterisation invites quotation. It should not be quoted while it
+describes Tangle as "the proven type-safe small-step core + TangleIR of the KRL
+stack". Everything else in that sentence survives: the OCaml compiler, the Rust
+LSP/WASM targets, the Lean 4 proofs and the five dialects are all real.
+
+=== Discharge — the Lean proofs have now been run
+
+The affirmation states: *"OCaml + Lean not run (absent)"*, and concludes that
+*"structure + the repo's proof records are confirmed, not a fresh green build"*.
+
+That gap is now closed for Lean. On 2026-07-21 the repository's own documented
+oracle was executed:
+
+[source,console]
+----
+$ cd proofs && lean Tangle.lean
+$ echo $?
+0
+----
+
+Exit 0, no errors, using the pinned toolchain from `proofs/lean-toolchain`
+(`leanprover/lean4:v4.14.0`). The proofs are self-contained — `Tangle.lean` has
+no `import` lines at all, so no Mathlib — and contain *zero* occurrences of
+`sorry` and *zero* `axiom` declarations across 2,128 lines. `progress`,
+`preservation`, `determinism`, `type_safety`, `infer_sound`, `infer_complete`
+and `infer_iff_hasType` are all present with real proof terms.
+
+This matters because "the Lean build is green" and "the theorems are proved" are
+not the same claim in general: an `axiom` stub compiles cleanly while proving
+nothing. Here they coincide, and that was checked rather than assumed.
+
+The OCaml compiler remains unbuilt — no workflow in this repository builds it.
