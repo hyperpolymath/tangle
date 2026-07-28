@@ -75,13 +75,20 @@ jobs:
           # "FAIL" line: several suites print their own tally and would
           # otherwise report failures while still exiting 0.
           dune test --force 2>&1 | tee /tmp/dune-test.log
-          if grep -qiE '^[[:space:]]*FAIL' /tmp/dune-test.log; then
+          # Match a FAIL *marker* only: "FAIL" followed by ':' or whitespace.
+          # NOT case-insensitive, and NOT bare "FAIL" — several suites print a
+          # "Failed: 0" tally, which a looser pattern flags as a failure. (It
+          # did: this gate's first run went red on a suite reporting zero
+          # failures. A gate that cries wolf is worse than no gate.)
+          if grep -qE '^[[:space:]]*FAIL([:[:space:]])' /tmp/dune-test.log; then
             echo "::error::A test reported FAIL — see the log above."
+            grep -nE '^[[:space:]]*FAIL([:[:space:]])' /tmp/dune-test.log | head -20
             exit 1
           fi
-          if grep -qE '[1-9][0-9]* failed' /tmp/dune-test.log; then
+          # Nonzero tallies, in either shape the suites use.
+          if grep -qE '([1-9][0-9]*) failed|Failed:[[:space:]]*[1-9]' /tmp/dune-test.log; then
             echo "::error::A suite reported a nonzero failure count."
-            grep -nE '[1-9][0-9]* failed' /tmp/dune-test.log
+            grep -nE '([1-9][0-9]*) failed|Failed:[[:space:]]*[1-9]' /tmp/dune-test.log
             exit 1
           fi
           echo "OCaml compiler: build + all suites GREEN."
