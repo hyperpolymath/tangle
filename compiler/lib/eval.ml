@@ -121,6 +121,17 @@ let gen_of_ast (g : generator) : gen =
 let gens_of_ast (gs : generator list) : gen list =
   List.map gen_of_ast gs
 
+(** Convert a runtime generator back to an AST generator.  The two records are
+    structurally identical but nominally distinct; [Braid_equiv] is written
+    against the AST type, so the braid-equivalence used by `==` and `~` (TG-7)
+    needs this direction too. *)
+let ast_of_gen (g : gen) : generator =
+  { gen_index = g.g_index; gen_exponent = g.g_exponent }
+
+(** Convert a list of runtime generators to AST generators. *)
+let ast_of_gens (gs : gen list) : generator list =
+  List.map ast_of_gen gs
+
 (** Compute the width (number of strands) of a braid word.
  *  width = max(index + 1) over all generators, or 0 if empty.
  *)
@@ -575,28 +586,53 @@ and eval_binop (op : binop) (v1 : value) (v2 : value) : value =
     | _ -> eval_error "Cannot divide %s by %s" (pp_value v1) (pp_value v2)
     end
 
-  (* Equality: structural comparison *)
+  (* Equality.  Scalars compare structurally; BRAIDS compare up to braid-GROUP
+     equivalence (TG-7, owner ruling tangle#50).  Syntactic equality would
+     contradict the language's own thesis — programs are topological objects and
+     equivalence is isotopy — so `==` must not be the one place that quietly
+     reverts to comparing representations.  Mirrored by the Lean `Step.eqBraids`
+     rule, which uses `braidEquiv`.
+
+     `Identity` evaluates to `VBraid []`, so identity comparisons flow through
+     this same case and correctly ask "is this word trivial?".
+
+     Correctness of the decision procedure is established by testing
+     (compiler/test/tg7), NOT by proof — see braid_equiv.ml and
+     PROOF-NARRATIVE.md §TG-7. *)
   | Eq ->
     begin match v1, v2 with
     | VInt a, VInt b       -> VBool (a = b)
     | VFloat a, VFloat b   -> VBool (a = b)
     | VBool a, VBool b     -> VBool (a = b)
     | VString a, VString b -> VBool (a = b)
-    | VBraid g1, VBraid g2 -> VBool (g1 = g2)
+    | VBraid g1, VBraid g2 -> VBool (Braid_equiv.equiv (ast_of_gens g1) (ast_of_gens g2))
     | _ -> eval_error "Cannot compare %s == %s" (pp_value v1) (pp_value v2)
     end
 
-  (* Isotopy: compare simplified braid words *)
+  (* Isotopy.  For BRAIDS, isotopy IS equality in the braid group, so `~` and
+     `==` denote the same relation and must agree.  This previously compared
+     `simplify_gens`, which only cancels adjacent inverses (Reidemeister II) and
+     does not implement the braid relation σᵢσⱼσᵢ = σⱼσᵢσⱼ — an incomplete
+     decision procedure.  Leaving it that way while `==` became complete would
+     have made `a == b` provable with `a ~ b` false, which is incoherent.  This
+     is therefore a COMPLETENESS fix, not a change of intended meaning.
+
+     CAVEAT for closed tangles: isotopy of a LINK (the closure of a braid) is
+     Markov equivalence — braid-group equality plus conjugation and
+     stabilisation.  Those moves are NOT implemented.  Braid equality is
+     sufficient but not necessary for closures to be isotopic, so on
+     `tv_closed` tangles this remains a SOUND but INCOMPLETE under-approximation:
+     `true` is trustworthy, `false` only means "not equal as braids". *)
   | Isotopy ->
     begin match v1, v2 with
     | VBraid g1, VBraid g2 ->
-      VBool (simplify_gens g1 = simplify_gens g2)
+      VBool (Braid_equiv.equiv (ast_of_gens g1) (ast_of_gens g2))
     | VTangle t1, VTangle t2 ->
-      VBool (simplify_gens t1.tv_word = simplify_gens t2.tv_word)
+      VBool (Braid_equiv.equiv (ast_of_gens t1.tv_word) (ast_of_gens t2.tv_word))
     | VBraid g1, VTangle t2 ->
-      VBool (simplify_gens g1 = simplify_gens t2.tv_word)
+      VBool (Braid_equiv.equiv (ast_of_gens g1) (ast_of_gens t2.tv_word))
     | VTangle t1, VBraid g2 ->
-      VBool (simplify_gens t1.tv_word = simplify_gens g2)
+      VBool (Braid_equiv.equiv (ast_of_gens t1.tv_word) (ast_of_gens g2))
     | _ -> eval_error "Cannot test isotopy of %s ~ %s" (pp_value v1) (pp_value v2)
     end
 

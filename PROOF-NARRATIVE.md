@@ -413,17 +413,56 @@ by isotopy." Currently `eqBraids` only checks list equality, so
 `σ_1 σ_2 σ_1` and `σ_2 σ_1 σ_2` are reported unequal. That's the
 trivial reading.
 
-**Status.** Current `eqBraids` is a soundness floor (if equal lists
-then equal braids), not a completeness ceiling. Promoting it to
-braid-group equivalence is a research-grade extension.
+**Status — LANDED 2026-07-29 (owner ruling #50), with a stated trusted base.**
+`==` on braids now decides braid-group equivalence in both engines:
+
+- **OCaml** — `eval.ml` `Eq` (and `Isotopy`, which for braids denotes the
+  *same* relation) route through `compiler/lib/braid_equiv.ml` (Dehornoy
+  handle reduction). `Identity` is `VBraid []`, so identity comparisons flow
+  through the same case.
+- **Lean** — `Step.eqBraids` / `eqIdBraid` / `eqBraidId`, and the three
+  `echoEq` counterparts, use `braidEquiv` / `isTrivialBraid`: a faithful
+  in-Lean port of the same procedure, in §BRAID-GROUP EQUIVALENCE of
+  `Tangle.lean`.
+
+`σ₁σ₂σ₁ == σ₂σ₁σ₂` is now `true`, which is what the README's "equivalence is
+defined by isotopy" always claimed. Progress / Preservation / Determinism were
+re-verified **unchanged** — all three need only that the right-hand side is a
+*total function into `Bool`*, which `braidEquiv` is; Determinism in particular
+is immediate, since a function applied to fixed arguments yields a fixed result.
+
+> ### ⚠ TRUSTED, NOT PROVEN — the honest boundary
+> `braidEquiv` is a **definition**, not an axiom: nothing is postulated, and
+> the sorry/axiom gate passes legitimately. But **the gate passing does NOT
+> mean this claim is proven.** What is established is that the metatheory
+> holds *relative to* `braidEquiv`. What is **not** established is that
+> `braidEquiv` correctly **decides** braid-group equality — that is the
+> mechanised Garside/Dehornoy correctness proof, which remains research-grade
+> and out of scope (#51).
+>
+> Correctness is currently evidenced **by testing only**: `compiler/test/tg7`
+> (2220 assertions — defining relations, 400 constructed-equivalent pairs,
+> invariant-distinguished negatives) plus 8 semantics-distinguishing cases in
+> `test_eval.ml`. Testing is not proof.
+>
+> Termination in the Lean port is by an explicit **fuel** bound mirroring the
+> OCaml `max_steps`, not by a well-founded measure. Dehornoy reduction does
+> terminate, but proving that *is* the research obligation above; fuel keeps
+> the definitions total without smuggling in an unproven termination claim.
 
 **Assumptions.**
 - [[A-TG-7.1]] Word problem in the braid group is solvable in
   polynomial time on finitely many strands (Birman–Ko–Lee /
   Garside-normal-form algorithm — known true).
+- [[A-TG-7.2]] `braidEquiv` (Lean) and `braid_equiv.ml` (OCaml) implement
+  Dehornoy handle reduction *correctly*, and agree with each other. Evidenced
+  by testing, not proof. **This is the load-bearing unproven assumption of
+  TG-7.**
 
-**How to discharge.** Implement Birman–Ko–Lee normal form;
-re-prove `Step.eqBraids` against the normal form.
+**How to discharge the remainder.** Mechanise the Dehornoy correctness
+argument (or a Birman–Ko–Lee normal form) in Lean, prove `braidEquiv u v =
+true ↔ u ≡ v` in the braid group, and prove termination to replace the fuel
+bound. That retires [[A-TG-7.2]].
 
 ### TG-8 — Dialect conservativity
 

@@ -594,7 +594,61 @@ let test_equality () =
     eval (BinOp (Isotopy,
       BraidLit [sigma 1],
       BraidLit [sigma 2]))
-      = VBool false)
+      = VBool false);
+
+  (* ---------------------------------------------------------------- *)
+  (* TG-7 (tangle#50): `==` decides braid-GROUP equivalence, NOT list   *)
+  (* equality.  Every case below is FALSE under list equality and TRUE  *)
+  (* under the ruling, so these are the tests that actually distinguish *)
+  (* the two semantics — the pre-existing cases above pass either way.  *)
+  (* ---------------------------------------------------------------- *)
+
+  test "TG-7: braid relation s1.s2.s1 == s2.s1.s2" (fun () ->
+    (* The defining braid relation. Distinct words, same group element. *)
+    eval (BinOp (Eq,
+      BraidLit [sigma 1; sigma 2; sigma 1],
+      BraidLit [sigma 2; sigma 1; sigma 2]))
+      = VBool true);
+
+  test "TG-7: far commutation s1.s3 == s3.s1" (fun () ->
+    (* |i - j| >= 2 generators commute. *)
+    eval (BinOp (Eq,
+      BraidLit [sigma 1; sigma 3],
+      BraidLit [sigma 3; sigma 1]))
+      = VBool true);
+
+  test "TG-7: free cancellation s1.s1^-1 == identity" (fun () ->
+    eval (BinOp (Eq, BraidLit [sigma 1; sigma_inv 1], Identity)) = VBool true);
+
+  test "TG-7: identity == s1.s1^-1 (symmetric)" (fun () ->
+    eval (BinOp (Eq, Identity, BraidLit [sigma 1; sigma_inv 1])) = VBool true);
+
+  test "TG-7: non-equivalent braids still compare false" (fun () ->
+    (* Guards against a decision procedure that says `true` for everything —
+       s1 and s1^-1 differ in writhe, so they cannot be equal. *)
+    eval (BinOp (Eq, BraidLit [sigma 1], BraidLit [sigma_inv 1])) = VBool false);
+
+  test "TG-7: s1.s2 =/= s2.s1 (adjacent gens do NOT commute)" (fun () ->
+    eval (BinOp (Eq,
+      BraidLit [sigma 1; sigma 2],
+      BraidLit [sigma 2; sigma 1]))
+      = VBool false);
+
+  test "TG-7: `~` agrees with `==` on the braid relation" (fun () ->
+    (* For braids, isotopy IS braid-group equality; the two operators must
+       not disagree.  `~` previously used free reduction only and returned
+       false here. *)
+    eval (BinOp (Isotopy,
+      BraidLit [sigma 1; sigma 2; sigma 1],
+      BraidLit [sigma 2; sigma 1; sigma 2]))
+      = VBool true);
+
+  test "TG-7: echoEq lowers to braid-group equality" (fun () ->
+    (* echoEq reuses the Eq logic, so it must follow the ruling too. *)
+    eval (Lower (EchoEq (
+      BraidLit [sigma 1; sigma 2; sigma 1],
+      BraidLit [sigma 2; sigma 1; sigma 2])))
+      = VBool true)
 
 (* ================================================================== *)
 (*  11. Error cases                                                    *)

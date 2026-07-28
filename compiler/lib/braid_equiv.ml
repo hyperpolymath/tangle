@@ -2,12 +2,16 @@
 (* braid_equiv.ml — decide braid-GROUP equivalence of braid words via Dehornoy
  * handle reduction.
  *
- * TG-7, NON-SEMANTIC rung.  The language's `==` on braids (eval.ml `VBraid`
- * equality and the Lean `Step.eqBraids` rule) is LIST equality and is left
- * UNCHANGED by this module — `braid_equiv` is an out-of-band decision procedure
- * for callers who want true braid-group equivalence (e.g. tooling, future
- * `compute`-style checks).  Changing `==` itself to use this is a separate
- * language-design decision (see PROOF-NEEDS.md TG-7).
+ * TG-7, SEMANTIC rung as of 2026-07-29.  Owner ruling tangle#50 settled the
+ * open question in favour of true braid-group equivalence: the language's `==`
+ * on braids (eval.ml `Eq` on `VBraid`, and the Lean `Step.eqBraids` rule via
+ * `braidEquiv`) now DECIDES braid-group equality, not list equality.  `~`
+ * (isotopy) routes here too — for braids, isotopy IS equality in the braid
+ * group, so the two must agree.
+ *
+ * Rationale: syntactic equality contradicts the language's own thesis, that
+ * programs are topological objects and equivalence is isotopy.  `==` must not
+ * be the one place that quietly reverts to comparing representations.
  *
  * Algorithm (Dehornoy 1997, "A fast method for comparing braids").  A braid
  * word on σ₁,σ₂,…  A σᵢ-handle is a factor
