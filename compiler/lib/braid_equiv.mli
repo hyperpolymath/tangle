@@ -1,9 +1,9 @@
 (* SPDX-License-Identifier: MPL-2.0 *)
-(* braid_equiv.mli — out-of-band braid-GROUP equivalence (TG-7, non-semantic).
+(* braid_equiv.mli — braid-GROUP equivalence (TG-7; the semantics of `==`).
  *
- * Decides braid-group equality via Dehornoy handle reduction.  This does NOT
- * change the language's `==` on braids (eval.ml / Lean Step keep list equality);
- * it is a separate decision procedure for callers wanting true equivalence. *)
+ * Decides braid-group equality via Dehornoy handle reduction.  As of the
+ * owner ruling tangle#50 (2026-07-29) this IS the language's `==` on braids
+ * (eval.ml `Eq`, Lean `Step.eqBraids` via `braidEquiv`), and `~` too. *)
 
 (** A braid word as unit letters (index >= 1, sign +/-1). *)
 type letter = { idx : int; sgn : int }

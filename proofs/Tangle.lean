@@ -146,6 +146,135 @@ def shiftGenerators (gs : List Generator) (n : Nat) : List Generator :=
   gs.map fun g => { g with idx := g.idx + n }
 
 -- ═══════════════════════════════════════════════════════════════════════
+-- BRAID-GROUP EQUIVALENCE  (TG-7)
+-- ═══════════════════════════════════════════════════════════════════════
+--
+-- Owner ruling 2026-07-29 (tangle#50): `==` on braids decides braid-GROUP
+-- equivalence, NOT list equality.  Syntactic equality contradicts the
+-- language's own thesis — programs are topological objects and equivalence is
+-- isotopy — so `==` must not be the one place that quietly reverts to
+-- comparing representations.
+--
+-- This is a faithful port of `compiler/lib/braid_equiv.ml` (Dehornoy 1997,
+-- "A fast method for comparing braids").  A σᵢ-handle is a factor
+--     σᵢ^e · w₀ · σ_{i+1}^d · w₁ · ⋯ · σ_{i+1}^d · w_m · σᵢ^{-e}
+-- whose interior uses only σⱼ with j ≥ i+2 apart from same-sign σ_{i+1}.  It
+-- reduces to
+--     w₀ · (σ_{i+1}^{-e} σᵢ^d σ_{i+1}^e) · w₁ · ⋯ · w_m
+-- and a handle-free, freely-reduced word is empty iff the braid is trivial, so
+--     equiv u v  ⇔  reduce (u · v⁻¹) = ε.
+--
+-- ── TRUSTED, NOT PROVEN ────────────────────────────────────────────────
+-- These are DEFINITIONS, not axioms — nothing here is postulated, and the
+-- metatheory below (Progress / Preservation / Determinism) goes through for
+-- `braidEquiv` exactly as it did for list equality, because all three need
+-- only that it is a TOTAL FUNCTION into `Bool`.  Determinism in particular is
+-- unaffected: a function applied to fixed arguments yields a fixed result.
+--
+-- What is NOT established here is that `braidEquiv` DECIDES braid-group
+-- equality.  That is the mechanised Garside/Dehornoy correctness proof, which
+-- is research-grade and explicitly out of scope (tangle#51).  Until it exists,
+-- `braidEquiv` is trusted code that the `Step` relation is proven *relative
+-- to*.  The sorry/axiom gate passing does NOT mean this claim is proven; see
+-- PROOF-NARRATIVE.md §TG-7.
+--
+-- Termination is by an explicit FUEL parameter rather than a well-founded
+-- measure, mirroring the OCaml `max_steps` safety bound.  Dehornoy reduction
+-- does terminate, but proving that is precisely the research-grade obligation
+-- above; fuel keeps these definitions total and computable without smuggling
+-- in an unproven termination claim.
+
+/-- A braid word as unit letters: index ≥ 1 and sign ±1.
+    Mirrors `type letter` in braid_equiv.ml. -/
+structure Letter where
+  idx : Nat
+  sgn : Int
+  deriving DecidableEq, Repr
+
+/-- Expand generators with arbitrary nonzero exponents into unit letters. -/
+def unitsOf (gs : List Generator) : List Letter :=
+  gs.flatMap fun g =>
+    List.replicate g.exp.natAbs { idx := g.idx, sgn := if g.exp ≥ 0 then 1 else -1 }
+
+/-- Inverse braid word: reverse order, negate every sign.  (ab)⁻¹ = b⁻¹a⁻¹. -/
+def inverseWord (w : List Letter) : List Letter :=
+  (w.map fun l => { l with sgn := -l.sgn }).reverse
+
+/-- Free reduction: cancel adjacent σ·σ⁻¹. -/
+def freeReduce (w : List Letter) : List Letter :=
+  w.foldr (fun x acc =>
+    match acc with
+    | y :: rest => if x.idx = y.idx && x.sgn = -y.sgn then rest else x :: acc
+    | []        => [x]) []
+
+/-- Does the letter at the head open a handle over `rest`?  Returns the
+    interior and the tail after the closing letter, or `none`.
+    Mirrors `handle_at` / the `scan` loop in braid_equiv.ml. -/
+def scanHandle (i : Nat) (e : Int) :
+    List Letter → Option Int → List Letter → Option (List Letter × List Letter)
+  | [],       _,     _   => none                       -- no close → not a handle
+  | l :: ls,  dOpt,  acc =>
+    if l.idx = i then
+      if l.sgn = -e then some (acc.reverse, ls)        -- closes the handle
+      else none                                         -- same-sign σᵢ → blocked
+    else if l.idx < i then none                        -- σ_{<i} inside → blocked
+    else if l.idx = i + 1 then
+      match dOpt with
+      | none   => scanHandle i e ls (some l.sgn) (l :: acc)
+      | some d => if d = l.sgn then scanHandle i e ls dOpt (l :: acc)
+                  else none                             -- mixed σ_{i+1} signs
+    else scanHandle i e ls dOpt (l :: acc)             -- j ≥ i+2 → interior, ok
+
+/-- Rewrite a handle's interior: σ_{i+1}^d ↦ σ_{i+1}^{-e} σᵢ^d σ_{i+1}^e. -/
+def rewriteInterior (i : Nat) (e : Int) (interior : List Letter) : List Letter :=
+  interior.flatMap fun l =>
+    if l.idx = i + 1 then
+      [ { idx := i + 1, sgn := -e }, { idx := i, sgn := l.sgn }, { idx := i + 1, sgn := e } ]
+    else [l]
+
+/-- Reduce the leftmost handle; `none` if the word is handle-free. -/
+def reduceOne : List Letter → Option (List Letter)
+  | []      => none
+  | l :: ls =>
+    match scanHandle l.idx l.sgn ls none [] with
+    | some (interior, tail) => some (rewriteInterior l.idx l.sgn interior ++ tail)
+    | none =>
+      match reduceOne ls with
+      | some ls' => some (l :: ls')
+      | none     => none
+
+/-- Default fuel; mirrors `default_max_steps` in braid_equiv.ml. -/
+def defaultFuel : Nat := 1000000
+
+/-- Reduce to a handle-free, freely-reduced word (fuel-bounded). -/
+def reduceFuel : Nat → List Letter → List Letter
+  | 0,        w => w                                    -- safety net
+  | fuel + 1, w =>
+    match reduceOne w with
+    | none    => w
+    | some w' => reduceFuel fuel (freeReduce w')
+
+/-- Reduce with the default fuel. -/
+def reduceWord (w : List Letter) : List Letter :=
+  reduceFuel defaultFuel (freeReduce w)
+
+/-- A unit word is trivial iff it reduces to the empty word. -/
+def isTrivialWord (w : List Letter) : Bool := reduceWord w == []
+
+/-- A generator list denotes the trivial (identity) braid. -/
+def isTrivialBraid (gs : List Generator) : Bool := isTrivialWord (unitsOf gs)
+
+/-- **Braid-group equivalence**: `u ≡ v` iff `u · v⁻¹` is trivial.
+    This is what `==` on braids means (tangle#50). -/
+def braidEquiv (u v : List Generator) : Bool :=
+  isTrivialWord (unitsOf u ++ inverseWord (unitsOf v))
+
+/-- Writhe (exponent sum): invariant under the braid relations.  A necessary
+    condition for equivalence, exposed for testing. -/
+def writhe (gs : List Generator) : Int :=
+  gs.foldl (fun a g => a + g.exp) 0
+
+-- ═══════════════════════════════════════════════════════════════════════
 -- DE BRUIJN SUBSTITUTION MACHINERY
 -- ═══════════════════════════════════════════════════════════════════════
 --
@@ -333,10 +462,10 @@ inductive Step : Expr → Expr → Prop where
   | eqRight      : IsValue e₁ → Step e₂ e₂' → Step (.eq e₁ e₂) (.eq e₁ e₂')
   | eqNums       : Step (.eq (.num n₁) (.num n₂)) (.boolLit (n₁ == n₂))
   | eqStrs       : Step (.eq (.str s₁) (.str s₂)) (.boolLit (s₁ == s₂))
-  | eqBraids     : Step (.eq (.braidLit gs₁) (.braidLit gs₂)) (.boolLit (gs₁ == gs₂))
+  | eqBraids     : Step (.eq (.braidLit gs₁) (.braidLit gs₂)) (.boolLit (braidEquiv gs₁ gs₂))
   | eqIdId       : Step (.eq .identity .identity) (.boolLit true)
-  | eqIdBraid    : Step (.eq .identity (.braidLit gs)) (.boolLit (gs == []))
-  | eqBraidId    : Step (.eq (.braidLit gs) .identity) (.boolLit (gs == []))
+  | eqIdBraid    : Step (.eq .identity (.braidLit gs)) (.boolLit (isTrivialBraid gs))
+  | eqBraidId    : Step (.eq (.braidLit gs) .identity) (.boolLit (isTrivialBraid gs))
   -- Echo (structured loss): `echoClose` is a redex that reduces into a formed
   -- echo value `echoVal residue result`; `lower`/`residue` are the two generic
   -- projections off a formed echo value.  `lower` yields the result component
@@ -373,13 +502,13 @@ inductive Step : Expr → Expr → Prop where
   | echoEqStrs    : Step (.echoEq (.str s₁) (.str s₂))
                         (.echoVal (.pair (.str s₁) (.str s₂)) (.boolLit (s₁ == s₂)))
   | echoEqBraids  : Step (.echoEq (.braidLit gs₁) (.braidLit gs₂))
-                        (.echoVal (.pair (.braidLit gs₁) (.braidLit gs₂)) (.boolLit (gs₁ == gs₂)))
+                        (.echoVal (.pair (.braidLit gs₁) (.braidLit gs₂)) (.boolLit (braidEquiv gs₁ gs₂)))
   | echoEqIdId    : Step (.echoEq .identity .identity)
                         (.echoVal (.pair .identity .identity) (.boolLit true))
   | echoEqIdBraid : Step (.echoEq .identity (.braidLit gs))
-                        (.echoVal (.pair .identity (.braidLit gs)) (.boolLit (gs == [])))
+                        (.echoVal (.pair .identity (.braidLit gs)) (.boolLit (isTrivialBraid gs)))
   | echoEqBraidId : Step (.echoEq (.braidLit gs) .identity)
-                        (.echoVal (.pair (.braidLit gs) .identity) (.boolLit (gs == [])))
+                        (.echoVal (.pair (.braidLit gs) .identity) (.boolLit (isTrivialBraid gs)))
   -- Let-binding: congruence on the bound expression, then β-reduction once it
   -- is a value (the bound value is substituted into the body's variable 0).
   | letStep : Step e₁ e₁' → Step (.lett e₁ e₂) (.lett e₁' e₂)
