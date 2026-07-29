@@ -133,7 +133,7 @@ let rec lean_expr (scope : string list) (e : expr) : string =
   (* Non-core: must never appear in the corpus (close is the boundary gateway). *)
   | FloatLit _ | BinOp ((Sub | Mul | Div | Isotopy), _, _) | UnaryOp _
   | Close _ | Mirror _ | Reverse _ | Simplify _ | Cap _ | Cup _ | Twist _
-  | Match _ | Call _ | Crossing _ ->
+  | Match _ | Call _ | Crossing _ | Weave _ ->
     failwith "TG-3: non-core constructor in corpus term"
 
 (* ================================================================== *)

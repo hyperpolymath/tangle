@@ -121,7 +121,15 @@ primary = braid_literal
 | crossing
 | identifier, [ "(", arg_list, ")" ]
 | literal
+| weave_block
 | "(", expr, ")" ;
+
+(* weave_block appears BOTH as a statement (above) and as a primary
+   expression. As a statement alone it was inert: its Tangle[A,B] type was
+   computed and discarded, and evaluation was a no-op, so the construct could
+   be written but never bound or used. In expression position it denotes the
+   morphism, which is how `def x = weave ... into ... yield ...` works and how
+   conformance/valid/v02, v08, v09 and v12 have always been written. *)
 
 arg_list = expr, { ",", expr } ;
 

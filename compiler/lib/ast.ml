@@ -108,6 +108,18 @@ and expr =
   (* ---- Crossings (weave context) ---- *)
   | Crossing  of string * crossing_op * string
 
+  (* ---- Weave as an EXPRESSION ----
+   * `weave ... into ... yield ...` was a statement only, per spec/grammar.ebnf.
+   * As a statement it is inert: eval returns (env, None) and the typechecker
+   * discards the Tangle[A,B] it computes, so the construct could be written
+   * but never bound or used.  Allowing it in expression position is what makes
+   * it reachable — and is how conformance/valid/v02, v08, v09 and v12 have
+   * always been written (`def x = weave ...`).  The statement form is kept, so
+   * this is purely additive.  Weave is outside the mechanised Lean core (0
+   * occurrences in proofs/Tangle.lean) and outside the TG-3 corpus, so this
+   * touches no proof obligation. *)
+  | Weave     of weave_block
+
 (** Binary operator tag. *)
 and binop =
   | Add       (** + *)

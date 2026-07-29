@@ -384,6 +384,18 @@ let rec eval_expr (env : env) (e : expr) : value =
     | _ -> eval_error "Cannot simplify %s" (pp_value v)
     end
 
+  | Weave wb ->
+    (* The statement form is a no-op returning (env, None) — the value was
+       unreachable, which is what made weave inert.  In expression position the
+       body IS the value: it denotes the morphism from the input strands to the
+       output strands, so evaluate it and present it as a tangle. *)
+    begin match eval_expr env wb.weave_body with
+    | VTangle _ as t -> t
+    | VBraid gens    -> VTangle { tv_word = gens; tv_closed = false }
+    | v -> eval_error "Weave body must evaluate to a braid or tangle, got %s"
+             (pp_value v)
+    end
+
   | Cap (_e1, _e2) ->
     (* Cap creates a tangle that absorbs two strands — a single-crossing
        cup/cap pair.  Represented as an empty closed tangle. *)

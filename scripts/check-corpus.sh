@@ -62,16 +62,18 @@ EXAMPLES_KNOWN_UNTYPED=(
   turing_complete.tangle
 )
 
-# conformance/valid programs the parser does not yet accept. These specify
-# language surface that exists in the spec but not in parser.mly. Tracked in #88.
-#   v02/v08/v09/v12 : `weave strands a:Q, b:Q into (...) yield strands ...`
-#   v11             : `add{ ... }` blocks (JTV data injection)
+# conformance/valid programs the parser does not yet accept.
+#   v11 : `add{ ... }` — the Harvard DATA SUB-LANGUAGE, not a parse rule. It has
+#         its own expression grammar, type system (Int/Float/Rational/Hex/
+#         Binary/Bool/String/Symbolic), environments (Pi), visibility rules, a
+#         separate typing judgement, Embed/Unembed, and bidirectional calling
+#         with Tangle — 288 lines of FORMAL-SEMANTICS.md across 12 sections.
+#         A feature, tracked separately.
+#
+# v02/v08/v09/v12 were here for `weave ... into ... yield ...` used as a
+# DEFINITION BODY. Fixed: weave is now an expression as well as a statement.
 CONFORMANCE_KNOWN_UNPARSED=(
-  v02_weave.tangle
-  v08_crossing.tangle
-  v09_twist.tangle
   v11_add_block.tangle
-  v12_weave_expr.tangle
 )
 
 fail=0
