@@ -231,8 +231,22 @@ let derive_file ?(dot = false) (filename : string) : unit =
         end;
         if dot then print_string (Tangle.Jeg.to_dot dv)
         else begin
-          Printf.printf "== %s ==  (%d nodes, depth %d)\n"
-            d.Tangle.Ast.def_name (Tangle.Jeg.size dv) (Tangle.Jeg.depth dv);
+          (* Report coverage, not just size. A graph that checks is worth less
+             if some of its nodes were accepted without being re-derived, and
+             the reader cannot tell the difference from the tree alone. *)
+          let unchecked = Tangle.Jeg.unchecked dv in
+          let coverage =
+            match unchecked with
+            | [] -> "every node re-derived"
+            | us ->
+              Printf.sprintf "%d node(s) NOT re-derived: %s"
+                (List.length us)
+                (String.concat ", "
+                   (List.sort_uniq compare (List.map fst us)))
+          in
+          Printf.printf "== %s ==  (%d nodes, depth %d, %s)\n"
+            d.Tangle.Ast.def_name (Tangle.Jeg.size dv) (Tangle.Jeg.depth dv)
+            coverage;
           print_string (Tangle.Jeg.to_string dv);
           print_newline ()
         end;

@@ -5,9 +5,10 @@ open Ast
 open Typecheck
 
 type judgement = {
-  j_ctx  : (string * ty) list;
-  j_expr : expr;
-  j_ty   : ty;
+  j_ctx   : (string * env_entry) list;
+  j_sigma : (string * strand_entry) list;
+  j_expr  : expr;
+  j_ty    : ty;
 }
 
 type derivation = {
@@ -29,23 +30,47 @@ type check_error = {
 (* Only the bindings a node actually consults are recorded, so the graph stays
    readable: a 40-binding environment would otherwise be repeated at every
    node. *)
-let ctx_of (gamma : env) (names : string list) : (string * ty) list =
+(* Function signatures are recorded, not just value types: without the callee's
+   signature a T-App node cannot be re-derived at all, and an unre-derivable
+   node is a hole a forger can put anything through. *)
+let ctx_of (gamma : env) (names : string list) : (string * env_entry) list =
   List.filter_map (fun n ->
     match env_lookup gamma n with
-    | Some (EVal t) -> Some (n, t)
-    | _ -> None) names
+    | Some entry -> Some (n, entry)
+    | None -> None) names
 
-let node rule gamma names e t premises =
+let node ?(sigma = []) rule gamma names e t premises =
   { d_rule = rule;
-    d_conclusion = { j_ctx = ctx_of gamma names; j_expr = e; j_ty = t };
+    d_conclusion =
+      { j_ctx = ctx_of gamma names; j_sigma = sigma; j_expr = e; j_ty = t };
     d_premises = premises }
+
+(* Record only the strand entries a node consults, mirroring [ctx_of]. *)
+let strands_of (sigma : strand_ctx) (names : string list) :
+      (string * strand_entry) list =
+  List.filter_map (fun n ->
+    match strand_lookup sigma n with
+    | Some se -> Some (n, se)
+    | None -> None) names
+
+(* The strand context a weave block introduces — the same construction
+   [infer_expr] performs for [T-Weave]. *)
+let sigma_of_weave (wb : weave_block) : strand_ctx =
+  List.mapi (fun i ts ->
+    let sty = match ts.strand_type with
+      | Some name -> StrandNamed name
+      | None      -> StrandDefault
+    in
+    (ts.strand_name, { strand_pos = i + 1; strand_ty = sty })) wb.weave_inputs
 
 (* The derivation is produced by the SAME rules the checker uses — `derive` is
    not a parallel implementation that could drift.  Each case mirrors one
    inference rule from FORMAL-SEMANTICS.md, and the type recorded on the
    conclusion is the one `infer_expr` computes. *)
-let rec derive (gamma : env) (e : expr) : derivation =
-  let ty = infer_expr gamma [] e in
+let rec derive_in (gamma : env) (sigma : strand_ctx) (e : expr) : derivation =
+  let derive gamma e = derive_in gamma sigma e in
+  let node ?(sigma = sigma) = node ~sigma in
+  let ty = infer_expr gamma sigma e in
   let leaf rule = node rule gamma [] e ty [] in
   match e with
   | IntLit _ | FloatLit _ -> leaf "T-Num"
@@ -99,9 +124,29 @@ let rec derive (gamma : env) (e : expr) : derivation =
       (derive gamma scrut :: List.map (fun a -> derive gamma a.arm_body) arms)
 
   | Call (f, args)   -> node "T-App" gamma [f] e ty (List.map (derive gamma) args)
+
+  (* An add{} island has its own judgement (|-_hd), so there is no TANGLE-rule
+     premise structure to record.  It is the one rule `check` cannot re-derive,
+     and [unchecked] reports it rather than passing it off as verified. *)
   | AddBlock _       -> leaf "T-Add-Block"
-  | Crossing _       -> leaf "T-Crossing"
-  | Weave _          -> leaf "T-Weave"
+
+  (* Crossings and weaves read the STRAND context, not premise types.  Recording
+     Sigma on the judgement is what lets `check` re-derive them — previously
+     they were bare leaves, i.e. nodes that asserted a type with nothing
+     licensing it. *)
+  | Crossing (a, _, b) ->
+    { d_rule = "T-Crossing";
+      d_conclusion =
+        { j_ctx = []; j_sigma = strands_of sigma [a; b]; j_expr = e; j_ty = ty };
+      d_premises = [] }
+
+  | Weave wb ->
+    (* The body is derived in the weave's OWN strand context, which is where
+       strand names mean anything. *)
+    let sigma' = sigma_of_weave wb in
+    node ~sigma "T-Weave" gamma [] e ty [derive_in gamma sigma' wb.weave_body]
+
+and derive (gamma : env) (e : expr) : derivation = derive_in gamma [] e
 
 (* ================================================================== *)
 (*  Checking — independent of `derive`                                 *)
@@ -115,9 +160,26 @@ let rec derive (gamma : env) (e : expr) : derivation =
 let errs = ref []
 let fail rule reason at = errs := { ce_rule = rule; ce_reason = reason; ce_at = at } :: !errs
 
+(* Nodes accepted WITHOUT re-derivation.  A rule that cannot be re-derived is a
+   hole — a forger can put any conclusion through it — so the holes are counted
+   and reportable rather than hidden behind a silent `-> ()`.  `check` returning
+   Ok while [unchecked] is non-empty is a meaningful, and different, result. *)
+let unchecked_nodes = ref []
+let defer rule at = unchecked_nodes := (rule, at) :: !unchecked_nodes
+
 (* The type a node CLAIMS for each premise, in order. *)
 let premise_tys (d : derivation) : ty list =
   List.map (fun p -> p.d_conclusion.j_ty) d.d_premises
+
+(* Every T-Var node inside a derivation that names [x], with the type it
+   assumed.  Used by T-Let to verify the body was checked under the binding the
+   let actually introduces. *)
+let rec var_uses_in (x : string) (d : derivation) : (string * ty) list =
+  let here =
+    if d.d_rule = "T-Var" && d.d_conclusion.j_expr = Var x
+    then [ (x, d.d_conclusion.j_ty) ] else []
+  in
+  here @ List.concat_map (var_uses_in x) d.d_premises
 
 let rec check_node (d : derivation) : unit =
   List.iter check_node d.d_premises;
@@ -135,6 +197,26 @@ let rec check_node (d : derivation) : unit =
       fail d.d_rule
         (Printf.sprintf "concludes %s but the rule gives %s" (pp_ty c.j_ty) (pp_ty want)) c
   in
+  (* Run a rule function and compare.  A Type_error means the premises do not
+     license the conclusion at all, which is a failure, not an exception to
+     propagate: `check` reports, it does not throw. *)
+  let guard rule at f =
+    match (try Ok (f ()) with Type_error m -> Error m) with
+    | Ok want ->
+      if at.j_ty <> want then
+        fail rule
+          (Printf.sprintf "concludes %s but the rule gives %s"
+             (pp_ty at.j_ty) (pp_ty want)) at
+    | Error m -> fail rule ("premises do not license it: " ^ m) at
+  in
+  let unary_rule d c pts f =
+    if arity 1 then
+      (match pts with [t] -> guard d.d_rule c (fun () -> f t) | _ -> ())
+  in
+  let binary_rule d c pts f =
+    if arity 2 then
+      (match pts with [a; b] -> guard d.d_rule c (fun () -> f a b) | _ -> ())
+  in
   match d.d_rule with
   (* Axioms: the conclusion must match the literal, and there are no premises. *)
   | "T-Num"   -> if arity 0 then expect TNum
@@ -151,7 +233,10 @@ let rec check_node (d : derivation) : unit =
       (match c.j_expr with
        | Var n ->
          (match List.assoc_opt n c.j_ctx with
-          | Some t -> expect t
+          | Some (EVal t) -> expect t
+          | Some (EFun _) ->
+            fail d.d_rule
+              (Printf.sprintf "'%s' is a function; it has no value type" n) c
           | None -> fail d.d_rule (Printf.sprintf "'%s' not in the recorded context" n) c)
        | _ -> fail d.d_rule "conclusion is not a variable" c)
 
@@ -220,21 +305,148 @@ let rec check_node (d : derivation) : unit =
        | [t] -> fail d.d_rule ("premise must be an Epi, got " ^ pp_ty t) c
        | _ -> ())
 
-  (* Rules whose side conditions are not yet re-derivable here.  Listed
-     explicitly rather than swallowed by a wildcard, so the coverage gap is
-     visible: an unknown rule name is itself an error. *)
-  | "T-Pipeline" | "T-Unary" | "T-Close" | "T-Mirror" | "T-Reverse"
-  | "T-Simplify" | "T-Twist" | "T-Cap" | "T-Cup" | "T-Echo-Add" | "T-Echo-Eq"
-  | "T-Let" | "T-Match" | "T-App" | "T-Crossing" | "T-Weave" -> ()
+  (* ---- Unary and pipeline: re-run the rule on the premise type. ---- *)
+
+  | "T-Pipeline" ->
+    if arity 2 then
+      (match pts with
+       | [t1; t2] -> guard d.d_rule c (fun () -> infer_binop Compose t1 t2)
+       | _ -> ())
+
+  | "T-Unary" ->
+    if arity 1 then
+      (match c.j_expr, pts with
+       | UnaryOp (op, _), [t] -> guard d.d_rule c (fun () -> infer_unop op t)
+       | _ -> fail d.d_rule "conclusion is not a unary operation" c)
+
+  | "T-Close"    -> unary_rule d c pts infer_close
+  | "T-Mirror"   -> unary_rule d c pts infer_mirror
+  | "T-Reverse"  -> unary_rule d c pts infer_reverse
+  | "T-Simplify" -> unary_rule d c pts infer_simplify
+  | "T-Twist"    -> unary_rule d c pts infer_twist
+
+  | "T-Cap"      -> binary_rule d c pts infer_cap
+  | "T-Cup"      -> binary_rule d c pts infer_cup
+  | "T-Echo-Add" -> binary_rule d c pts infer_echo_add
+  | "T-Echo-Eq"  -> binary_rule d c pts infer_echo_eq
+
+  (* ---- T-Let ----
+     Two obligations.  The conclusion is the BODY's type (the bound expression's
+     type does not escape), and — the substantive half — the body must have been
+     checked under the binding the let actually introduces.  Checking only the
+     first would accept a derivation whose body silently assumed `x` had some
+     more convenient type. *)
+  | "T-Let" ->
+    if arity 2 then
+      (match c.j_expr, d.d_premises, pts with
+       | Let (x, _, _), [_; body], [t1; t2] ->
+         expect t2;
+         List.iter (fun (nm, t) ->
+           if nm = x && t <> t1 then
+             fail d.d_rule
+               (Printf.sprintf
+                  "body assumes '%s' : %s, but the let binds it at %s"
+                  x (pp_ty t) (pp_ty t1)) c)
+           (var_uses_in x body)
+       | _ -> fail d.d_rule "conclusion is not a let" c)
+
+  (* ---- T-Match ----
+     Premises are the scrutinee followed by one per arm.  The conclusion is the
+     join of the arm types (words agree up to width, #92). *)
+  | "T-Match" ->
+    (match c.j_expr, pts with
+     | Match (_, arms), _ :: arm_tys when List.length arms = List.length arm_tys
+                                       && arm_tys <> [] ->
+       let joined =
+         List.fold_left (fun acc t ->
+           match acc with None -> None | Some a -> join_arm_ty a t)
+           (Some (List.hd arm_tys)) arm_tys
+       in
+       (match joined with
+        | Some t -> expect t
+        | None -> fail d.d_rule "arms have no common type" c)
+     | Match (arms_e, _), _ ->
+       ignore arms_e;
+       fail d.d_rule
+         "premises must be the scrutinee followed by exactly one per arm" c
+     | _ -> fail d.d_rule "conclusion is not a match" c)
+
+  (* ---- T-App ----
+     Re-derivable now that the callee's SIGNATURE is recorded on the judgement.
+     Both halves matter: the argument types must match the parameters, and the
+     conclusion must be the declared return type. *)
+  | "T-App" ->
+    (match c.j_expr with
+     | Call (f, _) ->
+       (match List.assoc_opt f c.j_ctx with
+        | Some (EFun fs) ->
+          let np = List.length fs.fsig_params in
+          if List.length pts <> np then
+            fail d.d_rule
+              (Printf.sprintf "'%s' takes %d argument(s), the graph supplies %d"
+                 f np (List.length pts)) c
+          else
+            List.iteri (fun i (want, got) ->
+              if want <> got then
+                fail d.d_rule
+                  (Printf.sprintf "argument %d of '%s' is %s but the signature \
+                                   declares %s" (i + 1) f (pp_ty got) (pp_ty want)) c)
+              (List.combine fs.fsig_params pts);
+          expect fs.fsig_return
+        | Some (EVal _) ->
+          fail d.d_rule (Printf.sprintf "'%s' is a value, not a function" f) c
+        | None ->
+          fail d.d_rule
+            (Printf.sprintf "'%s' is not in the recorded context — the callee's \
+                             signature is required to re-derive the call" f) c)
+     | _ -> fail d.d_rule "conclusion is not a call" c)
+
+  (* ---- T-Crossing / T-Weave ----
+     These read the STRAND context rather than premise types, so they are
+     re-derived against the Sigma recorded on the judgement.  That is still
+     independent of `derive`: it recomputes the rule from the graph's own data.
+     For T-Weave it also re-checks strand LINEARITY, so a graph asserting a
+     weave that duplicates or drops a strand is rejected here too. *)
+  | "T-Crossing" ->
+    if arity 0 then
+      (match c.j_expr with
+       | Crossing _ -> guard d.d_rule c (fun () -> infer_expr [] c.j_sigma c.j_expr)
+       | _ -> fail d.d_rule "conclusion is not a crossing" c)
+
+  | "T-Weave" ->
+    (match c.j_expr with
+     | Weave wb ->
+       guard d.d_rule c (fun () ->
+         (* linearity + boundary, exactly as the typechecker computes them *)
+         check_strand_linearity (sigma_of_weave wb) wb;
+         let inb = List.map (fun (_, se) -> se.strand_ty) (sigma_of_weave wb) in
+         let outb = List.map (fun ts ->
+           match ts.strand_type with
+           | Some n -> StrandNamed n
+           | None   -> StrandDefault) wb.weave_outputs in
+         TTangle (inb, outb))
+     | _ -> fail d.d_rule "conclusion is not a weave" c)
+
   (* T-Add-Block: the island has its own judgement (|-_hd), so re-deriving it
-     here would mean re-implementing that checker. Deferred, and listed. *)
-  | "T-Add-Block" -> ()
+     here would mean re-implementing that checker.  Recorded as UNCHECKED — the
+     one remaining hole, and reported as such rather than silently accepted. *)
+  | "T-Add-Block" -> defer d.d_rule c
+
   | r -> fail r "unknown rule name" c
 
 let check (d : derivation) : (unit, check_error list) result =
   errs := [];
+  unchecked_nodes := [];
   check_node d;
   match List.rev !errs with [] -> Ok () | es -> Error es
+
+(** Which nodes `check` accepted without re-deriving.  Empty means every node
+    in the graph was licensed by a rule the checker recomputed. *)
+let unchecked (d : derivation) : (string * judgement) list =
+  errs := [];
+  unchecked_nodes := [];
+  check_node d;
+  List.rev !unchecked_nodes
 
 (* ================================================================== *)
 (*  Presentation                                                       *)
@@ -250,7 +462,13 @@ let judgement_to_string (j : judgement) : string =
   let ctx =
     if j.j_ctx = [] then ""
     else (String.concat ", "
-            (List.map (fun (n, t) -> n ^ ":" ^ pp_ty t) j.j_ctx)) ^ " "
+            (List.map (fun (n, entry) ->
+               match entry with
+               | EVal t -> n ^ ":" ^ pp_ty t
+               | EFun fs ->
+                 Printf.sprintf "%s:(%s)->%s" n
+                   (String.concat ", " (List.map pp_ty fs.fsig_params))
+                   (pp_ty fs.fsig_return)) j.j_ctx)) ^ " "
   in
   Printf.sprintf "%s|- %s : %s" ctx (Pretty.expr_to_string j.j_expr) (pp_ty j.j_ty)
 
