@@ -373,11 +373,32 @@ let rec infer_expr (gamma : env) (sigma : strand_ctx) (e : expr) : ty =
 
   (* [T-Twist-Word], [T-Twist-Tangle] (D1.18) *)
   | Twist e1 ->
-    let t = infer_expr gamma sigma e1 in
-    begin match t with
-    | TWord n        -> TWord n
-    | TTangle (a, b) -> TTangle (a, b)
-    | _ -> type_error "twist requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
+    (* [T-Twist-Strand] (D1.18, spec section 3.10) must be tried FIRST:
+     *
+     *     Sigma(a) = (i, T)
+     *     ---------------------------------
+     *     Gamma; Sigma |- (~a) : Tangle[[T], [T]]
+     *
+     * `(~a)` on a NAMED STRAND inside a weave twists that strand.  Falling
+     * through to the general case would infer `a` as an ordinary expression,
+     * and the Var rule rejects strand names outright ("cannot be used as a
+     * standalone expression") — which is why conformance/valid/v09_twist.tangle
+     * never typechecked despite the spec licensing it.
+     *
+     * Exactly parallel to [T-Self-Cross] below, which types `(a > a)` the same
+     * way; the spec presents them as a pair. *)
+    begin match e1 with
+    | Var a when strand_lookup sigma a <> None ->
+      let ea = Option.get (strand_lookup sigma a) in
+      TTangle ([strand_to_type ea.strand_ty], [strand_to_type ea.strand_ty])
+    | _ ->
+      (* [T-Twist-Word] / [T-Twist-Tangle]: the standalone forms. *)
+      let t = infer_expr gamma sigma e1 in
+      begin match t with
+      | TWord n        -> TWord n
+      | TTangle (a, b) -> TTangle (a, b)
+      | _ -> type_error "twist requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
+      end
     end
 
   (* ---- Crossings in weave context [T-Cross-Over], [T-Cross-Under] ---- *)

@@ -428,6 +428,18 @@ let rec eval_expr (env : env) (e : expr) : value =
        cup/cap pair.  Represented as an empty closed tangle. *)
     VTangle { tv_word = []; tv_closed = true }
 
+  (* [T-Twist-Strand]: `(~a)` on a NAMED STRAND inside a weave.  Treated as
+     structural, exactly as `Crossing` is below — weave bodies describe a
+     morphism, and the interpreter carries no strand context at runtime.
+     A single-strand twist is in any case invisible to the braid WORD: it is a
+     framing change (Reidemeister I), which the braid group does not see.
+
+     Safe to detect by "a Var the environment does not bind": the typechecker
+     runs first and accepts `Twist (Var a)` ONLY when `a` is in the strand
+     context, so a genuinely unbound variable never reaches here. *)
+  | Twist (Var a) when env_lookup env a = None ->
+    ignore a; VBraid []
+
   | Twist e1 ->
     let v = eval_expr env e1 in
     begin match v with
