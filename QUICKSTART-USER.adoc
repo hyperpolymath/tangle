@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
 // Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 // Template: QUICKSTART-USER.adoc — 5-minute path to working software
-// Replace tangle, Tangle — See README.adoc for details., just run, Tangle started successfully. with actuals
+// QUICKSTART-USER.adoc — instantiated for tangle (#56)
 = tangle — Quick Start for Users
 :toc:
 :toclevels: 2
@@ -40,44 +40,62 @@ Before you begin, ensure you have:
 # Clone and set up
 git clone https://github.com/hyperpolymath/tangle.git
 cd tangle
-just setup
+
+# Build the compiler (`just setup` never existed)
+sudo apt-get install -y ocaml ocaml-dune menhir
+cd compiler && dune build
 ----
 
-The setup script will:
-
-* Detect your platform and shell
-* Install missing dependencies (with your permission)
-* Configure the application
-* Offer install location choices
-* Run a self-diagnostic to verify everything works
+There is no setup script — the build IS the setup. `dune build` produces a
+single self-contained native executable at
+`compiler/_build/default/bin/main.exe`, which needs nothing at runtime beyond
+libc. There is no configuration step and no install location to choose.
 
 === Option 2: Container (via Stapeln)
 
 [source,bash]
 ----
-just stapeln-run
+# `just stapeln-run` does not exist. Run the built binary:
+./compiler/_build/default/bin/main.exe --repl
 ----
 
 === Option 3: Portable (no system changes)
 
 [source,bash]
 ----
-just install --portable --prefix=./tangle-portable
+# No `just install` recipe — the build IS the artefact:
+cp ./compiler/_build/default/bin/main.exe ./tanglec
 ----
 
 == First Run
 
 [source,bash]
 ----
-just run
+# `just run` does not exist. Invoke the compiler on a file:
+./compiler/_build/default/bin/main.exe --eval examples/isotopy.tangle
 ----
 
-Expected output:
+Expected output — one line per assertion, exit 0 (verified, not assumed):
 
-[source]
+[source,bash]
 ----
-Tangle started successfully.
+$ ./compiler/_build/default/bin/main.exe --eval examples/isotopy.tangle
+assertion passed
+assertion passed
+assertion passed
+assertion passed
+assertion passed
+assertion passed
+assertion passed
+assertion passed
+$ echo $?
+0
 ----
+
+That file is worth reading: it asserts Reidemeister II cancellation and far
+commutation, and it only passes because `~` decides braid-group equivalence
+(TG-7, #50). Before that change it failed with `Runtime error: Assertion
+failed`.
 
 == Self-Diagnostic
 
@@ -95,12 +113,14 @@ To attempt automatic repair:
 
 [source,bash]
 ----
-just heal
+# `just heal` does not exist. The real self-checks are:
+just doctor        # diagnostic
+just check-all     # build + full suite + corpus gate
 ----
 
 == Get Help
 
-* **In-app**: `just run --help`
+* **CLI**: `./compiler/_build/default/bin/main.exe --repl` then explore; see README.adoc
 * **Guided tour**: `just tour`
 * **Report a problem**: `just help-me` (pre-fills diagnostic context)
 * **Wiki**: https://github.com/hyperpolymath/tangle/wiki
@@ -109,7 +129,8 @@ just heal
 
 [source,bash]
 ----
-just uninstall
+# Nothing is installed system-wide: delete the clone and any copy you made.
+rm -f ./tanglec
 ----
 
 You will be asked:
