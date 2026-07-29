@@ -189,7 +189,18 @@ let dump_tokens (filename : string) : unit =
      | ECHOADD     -> print_string "ECHOADD"
      | ECHOEQ      -> print_string "ECHOEQ"
      | WARRANT     -> print_string "WARRANT"
-     | EVIDENCE    -> print_string "EVIDENCE");
+     | EVIDENCE    -> print_string "EVIDENCE"
+     | ADDBRACE    -> print_string "ADDBRACE"
+     | IF          -> print_string "IF"
+     | THEN        -> print_string "THEN"
+     | ELSE        -> print_string "ELSE"
+     | AMPAMP      -> print_string "AMPAMP"
+     | BARBAR      -> print_string "BARBAR"
+     | BANGEQ      -> print_string "BANGEQ"
+     | LE          -> print_string "LE"
+     | GE          -> print_string "GE"
+     | PERCENT     -> print_string "PERCENT"
+     | BANG        -> print_string "BANG");
     print_newline ();
     if tok <> EOF then loop ()
   in

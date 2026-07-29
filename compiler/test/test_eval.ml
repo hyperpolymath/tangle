@@ -231,6 +231,43 @@ let test_reverse () =
     eval (Mirror (BraidLit [sigma 1; sigma 2]))
       = VBraid [rgen 1 (-1); rgen 2 (-1)]);
 
+  (* ---------------------------------------------------------------- *)
+  (* JTV add{} island (#94). The design point is SEMANTIC SEPARATION:   *)
+  (* `+` in TANGLE is connect-sum; `+` inside add{} is arithmetic.      *)
+  (* ---------------------------------------------------------------- *)
+
+  test "#94 add{}: operator precedence is the island's own" (fun () ->
+    eval (AddBlock (HvBin (HvAdd, HvInt 1, HvBin (HvMul, HvInt 2, HvInt 3))))
+      = VInt 7);
+
+  test "#94 add{}: conditional is total (both branches)" (fun () ->
+    eval (AddBlock (HvIf (HvBin (HvGt, HvInt 5, HvInt 3), HvInt 10, HvInt 20)))
+      = VInt 10);
+
+  test "#94 add{}: logical operators" (fun () ->
+    eval (AddBlock (HvBin (HvAnd, HvBool true,
+                            HvBin (HvOr, HvBool false, HvUn (HvNot, HvBool false)))))
+      = VBool true);
+
+  test "#94 add{}: modulo" (fun () ->
+    eval (AddBlock (HvBin (HvMod, HvInt 7, HvInt 3))) = VInt 1);
+
+  test "#94 add{}: int division stays integral" (fun () ->
+    eval (AddBlock (HvBin (HvDiv, HvInt 10, HvInt 4))) = VInt 2);
+
+  test "#94 add{}: mixed int/float promotes" (fun () ->
+    eval (AddBlock (HvBin (HvAdd, HvInt 1, HvFloat 0.5))) = VFloat 1.5);
+
+  test "#94 add{}: division by zero is caught" (fun () ->
+    try let _ = eval (AddBlock (HvBin (HvDiv, HvInt 1, HvInt 0))) in false
+    with Eval_error _ -> true);
+
+  test "#94 add{}: Embed crosses back into TANGLE" (fun () ->
+    (* Int -> Num, Bool -> Bool, String -> Str (spec 7.2). *)
+    eval (AddBlock (HvInt 1)) = VInt 1
+    && eval (AddBlock (HvBool true)) = VBool true
+    && eval (AddBlock (HvStr "s")) = VString "s");
+
   (* Reverse identity is identity *)
   test "Reverse identity" (fun () ->
     eval (Reverse Identity) = VBraid []);

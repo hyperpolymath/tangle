@@ -100,6 +100,28 @@ let pp_strand_list ctx strands =
     pp_typed_strand ctx s
   ) strands
 
+(* Harvard data expressions print fully parenthesised: the island has its own
+   precedence, and re-parsing must not depend on the reader sharing TANGLE's. *)
+let rec pp_hv ctx = function
+  | HvInt n   -> emit ctx (string_of_int n)
+  | HvFloat f -> emit ctx (Printf.sprintf "%g" f)
+  | HvStr s   -> emit ctx (Printf.sprintf "%S" s)
+  | HvBool b  -> emit ctx (if b then "true" else "false")
+  | HvUn (op, a) ->
+    emit ctx "("; emit ctx (match op with HvNeg -> "-" | HvNot -> "!");
+    pp_hv ctx a; emit ctx ")"
+  | HvBin (op, a, b) ->
+    emit ctx "("; pp_hv ctx a;
+    emit ctx (match op with
+      | HvAdd -> " + " | HvSub -> " - " | HvMul -> " * " | HvDiv -> " / "
+      | HvMod -> " % " | HvEq -> " == " | HvNe -> " != " | HvLt -> " < "
+      | HvLe -> " <= " | HvGt -> " > " | HvGe -> " >= "
+      | HvAnd -> " && " | HvOr -> " || ");
+    pp_hv ctx b; emit ctx ")"
+  | HvIf (c, t, e) ->
+    emit ctx "(if "; pp_hv ctx c; emit ctx " then "; pp_hv ctx t;
+    emit ctx " else "; pp_hv ctx e; emit ctx ")"
+
 let rec pp_expr ctx = function
   | Match (scrut, arms) ->
     emit ctx "match ";
@@ -275,6 +297,9 @@ let rec pp_expr ctx = function
     pp_expr ctx w.weave_body;
     emit ctx " yield strands ";
     pp_strand_list ctx w.weave_outputs
+
+  | AddBlock he ->
+    emit ctx "add{ "; pp_hv ctx he; emit ctx " }"
 
   | Warrant (k, c, ev) ->
     emit ctx "warrant["; emit ctx (string_of_int k); emit ctx "](";

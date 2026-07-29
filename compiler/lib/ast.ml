@@ -97,6 +97,19 @@ and expr =
    *      proofs/Tangle.lean and epistemic-types' Warrant.agda.
    *      NON-FACTIVE: `Evidence` is the only elimination.  There is no
    *      operation taking a warrant to the thing warranted. ---- *)
+  (* ---- JTV injection island (D2.1) ----
+   * `add{ he }` embeds a Harvard DATA expression into TANGLE.
+   *
+   * Deliberately a SEPARATE grammar, not more TANGLE expressions: the whole
+   * point of the island is semantic separation.  `+` in TANGLE is connect-sum
+   * on tangles; `+` inside add{} is arithmetic.  Sharing one `expr` type would
+   * lose exactly the distinction the design exists to make (README-jtv.adoc,
+   * "Semantic Separation").
+   *
+   * The block is total and pure by construction: no side effects, no loops, no
+   * assignment, guaranteed terminating (D2.1). *)
+  | AddBlock  of hv_expr             (* add{ he } *)
+
   | Warrant   of int * expr * expr    (* warrant κ claim evidence (redex) *)
   | EpiVal    of int * expr * expr    (* formed warrant: standpoint, claim, token *)
   | Evidence  of expr                 (* project the evidence token (ONLY elimination) *)
@@ -127,6 +140,32 @@ and expr =
    * occurrences in proofs/Tangle.lean) and outside the TG-3 corpus, so this
    * touches no proof obligation. *)
   | Weave     of weave_block
+
+(** Harvard DATA expressions — the `add{...}` island (spec section 6.2).
+    Separate from [expr] on purpose; see [AddBlock].
+
+    Implemented here: the scalar-literal fragment with the full operator
+    hierarchy and the conditional.  NOT implemented, and NOT pretended:
+    rationals, complex numbers, lists and tuples (spec section 7.1); variables
+    resolving in the Pi environment and function calls (sections 8.2, 9.5); and
+    the `harvard{...}` CONTROL block (section 6.3) entirely. *)
+and hv_expr =
+  | HvInt   of int
+  | HvFloat of float
+  | HvStr   of string
+  | HvBool  of bool
+  | HvUn    of hv_unop * hv_expr
+  | HvBin   of hv_binop * hv_expr * hv_expr
+  | HvIf    of hv_expr * hv_expr * hv_expr   (* total: both branches required *)
+
+and hv_unop =
+  | HvNeg      (* - *)
+  | HvNot      (* ! *)
+
+and hv_binop =
+  | HvAdd | HvSub | HvMul | HvDiv | HvMod
+  | HvEq  | HvNe  | HvLt  | HvLe  | HvGt | HvGe
+  | HvAnd | HvOr
 
 (** Binary operator tag. *)
 and binop =

@@ -164,6 +164,98 @@ let apply_perm (b : boundary) (gens : generator list) : boundary =
 (*  Type inference for expressions                                     *)
 (* ================================================================== *)
 
+(* ================================================================== *)
+(*  Harvard data types and the |-_hd judgement (spec sections 7.1, 9.3)  *)
+(* ================================================================== *)
+
+(** Harvard DATA types (spec section 7.1).  A separate type language from
+    TANGLE's [ty] — the island has its own judgement, written |-_hd.
+
+    Implemented: Int, Float, Bool, String.  NOT implemented and not pretended:
+    Rational, Hex, Binary, Symbolic (section 7.1), and the aggregate types. *)
+type hv_ty =
+  | HvTInt
+  | HvTFloat
+  | HvTBool
+  | HvTStr
+
+let pp_hv_ty = function
+  | HvTInt -> "Int" | HvTFloat -> "Float"
+  | HvTBool -> "Bool" | HvTStr -> "String"
+
+(** Embed (D2.4): Harvard type -> TANGLE type, for an `add{...}` result
+    entering TANGLE.  Spec section 7.2:
+        Embed(Int) = Embed(Float) = Num,  Embed(Bool) = Bool,
+        Embed(String) = Str *)
+let embed : hv_ty -> ty = function
+  | HvTInt | HvTFloat -> TNum
+  | HvTBool           -> TBool
+  | HvTStr            -> TStr
+
+(** The |-_hd judgement (spec section 9.3).  Total and pure by construction, so
+    it needs no environment in this fragment: variables resolve in Pi, which is
+    not yet modelled. *)
+let rec infer_hv (e : hv_expr) : hv_ty =
+  match e with
+  | HvInt _   -> HvTInt
+  | HvFloat _ -> HvTFloat
+  | HvStr _   -> HvTStr
+  | HvBool _  -> HvTBool
+
+  | HvUn (HvNeg, a) ->
+    begin match infer_hv a with
+    | HvTInt -> HvTInt | HvTFloat -> HvTFloat
+    | t -> type_error "add{}: negation requires a number, got %s" (pp_hv_ty t)
+    end
+  | HvUn (HvNot, a) ->
+    begin match infer_hv a with
+    | HvTBool -> HvTBool
+    | t -> type_error "add{}: ! requires Bool, got %s" (pp_hv_ty t)
+    end
+
+  | HvBin (op, a, b) ->
+    let ta = infer_hv a and tb = infer_hv b in
+    begin match op with
+    | HvAdd | HvSub | HvMul | HvDiv | HvMod ->
+      begin match ta, tb with
+      | HvTInt, HvTInt -> HvTInt
+      | (HvTInt | HvTFloat), (HvTInt | HvTFloat) -> HvTFloat
+      | _ -> type_error "add{}: arithmetic requires numbers, got %s and %s"
+               (pp_hv_ty ta) (pp_hv_ty tb)
+      end
+    | HvLt | HvLe | HvGt | HvGe ->
+      begin match ta, tb with
+      | (HvTInt | HvTFloat), (HvTInt | HvTFloat) -> HvTBool
+      | _ -> type_error "add{}: comparison requires numbers, got %s and %s"
+               (pp_hv_ty ta) (pp_hv_ty tb)
+      end
+    | HvEq | HvNe ->
+      (* Equality is homogeneous, and numeric across Int/Float. *)
+      begin match ta, tb with
+      | (HvTInt | HvTFloat), (HvTInt | HvTFloat) -> HvTBool
+      | x, y when x = y -> HvTBool
+      | _ -> type_error "add{}: cannot compare %s with %s"
+               (pp_hv_ty ta) (pp_hv_ty tb)
+      end
+    | HvAnd | HvOr ->
+      begin match ta, tb with
+      | HvTBool, HvTBool -> HvTBool
+      | _ -> type_error "add{}: logical operators require Bool, got %s and %s"
+               (pp_hv_ty ta) (pp_hv_ty tb)
+      end
+    end
+
+  | HvIf (c, t, e2) ->
+    begin match infer_hv c with
+    | HvTBool ->
+      let tt = infer_hv t and te = infer_hv e2 in
+      (* TOTAL: both branches required and they must agree (D2.1). *)
+      if tt = te then tt
+      else type_error "add{}: if branches disagree — %s vs %s"
+             (pp_hv_ty tt) (pp_hv_ty te)
+    | t -> type_error "add{}: if condition must be Bool, got %s" (pp_hv_ty t)
+    end
+
 (** Infer the type of an expression under environment Gamma.
  *  Optionally takes a strand context Sigma for weave block bodies.
  *
@@ -243,6 +335,11 @@ let rec infer_expr (gamma : env) (sigma : strand_ctx) (e : expr) : ty =
     | TEpi (_, rho, _) -> rho
     | t -> type_error "evidence requires an Epi[k, rho, tau], got %s" (pp_ty t)
     end
+
+  (* [T-Add-Block] (spec section 9.1): the island's result crosses back into
+     TANGLE through Embed.  The Harvard judgement |-_hd is used inside; the
+     TANGLE judgement never looks in. *)
+  | AddBlock he -> embed (infer_hv he)
 
   (* ---- Variables [T-Var] ---- *)
 
@@ -776,6 +873,9 @@ let rec expr_calls (f : string) (e : expr) : bool =
   | Twist e1 | EchoClose e1 | Lower e1 | Residue e1 | Fst e1 | Snd e1
   | Evidence e1 -> go e1
   | Warrant (_, c, ev) | EpiVal (_, c, ev) -> go c || go ev
+  (* An add{} island is closed: it cannot call a TANGLE function (Pi/section 9.5
+     is not modelled), so it can never contain a recursive call. *)
+  | AddBlock _ -> false
   | Weave wb -> go wb.weave_body
   | BraidLit _ | Identity | BoolLit _ | IntLit _ | FloatLit _
   | StringLit _ | Var _ | Crossing _ -> false

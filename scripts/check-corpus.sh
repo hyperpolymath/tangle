@@ -61,25 +61,14 @@ EXAMPLES_KNOWN_UNTYPED=(
 )
 
 # conformance/valid programs the parser does not yet accept.
-#   v11 : `add{ ... }` — the Harvard DATA SUB-LANGUAGE, not a parse rule. It has
-#         its own expression grammar, type system (Int/Float/Rational/Hex/
-#         Binary/Bool/String/Symbolic), environments (Pi), visibility rules, a
-#         separate typing judgement, Embed/Unembed, and bidirectional calling
-#         with Tangle — 288 lines of FORMAL-SEMANTICS.md across 12 sections.
-#         A feature, tracked separately.
-#
-# v02/v08/v09/v12 were here for `weave ... into ... yield ...` used as a
-# DEFINITION BODY. Fixed: weave is now an expression as well as a statement.
+# EMPTY as of #94 (the JTV add{} island). All 19 valid programs parse.
 CONFORMANCE_KNOWN_UNPARSED=(
-  v11_add_block.tangle
 )
 
 # conformance/valid programs that PARSE but do not yet TYPECHECK+EVALUATE.
-#   v11 : does not parse at all (see above); listed here too so the eval loop
-#         does not double-report it.
-# (v09_twist was listed here for [T-Twist-Strand] until #96 implemented it.)
+# EMPTY as of #94. All 19 valid programs run. Keep it empty: an entry here is
+# debt, and the ratchet fails the build if a listed file starts working.
 CONFORMANCE_KNOWN_UNRUNNABLE=(
-  v11_add_block.tangle
 )
 
 fail=0
