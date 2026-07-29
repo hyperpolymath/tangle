@@ -652,6 +652,109 @@ and check_pattern (gamma : env) (scrutinee_ty : ty) (pat : pattern)
 let valid_invariants =
   ["jones"; "alexander"; "homfly"; "kauffman"; "writhe"; "linking"]
 
+(** Does [e] contain a call to [f]?  Used to detect self-recursion in a
+    function definition, so that only recursive definitions pay the cost of the
+    return-type search below. *)
+let rec expr_calls (f : string) (e : expr) : bool =
+  let go = expr_calls f in
+  match e with
+  | Call (g, args) -> g = f || List.exists go args
+  | Match (scrut, arms) ->
+    go scrut || List.exists (fun a -> go a.arm_body) arms
+  | Let (_, e1, e2)      -> go e1 || go e2
+  | Pipeline (e1, e2)    -> go e1 || go e2
+  | BinOp (_, e1, e2)    -> go e1 || go e2
+  | Cap (e1, e2) | Cup (e1, e2) | Pair (e1, e2)
+  | EchoAdd (e1, e2) | EchoEq (e1, e2) -> go e1 || go e2
+  | UnaryOp (_, e1) | Close e1 | Mirror e1 | Reverse e1 | Simplify e1
+  | Twist e1 | EchoClose e1 | Lower e1 | Residue e1 | Fst e1 | Snd e1 -> go e1
+  | BraidLit _ | Identity | BoolLit _ | IntLit _ | FloatLit _
+  | StringLit _ | Var _ | Crossing _ -> false
+
+(** Candidate return types for a recursive function, in the order they are
+    tried.  Seeds drawn from the body come first (a match's non-recursive arms
+    are the usual source), then the scalar types, then the original [TWord 0]
+    placeholder so the previous behaviour remains reachable. *)
+let recursive_return_candidates (gamma : env) (f : string) (body : expr) : ty list =
+  (* Types of the arms that do NOT mention [f] — those can be inferred before
+     anything is known about the function's return type.  For
+       def length(w) = match w with
+         | identity  => 0                  <- typeable now: Num
+         | s1 . rest => 1 + length(rest)   <- not yet
+         | _         => 0                  <- typeable now: Num
+     this yields [TNum], which is the fixpoint. *)
+  let seeds_from_body =
+    match body with
+    | Match (_, arms) ->
+      List.filter_map (fun a ->
+        if expr_calls f a.arm_body then None
+        else (try Some (infer_expr gamma [] a.arm_body) with _ -> None)
+      ) arms
+    | _ -> []
+  in
+  let dedup l =
+    List.fold_left (fun acc x -> if List.mem x acc then acc else acc @ [x]) [] l
+  in
+  dedup (seeds_from_body @ [TNum; TBool; TStr; TWord 0])
+
+(** Infer the return type of a function definition and bind it in [gamma].
+    [T-Def-Fun].
+
+    This is the single implementation of function-definition typing.  It used
+    to exist twice — once here and once inlined in [check_program]'s pass 1b —
+    and only the copy in [check_program] was ever reached for whole programs.
+    A fix applied to one had no effect on the other, so they are now one
+    function called from both. *)
+let bind_function_def (gamma : env) (def : definition) : env =
+  let param_tys = List.map (fun _p -> TWord 0) def.def_params in
+  (* Bind the params, and the function itself so recursive calls resolve.
+     [seed] is the return type assumed for those recursive calls. *)
+  let with_seed (seed : ty) : env =
+    let fsig = { fsig_params = param_tys; fsig_return = seed } in
+    let g = env_bind_fun gamma def.def_name fsig in
+    List.fold_left2 (fun g pname pty -> env_bind_val g pname pty)
+      g def.def_params param_tys
+  in
+  let body_ty =
+    if not (expr_calls def.def_name def.def_body) then
+      (* Non-recursive: the seed is never consulted, so one pass suffices.
+         Unchanged from the original behaviour. *)
+      infer_expr (with_seed (TWord 0)) [] def.def_body
+    else begin
+      (* Recursive.  The return type occurs in its own derivation, so it must
+         be a FIXPOINT: assume a return type, check the body under that
+         assumption, and accept only if the body then has exactly the assumed
+         type.  Anything weaker is a guess that merely failed to crash.
+
+         Previously the seed was hard-coded to [TWord 0] and marked
+         "placeholder", with nothing checking the result against it.  So
+
+             def length(w) = match w with
+               | identity  => 0
+               | s1 . rest => 1 + length(rest)
+               | _         => 0
+
+         failed with "Cannot add Num and Word[0]" — the recursive call was
+         typed at the placeholder rather than at Num, which made every
+         recursive function returning a scalar unwritable.
+
+         The candidate list is finite and ordered, so this terminates.  If no
+         candidate is a fixpoint we fall back to the original single pass,
+         which re-raises its original error: a definition that did not
+         typecheck before still does not, with the same message. *)
+      let rec first_fixpoint = function
+        | [] -> infer_expr (with_seed (TWord 0)) [] def.def_body
+        | seed :: rest ->
+          (match infer_expr (with_seed seed) [] def.def_body with
+           | t when t = seed -> t            (* consistent: a real fixpoint *)
+           | _               -> first_fixpoint rest
+           | exception _     -> first_fixpoint rest)
+      in
+      first_fixpoint (recursive_return_candidates gamma def.def_name def.def_body)
+    end
+  in
+  env_bind_fun gamma def.def_name { fsig_params = param_tys; fsig_return = body_ty }
+
 (** Type-check a single statement, returning the (possibly extended) environment.
  *  Implements [T-Def-Val], [T-Def-Fun], [T-Assert], [T-Compute], [T-Weave].
  *)
@@ -671,19 +774,7 @@ let check_statement (gamma : env) (stmt : statement) : env =
        * A more sophisticated implementation would use constraint-based
        * inference; here we use a simple forward analysis.
        *)
-      let param_tys = List.map (fun _p -> TWord 0) def.def_params in
-      (* Bind params and the function itself (for recursion) into the env *)
-      let ret_ty = TWord 0 in  (* placeholder *)
-      let fsig = { fsig_params = param_tys; fsig_return = ret_ty } in
-      let gamma' = env_bind_fun gamma def.def_name fsig in
-      let gamma' = List.fold_left2 (fun g pname pty ->
-        env_bind_val g pname pty
-      ) gamma' def.def_params param_tys in
-      (* Infer the body type *)
-      let body_ty = infer_expr gamma' [] def.def_body in
-      (* Re-register with inferred return type *)
-      let fsig' = { fsig_params = param_tys; fsig_return = body_ty } in
-      env_bind_fun gamma def.def_name fsig'
+      bind_function_def gamma def
     end
 
   (* [T-Weave] (section 3.10) *)
@@ -813,16 +904,7 @@ let check_program (prog : program) : check_result =
           let ty = infer_expr gamma [] def.def_body in
           env_bind_val gamma def.def_name ty
         end else begin
-          let param_tys = List.map (fun _p -> TWord 0) def.def_params in
-          let fsig_placeholder =
-            { fsig_params = param_tys; fsig_return = TWord 0 } in
-          let gamma' = env_bind_fun gamma def.def_name fsig_placeholder in
-          let gamma' = List.fold_left2 (fun g pname pty ->
-            env_bind_val g pname pty
-          ) gamma' def.def_params param_tys in
-          let body_ty = infer_expr gamma' [] def.def_body in
-          let fsig = { fsig_params = param_tys; fsig_return = body_ty } in
-          env_bind_fun gamma def.def_name fsig
+          bind_function_def gamma def
         end
       with Type_error msg ->
         add_error_at def.def_line
