@@ -477,6 +477,65 @@ yield declarations match B
 
 Weave blocks can reference all definitions in Γ (D2.8).
 
+#### 3.10.1 Strand quantities — the linear discipline
+
+The rule above has two side conditions that were, until the quantity semiring
+landed, written down and never enforced: the `i ≠ j` on `[T-Cross-Over]` /
+`[T-Cross-Under]` below, and "yield declarations match B". Both are instances
+of one law, so both are now discharged by one check.
+
+TANGLE annotates resources with a quantity from the QTT semiring
+{0, 1, ω} (Atkey 2018), rather than committing the whole language to a single
+substructural discipline:
+
+| quantity | reading | who carries it |
+|---|---|---|
+| `0` | erased — present for typing, absent at runtime | the claim in `Epi[κ, ρ, τ]` (see A-TG-11.1) |
+| `1` | linear — used **exactly** once | **strands** inside a `weave` |
+| `ω` | unrestricted — used freely | braid **words**, and every ordinary binding |
+
+Why a semiring and not a choice:
+
+- **Words are ω.** `x . x` is σ₁², a perfectly good braid. A blanket linear
+  discipline would reject a valid program.
+- **Strands are 1, and linear rather than affine.** A strand is a physical
+  thread. A braid on *n* strands is a *permutation* of those *n* strands, so
+  strand count is a conservation law: a strand may be neither duplicated
+  (contraction) nor dropped (weakening). Affine permits the second, so affine
+  is specifically the wrong discipline here — this is the case that decides it.
+
+Independent uses combine with semiring addition, so two uses of one strand give
+`1 + 1 = ω`, and `ω` is not permitted where `1` was declared.
+
+```
+Σ = {a₁ : (1, T₁), ..., aₙ : (n, Tₙ)}
+uses(body, aᵢ) = 1                    for every i        (no contraction, no
+                                                          unused strand)
+⟦b₁, ..., bₘ⟧ is a permutation of ⟦a₁, ..., aₙ⟧          (m = n; conservation)
+────────────────────────────────────────────────────────── [T-Weave-Linear]
+Σ ⊢ weave strands a₁,...,aₙ into body yield strands b₁,...,bₘ  linear
+```
+
+`uses` is defined by structural recursion over the body, mapping into the
+semiring: a strand occurrence contributes `1`, the two operands of a crossing
+and the two sides of any binary form combine with `+`, and non-strand leaves
+contribute `0`.
+
+Four programs this rejects, each previously accepted in silence:
+
+| program | violated law |
+|---|---|
+| `weave strands a, b into (a > a) yield strands a, b` | contraction (also the spec's `i ≠ j`) |
+| `weave strands a, b into (a > b) yield strands a, b, a` | contraction in the yield |
+| `weave strands a, b into (a > b) yield strands a` | weakening — a strand vanished |
+| `weave strands a, b into (a > b) yield strands a, c` | `c` is not in the input boundary |
+
+**Scope.** This is the semiring applied *to strands*, which is where the
+discipline bites and where the soundness gap was. TANGLE's core judgement is
+still `Γ ⊢ e : τ` without quantities on ordinary bindings; a full QTT judgement
+`Γ ⊢ e :^q τ` would change the judgement shape and require re-proving the
+metatheory, and is tracked separately.
+
 **Crossing in weave context**:
 
 ```

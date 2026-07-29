@@ -187,10 +187,39 @@ for f in "${ROOT}"/conformance/invalid/*.tangle; do
   fi
 done
 
+# ── 6. Conformance: ill-typed programs must PARSE and then be REJECTED.
+#
+# A third tier, separate from invalid/, because "the compiler rejects it" is
+# two different properties and conflating them produces a gate that passes for
+# the wrong reason. invalid/ is grammar-level: the file must not parse.
+# ill-typed/ is type-level: the file MUST parse — reaching the typechecker is
+# the whole point of the test — and the typechecker must then reject it.
+#
+# Asserting only the rejection is precisely the failure this suite already had
+# once, when three invalid/ cases "passed" because the command was wrong and
+# failed on every input. A typo in an ill-typed/ fixture would score the same
+# false point here, so the parse step is asserted first.
+echo
+echo "== conformance: ill-typed programs must parse, then be rejected =="
+for f in "${ROOT}"/conformance/ill-typed/*.tangle; do
+  [[ -e "$f" ]] || continue
+  n="$(basename "$f")"
+  if ! "${BIN}" "$f" >/dev/null 2>&1; then
+    note "ill-typed/$n" "PARSE FAILED (must parse first)"
+    echo "::error::conformance/ill-typed/${n} does not parse — it must reach the typechecker to prove anything"; fail=1
+  elif "${BIN}" --check "$f" >/dev/null 2>&1; then
+    note "ill-typed/$n" "TYPECHECKED (should not)"
+    echo "::error::conformance/ill-typed/${n} was accepted by the typechecker but is meant to be rejected"; fail=1
+  else
+    note "ill-typed/$n" "parsed, then rejected ok"
+  fi
+done
+
 echo
 if [[ "$fail" -ne 0 ]]; then
   echo "::error::corpus drifted from the manifest — see the errors above."
   exit 1
 fi
 echo "Corpus matches the manifest: examples parse, the must-run set evaluates,"
-echo "known gaps are unchanged, and invalid programs are still rejected."
+echo "known gaps are unchanged, invalid programs are still rejected, and"
+echo "ill-typed programs still parse but still fail to typecheck."
