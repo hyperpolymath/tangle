@@ -72,10 +72,15 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends ocaml ocaml-dune menhir
+          # `just` is needed by the RSR guard's phantom-command check. Without
+          # it that half of the guard skips (loudly, but it still does not run)
+          # — which is how the QUICKSTARTs accumulated a dozen commands that
+          # were never recipes.
+          sudo apt-get install -y --no-install-recommends ocaml ocaml-dune menhir just
           ocaml -version
           dune --version
           menhir --version
+          just --version
 
       - name: Build
         working-directory: compiler
