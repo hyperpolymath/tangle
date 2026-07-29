@@ -59,11 +59,11 @@ let rgen i e = { g_index = i; g_exponent = e }
 
 (** Helper: make a simple value definition statement. *)
 let def_val name body =
-  Definition { def_name = name; def_params = []; def_body = body }
+  Definition { def_name = name; def_params = []; def_body = body; def_line = 0 }
 
 (** Helper: make a function definition statement. *)
 let def_fun name params body =
-  Definition { def_name = name; def_params = params; def_body = body }
+  Definition { def_name = name; def_params = params; def_body = body; def_line = 0 }
 
 (** Evaluate an expression in an empty environment. *)
 let eval e = eval_expr_in_env [] e
@@ -204,6 +204,69 @@ let test_reverse () =
   test "Reverse braid" (fun () ->
     eval (Reverse (BraidLit [sigma 1; sigma 2]))
       = VBraid [rgen 2 (-1); rgen 1 (-1)]);
+
+  (* Reverse is the INVERSE braid: order reversed AND exponents negated.
+     Two separate corpus programs (examples/trefoil.tangle and
+     conformance/valid/v16) asserted that it merely reverses order. Both were
+     mathematically false and both went undetected for want of anything that
+     ran them. These pin the semantics so the misunderstanding cannot return. *)
+  test "reverse is the INVERSE, not just order-reversal" (fun () ->
+    (* reverse(s1 s2) = s2^-1 s1^-1, NOT s2 s1 *)
+    eval (Reverse (BraidLit [sigma 1; sigma 2]))
+      <> VBraid [rgen 2 1; rgen 1 1]);
+
+  test "reverse composed with itself is the identity map" (fun () ->
+    (* (w^-1)^-1 = w — a property that only holds if reverse really inverts. *)
+    let w = BraidLit [sigma 1; sigma 2; sigma_inv 1] in
+    eval (Reverse (Reverse w)) = eval w);
+
+  test "reverse negates writhe (the invariant that disproved the false claims)" (fun () ->
+    match eval (BraidLit [sigma 1; sigma 1; sigma 1]),
+          eval (Reverse (BraidLit [sigma 1; sigma 1; sigma 1])) with
+    | VBraid a, VBraid b -> writhe a = 3 && writhe b = -3
+    | _ -> false);
+
+  test "mirror negates IN PLACE, unlike reverse" (fun () ->
+    (* The contrast that makes the two easy to confuse. *)
+    eval (Mirror (BraidLit [sigma 1; sigma 2]))
+      = VBraid [rgen 1 (-1); rgen 2 (-1)]);
+
+  (* ---------------------------------------------------------------- *)
+  (* JTV add{} island (#94). The design point is SEMANTIC SEPARATION:   *)
+  (* `+` in TANGLE is connect-sum; `+` inside add{} is arithmetic.      *)
+  (* ---------------------------------------------------------------- *)
+
+  test "#94 add{}: operator precedence is the island's own" (fun () ->
+    eval (AddBlock (HvBin (HvAdd, HvInt 1, HvBin (HvMul, HvInt 2, HvInt 3))))
+      = VInt 7);
+
+  test "#94 add{}: conditional is total (both branches)" (fun () ->
+    eval (AddBlock (HvIf (HvBin (HvGt, HvInt 5, HvInt 3), HvInt 10, HvInt 20)))
+      = VInt 10);
+
+  test "#94 add{}: logical operators" (fun () ->
+    eval (AddBlock (HvBin (HvAnd, HvBool true,
+                            HvBin (HvOr, HvBool false, HvUn (HvNot, HvBool false)))))
+      = VBool true);
+
+  test "#94 add{}: modulo" (fun () ->
+    eval (AddBlock (HvBin (HvMod, HvInt 7, HvInt 3))) = VInt 1);
+
+  test "#94 add{}: int division stays integral" (fun () ->
+    eval (AddBlock (HvBin (HvDiv, HvInt 10, HvInt 4))) = VInt 2);
+
+  test "#94 add{}: mixed int/float promotes" (fun () ->
+    eval (AddBlock (HvBin (HvAdd, HvInt 1, HvFloat 0.5))) = VFloat 1.5);
+
+  test "#94 add{}: division by zero is caught" (fun () ->
+    try let _ = eval (AddBlock (HvBin (HvDiv, HvInt 1, HvInt 0))) in false
+    with Eval_error _ -> true);
+
+  test "#94 add{}: Embed crosses back into TANGLE" (fun () ->
+    (* Int -> Num, Bool -> Bool, String -> Str (spec 7.2). *)
+    eval (AddBlock (HvInt 1)) = VInt 1
+    && eval (AddBlock (HvBool true)) = VBool true
+    && eval (AddBlock (HvStr "s")) = VString "s");
 
   (* Reverse identity is identity *)
   test "Reverse identity" (fun () ->
@@ -594,7 +657,61 @@ let test_equality () =
     eval (BinOp (Isotopy,
       BraidLit [sigma 1],
       BraidLit [sigma 2]))
-      = VBool false)
+      = VBool false);
+
+  (* ---------------------------------------------------------------- *)
+  (* TG-7 (tangle#50): `==` decides braid-GROUP equivalence, NOT list   *)
+  (* equality.  Every case below is FALSE under list equality and TRUE  *)
+  (* under the ruling, so these are the tests that actually distinguish *)
+  (* the two semantics — the pre-existing cases above pass either way.  *)
+  (* ---------------------------------------------------------------- *)
+
+  test "TG-7: braid relation s1.s2.s1 == s2.s1.s2" (fun () ->
+    (* The defining braid relation. Distinct words, same group element. *)
+    eval (BinOp (Eq,
+      BraidLit [sigma 1; sigma 2; sigma 1],
+      BraidLit [sigma 2; sigma 1; sigma 2]))
+      = VBool true);
+
+  test "TG-7: far commutation s1.s3 == s3.s1" (fun () ->
+    (* |i - j| >= 2 generators commute. *)
+    eval (BinOp (Eq,
+      BraidLit [sigma 1; sigma 3],
+      BraidLit [sigma 3; sigma 1]))
+      = VBool true);
+
+  test "TG-7: free cancellation s1.s1^-1 == identity" (fun () ->
+    eval (BinOp (Eq, BraidLit [sigma 1; sigma_inv 1], Identity)) = VBool true);
+
+  test "TG-7: identity == s1.s1^-1 (symmetric)" (fun () ->
+    eval (BinOp (Eq, Identity, BraidLit [sigma 1; sigma_inv 1])) = VBool true);
+
+  test "TG-7: non-equivalent braids still compare false" (fun () ->
+    (* Guards against a decision procedure that says `true` for everything —
+       s1 and s1^-1 differ in writhe, so they cannot be equal. *)
+    eval (BinOp (Eq, BraidLit [sigma 1], BraidLit [sigma_inv 1])) = VBool false);
+
+  test "TG-7: s1.s2 =/= s2.s1 (adjacent gens do NOT commute)" (fun () ->
+    eval (BinOp (Eq,
+      BraidLit [sigma 1; sigma 2],
+      BraidLit [sigma 2; sigma 1]))
+      = VBool false);
+
+  test "TG-7: `~` agrees with `==` on the braid relation" (fun () ->
+    (* For braids, isotopy IS braid-group equality; the two operators must
+       not disagree.  `~` previously used free reduction only and returned
+       false here. *)
+    eval (BinOp (Isotopy,
+      BraidLit [sigma 1; sigma 2; sigma 1],
+      BraidLit [sigma 2; sigma 1; sigma 2]))
+      = VBool true);
+
+  test "TG-7: echoEq lowers to braid-group equality" (fun () ->
+    (* echoEq reuses the Eq logic, so it must follow the ruling too. *)
+    eval (Lower (EchoEq (
+      BraidLit [sigma 1; sigma 2; sigma 1],
+      BraidLit [sigma 2; sigma 1; sigma 2])))
+      = VBool true)
 
 (* ================================================================== *)
 (*  11. Error cases                                                    *)
@@ -725,6 +842,53 @@ let test_pp_value () =
     pp_value VUnit = "()")
 
 (* ================================================================== *)
+(*  Echo / product types (structured loss)                             *)
+(* ================================================================== *)
+
+(* Pins the eval-level semantics against the Lean Step relation
+   (proofs/Tangle.lean:345-382): lower = result, residue = residue/operand-pair,
+   echoClose residue = braid + result = identity, echoAdd/echoEq residue = the
+   operand pair.  Catches residue/result swaps that the parse/pretty round-trip
+   corpus cannot. *)
+let test_echo_types () =
+  Printf.printf "\n=== Echo / product types ===\n";
+
+  (* lower projects to the RESULT (second component) — echoAddNums result is the sum *)
+  test "lower (echoAdd 3 4) = 7" (fun () ->
+    eval (Lower (EchoAdd (IntLit 3, IntLit 4))) = VInt 7);
+
+  (* residue projects to the RESIDUE (first component) — the retained operand pair.
+     This is the arm a residue/result swap would break. *)
+  test "residue (echoAdd 3 4) = (3, 4)" (fun () ->
+    eval (Residue (EchoAdd (IntLit 3, IntLit 4))) = VPair (VInt 3, VInt 4));
+
+  test "fst (pair 1 \"a\") = 1" (fun () ->
+    eval (Fst (Pair (IntLit 1, StringLit "a"))) = VInt 1);
+
+  test "snd (pair 1 \"a\") = \"a\"" (fun () ->
+    eval (Snd (Pair (IntLit 1, StringLit "a"))) = VString "a");
+
+  (* echoClose: residue = the braid, result = the identity value (Word[0]) *)
+  test "echoClose(braid[s1]) = echoVal (braid[s1]) identity" (fun () ->
+    eval (EchoClose (BraidLit [sigma 1])) = VEcho (VBraid [rgen 1 1], VBraid []));
+
+  test "lower (echoClose b) = identity" (fun () ->
+    eval (Lower (EchoClose (BraidLit [sigma 1]))) = VBraid []);
+
+  test "residue (echoClose b) = b" (fun () ->
+    eval (Residue (EchoClose (BraidLit [sigma 1]))) = VBraid [rgen 1 1]);
+
+  (* echoEq: residue = operand pair, result = the boolean *)
+  test "residue (echoEq 1 1) = (1, 1)" (fun () ->
+    eval (Residue (EchoEq (IntLit 1, IntLit 1))) = VPair (VInt 1, VInt 1));
+
+  test "lower (echoEq 1 1) = true" (fun () ->
+    eval (Lower (EchoEq (IntLit 1, IntLit 1))) = VBool true);
+
+  test "lower (echoEq 1 2) = false" (fun () ->
+    eval (Lower (EchoEq (IntLit 1, IntLit 2))) = VBool false)
+
+(* ================================================================== *)
 (*  Main: run all test groups                                          *)
 (* ================================================================== *)
 
@@ -745,6 +909,7 @@ let () =
   test_compute ();
   test_arithmetic ();
   test_equality ();
+  test_echo_types ();
   test_errors ();
   test_program ();
   test_pp_value ();

@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: MPL-2.0
+# echo_pd.tangle — echo-preserving closure and the residue-threading path.
+#
+# Run the compositional / Skein lowering with:
+#     tanglec --compile-pd examples/echo_pd.tangle
+#
+# Plain `close` discards the pre-closure braid (lossy: Word[n] -> Word[0]).
+# `echoClose` retains it as a residue, so the consumer (QuandleDB, via the
+# TangleIR contract in docs/spec/ECHO-TANGLEIR-THREADING.md) can recover which
+# braid produced a given closed diagram. The closed diagram is identical either
+# way — only the residue is extra.
+
+# The trefoil as a closed braid, both ways:
+def trefoil        = close(braid[s1, s1, s1])      # lossy closure — no residue
+def trefoil_echo   = echoClose(braid[s1, s1, s1])  # residue = s1,s1,s1
+
+# Multi-exponent source: the residue keeps the verbatim word (s1^3), while the
+# planar diagram is the same 3-crossing trefoil as above.
+def trefoil_pow    = echoClose(braid[s1^3])        # residue = s1^3
+
+# Figure-eight, residue-preserving:
+def fig8_echo      = echoClose(braid[s1, s2^-1, s1, s2^-1])

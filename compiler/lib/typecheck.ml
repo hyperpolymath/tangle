@@ -44,6 +44,11 @@ type ty =
   | TProd   of ty * ty              (** ρ × σ — product / residue carrier for lossy ops *)
   | TEcho   of ty * ty              (** Echo[ρ, τ] — structured loss: residue ρ, result τ.
                                         Mirrors Ty.echo in proofs/Tangle.lean. *)
+  | TEpi    of int * ty * ty        (** Epi[κ, ρ, τ] — at standpoint κ, evidence ρ
+                                        purporting to support claim τ.  Mirrors
+                                        Ty.epi in proofs/Tangle.lean.  τ appears
+                                        in the type but NO rule eliminates to it:
+                                        a warrant is not knowledge. *)
 
 (** Function signature: (param_types) -> return_type. *)
 type fun_sig = {
@@ -100,6 +105,7 @@ let rec pp_ty = function
   | TStr           -> "Str"
   | TProd (a, b)   -> Printf.sprintf "(%s * %s)" (pp_ty a) (pp_ty b)
   | TEcho (r, t)   -> Printf.sprintf "Echo[%s, %s]" (pp_ty r) (pp_ty t)
+  | TEpi (k, r, t) -> Printf.sprintf "Epi[%d, %s, %s]" k (pp_ty r) (pp_ty t)
 
 (* ================================================================== *)
 (*  Environment operations                                             *)
@@ -158,6 +164,169 @@ let apply_perm (b : boundary) (gens : generator list) : boundary =
 (*  Type inference for expressions                                     *)
 (* ================================================================== *)
 
+(* ================================================================== *)
+(*  Strand linearity (QTT quantities applied to weave)                  *)
+(* ================================================================== *)
+
+(** Count how many times each STRAND is used in a weave body, in the {0,1,omega}
+    semiring.  Independent uses combine with semiring ADDITION, so two uses of
+    the same strand give 1 + 1 = omega — which then fails the linear check.
+
+    Strands appear in two places: as the operands of a crossing (`a > b`), and
+    under a twist (`(~a)`, [T-Twist-Strand]). *)
+let rec strand_uses (sigma : strand_ctx) (e : expr) : (string * Quantity.t) list =
+  let merge xs ys =
+    List.fold_left (fun acc (n, q) ->
+      match List.assoc_opt n acc with
+      | Some q' -> (n, Quantity.add q q') :: List.remove_assoc n acc
+      | None    -> (n, q) :: acc) xs ys
+  in
+  let go = strand_uses sigma in
+  let use n = if strand_lookup sigma n <> None then [(n, Quantity.one)] else [] in
+  match e with
+  | Crossing (a, _, b) -> merge (use a) (use b)
+  | Twist (Var a)      -> use a
+  | Var a              -> use a
+  | BinOp (_, x, y) | Pipeline (x, y) | Cap (x, y) | Cup (x, y)
+  | Pair (x, y) | EchoAdd (x, y) | EchoEq (x, y) -> merge (go x) (go y)
+  | UnaryOp (_, x) | Close x | Mirror x | Reverse x | Simplify x | Twist x
+  | EchoClose x | Lower x | Residue x | Fst x | Snd x | Evidence x -> go x
+  | Warrant (_, c, ev) | EpiVal (_, c, ev) -> merge (go c) (go ev)
+  | Let (_, a, b) -> merge (go a) (go b)
+  | Match (sc, arms) ->
+    List.fold_left (fun acc a -> merge acc (go a.arm_body)) (go sc) arms
+  | Call (_, args) -> List.fold_left (fun acc a -> merge acc (go a)) [] args
+  | Weave wb -> go wb.weave_body
+  | AddBlock _ | BraidLit _ | Identity | BoolLit _ | IntLit _ | FloatLit _
+  | StringLit _ -> []
+
+(** Enforce that every declared input strand is used EXACTLY ONCE, and that the
+    yielded strands are a permutation of the inputs.
+
+    Both halves are conservation laws of braids, not stylistic rules.  A braid
+    on n strands is a permutation of those n strands: none may be duplicated
+    (contraction) and none may vanish (weakening).  That is why the discipline
+    is LINEAR and not affine — affine would permit the second. *)
+let check_strand_linearity (sigma : strand_ctx) (wb : weave_block) : unit =
+  let uses = strand_uses sigma wb.weave_body in
+  (* 1. Each input is linear: exactly one use. *)
+  List.iter (fun (name, _) ->
+    let actual = match List.assoc_opt name uses with
+      | Some q -> q | None -> Quantity.zero in
+    if not (Quantity.permits ~declared:Quantity.one ~actual) then
+      type_error "strand '%s': %s" name
+        (Quantity.explain ~declared:Quantity.one ~actual)
+  ) sigma;
+  (* 2. The yield must be a permutation of the inputs: same multiset of names,
+     each exactly once.  This is where `yield strands a, b, a` is caught. *)
+  let ins  = List.map fst sigma in
+  let outs = List.map (fun ts -> ts.strand_name) wb.weave_outputs in
+  List.iter (fun n ->
+    let k = List.length (List.filter (( = ) n) outs) in
+    if k = 0 then
+      type_error "strand '%s' is declared but never yielded — a strand cannot \
+                  vanish; braids conserve strand count" n
+    else if k > 1 then
+      type_error "strand '%s' is yielded %d times — a strand cannot be \
+                  duplicated" n k
+  ) ins;
+  List.iter (fun n ->
+    if not (List.mem n ins) then
+      type_error "strand '%s' is yielded but was never declared as an input" n
+  ) outs
+
+(* ================================================================== *)
+(*  Harvard data types and the |-_hd judgement (spec sections 7.1, 9.3)  *)
+(* ================================================================== *)
+
+(** Harvard DATA types (spec section 7.1).  A separate type language from
+    TANGLE's [ty] — the island has its own judgement, written |-_hd.
+
+    Implemented: Int, Float, Bool, String.  NOT implemented and not pretended:
+    Rational, Hex, Binary, Symbolic (section 7.1), and the aggregate types. *)
+type hv_ty =
+  | HvTInt
+  | HvTFloat
+  | HvTBool
+  | HvTStr
+
+let pp_hv_ty = function
+  | HvTInt -> "Int" | HvTFloat -> "Float"
+  | HvTBool -> "Bool" | HvTStr -> "String"
+
+(** Embed (D2.4): Harvard type -> TANGLE type, for an `add{...}` result
+    entering TANGLE.  Spec section 7.2:
+        Embed(Int) = Embed(Float) = Num,  Embed(Bool) = Bool,
+        Embed(String) = Str *)
+let embed : hv_ty -> ty = function
+  | HvTInt | HvTFloat -> TNum
+  | HvTBool           -> TBool
+  | HvTStr            -> TStr
+
+(** The |-_hd judgement (spec section 9.3).  Total and pure by construction, so
+    it needs no environment in this fragment: variables resolve in Pi, which is
+    not yet modelled. *)
+let rec infer_hv (e : hv_expr) : hv_ty =
+  match e with
+  | HvInt _   -> HvTInt
+  | HvFloat _ -> HvTFloat
+  | HvStr _   -> HvTStr
+  | HvBool _  -> HvTBool
+
+  | HvUn (HvNeg, a) ->
+    begin match infer_hv a with
+    | HvTInt -> HvTInt | HvTFloat -> HvTFloat
+    | t -> type_error "add{}: negation requires a number, got %s" (pp_hv_ty t)
+    end
+  | HvUn (HvNot, a) ->
+    begin match infer_hv a with
+    | HvTBool -> HvTBool
+    | t -> type_error "add{}: ! requires Bool, got %s" (pp_hv_ty t)
+    end
+
+  | HvBin (op, a, b) ->
+    let ta = infer_hv a and tb = infer_hv b in
+    begin match op with
+    | HvAdd | HvSub | HvMul | HvDiv | HvMod ->
+      begin match ta, tb with
+      | HvTInt, HvTInt -> HvTInt
+      | (HvTInt | HvTFloat), (HvTInt | HvTFloat) -> HvTFloat
+      | _ -> type_error "add{}: arithmetic requires numbers, got %s and %s"
+               (pp_hv_ty ta) (pp_hv_ty tb)
+      end
+    | HvLt | HvLe | HvGt | HvGe ->
+      begin match ta, tb with
+      | (HvTInt | HvTFloat), (HvTInt | HvTFloat) -> HvTBool
+      | _ -> type_error "add{}: comparison requires numbers, got %s and %s"
+               (pp_hv_ty ta) (pp_hv_ty tb)
+      end
+    | HvEq | HvNe ->
+      (* Equality is homogeneous, and numeric across Int/Float. *)
+      begin match ta, tb with
+      | (HvTInt | HvTFloat), (HvTInt | HvTFloat) -> HvTBool
+      | x, y when x = y -> HvTBool
+      | _ -> type_error "add{}: cannot compare %s with %s"
+               (pp_hv_ty ta) (pp_hv_ty tb)
+      end
+    | HvAnd | HvOr ->
+      begin match ta, tb with
+      | HvTBool, HvTBool -> HvTBool
+      | _ -> type_error "add{}: logical operators require Bool, got %s and %s"
+               (pp_hv_ty ta) (pp_hv_ty tb)
+      end
+    end
+
+  | HvIf (c, t, e2) ->
+    begin match infer_hv c with
+    | HvTBool ->
+      let tt = infer_hv t and te = infer_hv e2 in
+      (* TOTAL: both branches required and they must agree (D2.1). *)
+      if tt = te then tt
+      else type_error "add{}: if branches disagree — %s vs %s"
+             (pp_hv_ty tt) (pp_hv_ty te)
+    | t -> type_error "add{}: if condition must be Bool, got %s" (pp_hv_ty t)
+    end
+
 (** Infer the type of an expression under environment Gamma.
  *  Optionally takes a strand context Sigma for weave block bodies.
  *
@@ -188,6 +357,65 @@ let rec infer_expr (gamma : env) (sigma : strand_ctx) (e : expr) : ty =
   | BraidLit gens ->
     let n = width_of_generators gens in
     TWord n
+
+  (* [T-Weave] in expression position.
+     The statement form computed this same Tangle[A,B] and then DISCARDED it
+     (`let _weave_ty = ... in gamma`), which is why weave was inert.  Here the
+     type is the expression's type, so the result can be bound and used. *)
+  | Weave wb ->
+    let sigma' = List.mapi (fun i ts ->
+      let sty = match ts.strand_type with
+        | Some name -> StrandNamed name
+        | None      -> StrandDefault
+      in
+      (ts.strand_name, { strand_pos = i + 1; strand_ty = sty })
+    ) wb.weave_inputs in
+    let input_boundary = List.map (fun (_, se) -> se.strand_ty) sigma' in
+    (* Strands are LINEAR — see [check_strand_linearity].  This must be applied
+       in BOTH weave forms: `def x = weave ...` reaches the expression rule and
+       never touches the statement rule, so checking only there would leave the
+       ordinary, idiomatic spelling of a weave completely unchecked. *)
+    check_strand_linearity sigma' wb;
+    (* The body is checked in the strand context, exactly as the statement
+       form does — strand names are only meaningful there. *)
+    let body_ty = infer_expr gamma sigma' wb.weave_body in
+    begin match body_ty with
+    | TTangle (_, _) | TWord _ -> ()   (* words coerce to tangles *)
+    | _ ->
+      type_error "Weave body must produce a Word or Tangle type, got %s"
+        (pp_ty body_ty)
+    end;
+    let output_boundary = List.map (fun ts ->
+      match ts.strand_type with
+      | Some name -> StrandNamed name
+      | None      -> StrandDefault
+    ) wb.weave_outputs in
+    TTangle (input_boundary, output_boundary)
+
+  (* [T-Warrant] / [T-Epi-Val] / [T-Evidence] — epistemic.
+     Note the absence: no case here produces τ from an Epi.  `Evidence` yields
+     the token type ρ, and that is the only elimination.  Contrast `Lower`,
+     which DOES deliver an echo's result. *)
+  | Warrant (k, claim, ev) ->
+    let t_claim = infer_expr gamma sigma claim in
+    let t_ev    = infer_expr gamma sigma ev in
+    TEpi (k, t_ev, t_claim)
+
+  | EpiVal (k, claim, ev) ->
+    let t_claim = infer_expr gamma sigma claim in
+    let t_ev    = infer_expr gamma sigma ev in
+    TEpi (k, t_ev, t_claim)
+
+  | Evidence e ->
+    begin match infer_expr gamma sigma e with
+    | TEpi (_, rho, _) -> rho
+    | t -> type_error "evidence requires an Epi[k, rho, tau], got %s" (pp_ty t)
+    end
+
+  (* [T-Add-Block] (spec section 9.1): the island's result crosses back into
+     TANGLE through Embed.  The Harvard judgement |-_hd is used inside; the
+     TANGLE judgement never looks in. *)
+  | AddBlock he -> embed (infer_hv he)
 
   (* ---- Variables [T-Var] ---- *)
 
@@ -242,87 +470,53 @@ let rec infer_expr (gamma : env) (sigma : strand_ctx) (e : expr) : ty =
 
   (* ---- Unary operators ---- *)
 
-  | UnaryOp (Neg, e1) ->
-    let t = infer_expr gamma sigma e1 in
-    begin match t with
-    | TNum -> TNum
-    | _    -> type_error "Negation requires Num, got %s" (pp_ty t)
-    end
-
-  | UnaryOp (Not, e1) ->
-    let t = infer_expr gamma sigma e1 in
-    begin match t with
-    | TBool -> TBool
-    | _     -> type_error "Logical not requires Bool, got %s" (pp_ty t)
-    end
+  | UnaryOp (op, e1) -> infer_unop op (infer_expr gamma sigma e1)
 
   (* ---- Tier 1 primitives ---- *)
 
   (* [T-Close-Word], [T-Close-Tangle] *)
-  | Close e1 ->
-    let t = infer_expr gamma sigma e1 in
-    begin match t with
-    | TWord _        -> TTangle (empty_boundary, empty_boundary)
-    | TTangle (a, b) ->
-      if List.length a <> List.length b then
-        type_error "close requires |A| = |B|, got |%s| = %d and |%s| = %d"
-          (pp_boundary a) (List.length a)
-          (pp_boundary b) (List.length b);
-      TTangle (empty_boundary, empty_boundary)
-    | _ -> type_error "close requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
-    end
+  | Close e1 -> infer_close (infer_expr gamma sigma e1)
 
   (* [T-Mirror-Word], [T-Mirror-Tangle] *)
-  | Mirror e1 ->
-    let t = infer_expr gamma sigma e1 in
-    begin match t with
-    | TWord n        -> TWord n
-    | TTangle (a, b) -> TTangle (b, a)
-    | _ -> type_error "mirror requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
-    end
+  | Mirror e1 -> infer_mirror (infer_expr gamma sigma e1)
 
   (* [T-Reverse] *)
-  | Reverse e1 ->
-    let t = infer_expr gamma sigma e1 in
-    begin match t with
-    | TWord n -> TWord n
-    | _       -> type_error "reverse requires Word[n], got %s" (pp_ty t)
-    end
+  | Reverse e1 -> infer_reverse (infer_expr gamma sigma e1)
 
   (* [T-Simplify-Word], [T-Simplify-Tangle] *)
-  | Simplify e1 ->
-    let t = infer_expr gamma sigma e1 in
-    begin match t with
-    | TWord n        -> TWord n
-    | TTangle (a, b) -> TTangle (a, b)
-    | _ -> type_error "simplify requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
-    end
+  | Simplify e1 -> infer_simplify (infer_expr gamma sigma e1)
 
   (* [T-Cap], [T-Cap-Typed] *)
   | Cap (e1, e2) ->
-    let t1 = infer_expr gamma sigma e1 in
-    let t2 = infer_expr gamma sigma e2 in
-    (* Cap creates a tangle that absorbs two strands from above *)
-    let s1 = strand_type_of_ty t1 in
-    let s2 = strand_type_of_ty t2 in
-    TTangle ([s1; s2], empty_boundary)
+    infer_cap (infer_expr gamma sigma e1) (infer_expr gamma sigma e2)
 
   (* [T-Cup], [T-Cup-Typed] *)
   | Cup (e1, e2) ->
-    let t1 = infer_expr gamma sigma e1 in
-    let t2 = infer_expr gamma sigma e2 in
-    (* Cup creates a tangle that emits two strands below *)
-    let s1 = strand_type_of_ty t1 in
-    let s2 = strand_type_of_ty t2 in
-    TTangle (empty_boundary, [s1; s2])
+    infer_cup (infer_expr gamma sigma e1) (infer_expr gamma sigma e2)
 
   (* [T-Twist-Word], [T-Twist-Tangle] (D1.18) *)
   | Twist e1 ->
-    let t = infer_expr gamma sigma e1 in
-    begin match t with
-    | TWord n        -> TWord n
-    | TTangle (a, b) -> TTangle (a, b)
-    | _ -> type_error "twist requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
+    (* [T-Twist-Strand] (D1.18, spec section 3.10) must be tried FIRST:
+     *
+     *     Sigma(a) = (i, T)
+     *     ---------------------------------
+     *     Gamma; Sigma |- (~a) : Tangle[[T], [T]]
+     *
+     * `(~a)` on a NAMED STRAND inside a weave twists that strand.  Falling
+     * through to the general case would infer `a` as an ordinary expression,
+     * and the Var rule rejects strand names outright ("cannot be used as a
+     * standalone expression") — which is why conformance/valid/v09_twist.tangle
+     * never typechecked despite the spec licensing it.
+     *
+     * Exactly parallel to [T-Self-Cross] below, which types `(a > a)` the same
+     * way; the spec presents them as a pair. *)
+    begin match e1 with
+    | Var a when strand_lookup sigma a <> None ->
+      let ea = Option.get (strand_lookup sigma a) in
+      TTangle ([strand_to_type ea.strand_ty], [strand_to_type ea.strand_ty])
+    | _ ->
+      (* [T-Twist-Word] / [T-Twist-Tangle]: the standalone forms. *)
+      infer_twist (infer_expr gamma sigma e1)
     end
 
   (* ---- Crossings in weave context [T-Cross-Over], [T-Cross-Under] ---- *)
@@ -370,13 +564,63 @@ let rec infer_expr (gamma : env) (sigma : strand_ctx) (e : expr) : ty =
         env_bind_val g name ty) gamma bindings in
       infer_expr gamma' sigma arm.arm_body
     ) arms in
-    let result_ty = List.hd arm_types in
-    List.iteri (fun i ty ->
-      if ty <> result_ty then
-        type_error "Match arm %d has type %s but arm 0 has type %s"
-          i (pp_ty ty) (pp_ty result_ty)
-    ) arm_types;
-    result_ty
+    (* Arms must agree — but for WORDS, "agree" means agree up to width (#92),
+       consistent with `.` (compose) widening to max and with `==` no longer
+       requiring equal widths.  Arms at Word[0] and Word[2] describe the same
+       kind of thing at different strand counts; the join is the wider.
+       Everything else must still match exactly. *)
+    let join_ty = join_arm_ty in
+    let result_ty =
+      List.fold_left (fun acc ty ->
+        match acc with
+        | None -> None
+        | Some a -> join_ty a ty
+      ) (Some (List.hd arm_types)) arm_types
+    in
+    begin match result_ty with
+    | Some t -> t
+    | None ->
+      (* Report against arm 0, as before, so the message stays familiar. *)
+      let t0 = List.hd arm_types in
+      let i, bad =
+        let rec find i = function
+          | [] -> (0, t0)
+          | ty :: rest -> if join_ty t0 ty = None then (i, ty) else find (i+1) rest
+        in find 0 arm_types
+      in
+      type_error "Match arm %d has type %s but arm 0 has type %s"
+        i (pp_ty bad) (pp_ty t0)
+    end
+
+  (* ---- Echo types (structured loss) ----
+   * Mirror the HasType rules in proofs/Tangle.lean:
+   *   [T-Echo-Close] echoClose e : Echo[Word[n], Word[0]]   when e : Word[n]
+   *   [T-Lower]      lower e      : τ                        when e : Echo[ρ, τ]
+   *   [T-Residue]    residue e    : ρ                        when e : Echo[ρ, τ]
+   *   [T-Pair]/[T-Fst]/[T-Snd]    product intro + projections
+   *   [T-Echo-Add]   echoAdd a b  : Echo[Num × Num, Num]
+   *   [T-Echo-Eq]    echoEq a b   : Echo[ρ × ρ, Bool]        for ρ ∈ {Num, Str, Word[n]}
+   *)
+  | EchoClose e1 -> infer_echo_close (infer_expr gamma sigma e1)
+
+  | Lower e1 -> infer_lower (infer_expr gamma sigma e1)
+
+  | Residue e1 -> infer_residue (infer_expr gamma sigma e1)
+
+  | Pair (e1, e2) ->
+    let t1 = infer_expr gamma sigma e1 in
+    let t2 = infer_expr gamma sigma e2 in
+    TProd (t1, t2)
+
+  | Fst e1 -> infer_fst (infer_expr gamma sigma e1)
+
+  | Snd e1 -> infer_snd (infer_expr gamma sigma e1)
+
+  | EchoAdd (e1, e2) ->
+    infer_echo_add (infer_expr gamma sigma e1) (infer_expr gamma sigma e2)
+
+  | EchoEq (e1, e2) ->
+    infer_echo_eq (infer_expr gamma sigma e1) (infer_expr gamma sigma e2)
 
   (* ---- Echo types (structured loss) ----
    * Mirror the HasType rules in proofs/Tangle.lean:
@@ -533,10 +777,22 @@ and infer_binop (op : binop) (t1 : ty) (t2 : ty) : ty =
     | _ -> type_error "Division requires Num, got %s / %s" (pp_ty t1) (pp_ty t2)
     end
 
-  (* [T-Eq-Word], [T-Eq-Num], [T-Eq-Str] *)
+  (* [T-Eq-Word] (same width), [T-Eq-Num], [T-Eq-Str].
+   * Word equality requires equal width (n = m), matching the mechanised
+   * Lean rule `tEqWord` (proofs/Tangle.lean:248) which binds one width to
+   * both operands. `Bool == Bool` is an extra-core convenience (used by
+   * examples/braids_as_data.tangle) that lives outside the 26-rule Lean
+   * fragment, like `match`/`weave`/`mirror`/etc.; recorded under TG-3 in
+   * PROOF-NEEDS.md. *)
   | Eq ->
     begin match t1, t2 with
-    | TWord _, TWord _  -> TBool
+    (* Widths need not agree (#92).  Braid groups embed Bn -> Bn+1 by adding a
+       strand nothing touches, so a Word[n] IS a Word[max n m]; the comparison
+       is decided in the larger group.  That is already what
+       [Braid_equiv.equiv] computes — it takes two generator lists and has no
+       width parameter — and it is what `~` has always accepted.  Mirrors the
+       widened [tEqWord] in proofs/Tangle.lean. *)
+    | TWord _, TWord _ -> TBool
     | TNum, TNum        -> TBool
     | TStr, TStr        -> TBool
     | TBool, TBool      -> TBool
@@ -574,6 +830,138 @@ and check_compatible (expected : ty) (actual : ty) (fname : string) : unit =
     type_error "Function '%s': expected %s but got %s"
       fname (pp_ty expected) (pp_ty actual)
 
+(* ================================================================== *)
+(*  Type-level rule functions                                          *)
+(* ================================================================== *)
+(* One function per typing rule, taking the PREMISE types and returning the
+   conclusion type (or raising Type_error).  [infer_binop] was always written
+   this way; these bring the remaining rules into the same shape.
+
+   The point is not tidiness.  The Judgement Evidence Graph (jeg.ml) has to
+   re-derive each rule in order to reject forged derivations, and a JEG that
+   re-implements the rules independently can DRIFT from the typechecker — at
+   which point it certifies a rule the compiler does not actually apply, and
+   the evidence is worthless.  Sharing one definition makes drift impossible
+   by construction: there is nothing to keep in sync. *)
+
+and infer_unop (op : unaryop) (t : ty) : ty =
+  match op, t with
+  | Neg, TNum  -> TNum
+  | Neg, _     -> type_error "Negation requires Num, got %s" (pp_ty t)
+  | Not, TBool -> TBool
+  | Not, _     -> type_error "Logical not requires Bool, got %s" (pp_ty t)
+
+(** [T-Close-Word], [T-Close-Tangle].  Closure needs |A| = |B| — you cannot
+    join a boundary to one of a different size. *)
+and infer_close (t : ty) : ty =
+  match t with
+  | TWord _        -> TTangle (empty_boundary, empty_boundary)
+  | TTangle (a, b) ->
+    if List.length a <> List.length b then
+      type_error "close requires |A| = |B|, got |%s| = %d and |%s| = %d"
+        (pp_boundary a) (List.length a) (pp_boundary b) (List.length b);
+    TTangle (empty_boundary, empty_boundary)
+  | _ -> type_error "close requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
+
+(** [T-Mirror-Word], [T-Mirror-Tangle].  Mirroring a tangle swaps its
+    boundaries; mirroring a word keeps its width. *)
+and infer_mirror (t : ty) : ty =
+  match t with
+  | TWord n        -> TWord n
+  | TTangle (a, b) -> TTangle (b, a)
+  | _ -> type_error "mirror requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
+
+(** [T-Reverse].  Words only — reverse is w^-1, and inversion is not defined
+    on a tangle's boundary pair. *)
+and infer_reverse (t : ty) : ty =
+  match t with
+  | TWord n -> TWord n
+  | _       -> type_error "reverse requires Word[n], got %s" (pp_ty t)
+
+(** [T-Simplify-Word], [T-Simplify-Tangle].  Reidemeister reduction preserves
+    the type: it changes the representative, not what it is a representative
+    of. *)
+and infer_simplify (t : ty) : ty =
+  match t with
+  | TWord n        -> TWord n
+  | TTangle (a, b) -> TTangle (a, b)
+  | _ -> type_error "simplify requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
+
+(** [T-Twist-Word], [T-Twist-Tangle] — the STANDALONE forms only.
+    [T-Twist-Strand] is not here because it reads the strand context rather
+    than a premise type, so it has no type-in/type-out shape. *)
+and infer_twist (t : ty) : ty =
+  match t with
+  | TWord n        -> TWord n
+  | TTangle (a, b) -> TTangle (a, b)
+  | _ -> type_error "twist requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
+
+(** [T-Cap] — absorbs two strands from above. *)
+and infer_cap (t1 : ty) (t2 : ty) : ty =
+  TTangle ([strand_type_of_ty t1; strand_type_of_ty t2], empty_boundary)
+
+(** [T-Cup] — emits two strands below. *)
+and infer_cup (t1 : ty) (t2 : ty) : ty =
+  TTangle (empty_boundary, [strand_type_of_ty t1; strand_type_of_ty t2])
+
+(** [T-Echo-Close].  Residue-retaining closure: the word that was closed is
+    kept as the residue rather than discarded. *)
+and infer_echo_close (t : ty) : ty =
+  match t with
+  | TWord n -> TEcho (TWord n, TWord 0)
+  | _ -> type_error "echoClose requires Word[n], got %s" (pp_ty t)
+
+(** [T-Lower] — project an echo to its result, discarding the residue. *)
+and infer_lower (t : ty) : ty =
+  match t with
+  | TEcho (_, r) -> r
+  | _ -> type_error "lower requires Echo[_, _], got %s" (pp_ty t)
+
+(** [T-Residue] — recover the witness. *)
+and infer_residue (t : ty) : ty =
+  match t with
+  | TEcho (r, _) -> r
+  | _ -> type_error "residue requires Echo[_, _], got %s" (pp_ty t)
+
+(** [T-Fst], [T-Snd]. *)
+and infer_fst (t : ty) : ty =
+  match t with
+  | TProd (a, _) -> a
+  | _ -> type_error "fst requires a product, got %s" (pp_ty t)
+
+and infer_snd (t : ty) : ty =
+  match t with
+  | TProd (_, b) -> b
+  | _ -> type_error "snd requires a product, got %s" (pp_ty t)
+
+(** [T-Echo-Add] — addition that keeps both summands as residue. *)
+and infer_echo_add (t1 : ty) (t2 : ty) : ty =
+  match t1, t2 with
+  | TNum, TNum -> TEcho (TProd (TNum, TNum), TNum)
+  | _ -> type_error "echoAdd requires Num, Num, got %s, %s" (pp_ty t1) (pp_ty t2)
+
+(** [T-Echo-Eq] — equality that keeps both operands as residue.  This is the
+    operation that makes loss structured: ordinary `==` forgets what it
+    compared, and the residue is exactly what it forgot. *)
+and infer_echo_eq (t1 : ty) (t2 : ty) : ty =
+  match t1, t2 with
+  | TNum, TNum -> TEcho (TProd (TNum, TNum), TBool)
+  | TStr, TStr -> TEcho (TProd (TStr, TStr), TBool)
+  | TWord n, TWord m when n = m -> TEcho (TProd (TWord n, TWord n), TBool)
+  | _ ->
+    type_error "echoEq requires matching Num/Str/Word[n] operands, got %s, %s"
+      (pp_ty t1) (pp_ty t2)
+
+(** The join used by [T-Match] to reconcile arm types.  Words agree UP TO
+    WIDTH (#92): arms at Word[0] and Word[2] describe the same kind of thing
+    at different strand counts, and the join is the wider.  Everything else
+    must match exactly. *)
+and join_arm_ty (a : ty) (b : ty) : ty option =
+  match a, b with
+  | TWord n, TWord m -> Some (TWord (max n m))
+  | x, y when x = y  -> Some x
+  | _                -> None
+
 (** Extract a strand_type from a type expression for cap/cup.
  *  Numbers/strings produce default strands; this is a simplified model.
  *)
@@ -586,6 +974,7 @@ and strand_type_of_ty (t : ty) : strand_type =
   | TTangle _ -> StrandDefault
   | TProd _ -> StrandDefault
   | TEcho _ -> StrandDefault
+  | TEpi _ -> StrandDefault
 
 (** Convert a strand_type to a boundary element for self-crossing. *)
 and strand_to_type (st : strand_type) : strand_type = st
@@ -644,6 +1033,115 @@ and check_pattern (gamma : env) (scrutinee_ty : ty) (pat : pattern)
 let valid_invariants =
   ["jones"; "alexander"; "homfly"; "kauffman"; "writhe"; "linking"]
 
+(** Does [e] contain a call to [f]?  Used to detect self-recursion in a
+    function definition, so that only recursive definitions pay the cost of the
+    return-type search below. *)
+let rec expr_calls (f : string) (e : expr) : bool =
+  let go = expr_calls f in
+  match e with
+  | Call (g, args) -> g = f || List.exists go args
+  | Match (scrut, arms) ->
+    go scrut || List.exists (fun a -> go a.arm_body) arms
+  | Let (_, e1, e2)      -> go e1 || go e2
+  | Pipeline (e1, e2)    -> go e1 || go e2
+  | BinOp (_, e1, e2)    -> go e1 || go e2
+  | Cap (e1, e2) | Cup (e1, e2) | Pair (e1, e2)
+  | EchoAdd (e1, e2) | EchoEq (e1, e2) -> go e1 || go e2
+  | UnaryOp (_, e1) | Close e1 | Mirror e1 | Reverse e1 | Simplify e1
+  | Twist e1 | EchoClose e1 | Lower e1 | Residue e1 | Fst e1 | Snd e1
+  | Evidence e1 -> go e1
+  | Warrant (_, c, ev) | EpiVal (_, c, ev) -> go c || go ev
+  (* An add{} island is closed: it cannot call a TANGLE function (Pi/section 9.5
+     is not modelled), so it can never contain a recursive call. *)
+  | AddBlock _ -> false
+  | Weave wb -> go wb.weave_body
+  | BraidLit _ | Identity | BoolLit _ | IntLit _ | FloatLit _
+  | StringLit _ | Var _ | Crossing _ -> false
+
+(** Candidate return types for a recursive function, in the order they are
+    tried.  Seeds drawn from the body come first (a match's non-recursive arms
+    are the usual source), then the scalar types, then the original [TWord 0]
+    placeholder so the previous behaviour remains reachable. *)
+let recursive_return_candidates (gamma : env) (f : string) (body : expr) : ty list =
+  (* Types of the arms that do NOT mention [f] — those can be inferred before
+     anything is known about the function's return type.  For
+       def length(w) = match w with
+         | identity  => 0                  <- typeable now: Num
+         | s1 . rest => 1 + length(rest)   <- not yet
+         | _         => 0                  <- typeable now: Num
+     this yields [TNum], which is the fixpoint. *)
+  let seeds_from_body =
+    match body with
+    | Match (_, arms) ->
+      List.filter_map (fun a ->
+        if expr_calls f a.arm_body then None
+        else (try Some (infer_expr gamma [] a.arm_body) with _ -> None)
+      ) arms
+    | _ -> []
+  in
+  let dedup l =
+    List.fold_left (fun acc x -> if List.mem x acc then acc else acc @ [x]) [] l
+  in
+  dedup (seeds_from_body @ [TNum; TBool; TStr; TWord 0])
+
+(** Infer the return type of a function definition and bind it in [gamma].
+    [T-Def-Fun].
+
+    This is the single implementation of function-definition typing.  It used
+    to exist twice — once here and once inlined in [check_program]'s pass 1b —
+    and only the copy in [check_program] was ever reached for whole programs.
+    A fix applied to one had no effect on the other, so they are now one
+    function called from both. *)
+let bind_function_def (gamma : env) (def : definition) : env =
+  let param_tys = List.map (fun _p -> TWord 0) def.def_params in
+  (* Bind the params, and the function itself so recursive calls resolve.
+     [seed] is the return type assumed for those recursive calls. *)
+  let with_seed (seed : ty) : env =
+    let fsig = { fsig_params = param_tys; fsig_return = seed } in
+    let g = env_bind_fun gamma def.def_name fsig in
+    List.fold_left2 (fun g pname pty -> env_bind_val g pname pty)
+      g def.def_params param_tys
+  in
+  let body_ty =
+    if not (expr_calls def.def_name def.def_body) then
+      (* Non-recursive: the seed is never consulted, so one pass suffices.
+         Unchanged from the original behaviour. *)
+      infer_expr (with_seed (TWord 0)) [] def.def_body
+    else begin
+      (* Recursive.  The return type occurs in its own derivation, so it must
+         be a FIXPOINT: assume a return type, check the body under that
+         assumption, and accept only if the body then has exactly the assumed
+         type.  Anything weaker is a guess that merely failed to crash.
+
+         Previously the seed was hard-coded to [TWord 0] and marked
+         "placeholder", with nothing checking the result against it.  So
+
+             def length(w) = match w with
+               | identity  => 0
+               | s1 . rest => 1 + length(rest)
+               | _         => 0
+
+         failed with "Cannot add Num and Word[0]" — the recursive call was
+         typed at the placeholder rather than at Num, which made every
+         recursive function returning a scalar unwritable.
+
+         The candidate list is finite and ordered, so this terminates.  If no
+         candidate is a fixpoint we fall back to the original single pass,
+         which re-raises its original error: a definition that did not
+         typecheck before still does not, with the same message. *)
+      let rec first_fixpoint = function
+        | [] -> infer_expr (with_seed (TWord 0)) [] def.def_body
+        | seed :: rest ->
+          (match infer_expr (with_seed seed) [] def.def_body with
+           | t when t = seed -> t            (* consistent: a real fixpoint *)
+           | _               -> first_fixpoint rest
+           | exception _     -> first_fixpoint rest)
+      in
+      first_fixpoint (recursive_return_candidates gamma def.def_name def.def_body)
+    end
+  in
+  env_bind_fun gamma def.def_name { fsig_params = param_tys; fsig_return = body_ty }
+
 (** Type-check a single statement, returning the (possibly extended) environment.
  *  Implements [T-Def-Val], [T-Def-Fun], [T-Assert], [T-Compute], [T-Weave].
  *)
@@ -663,19 +1161,7 @@ let check_statement (gamma : env) (stmt : statement) : env =
        * A more sophisticated implementation would use constraint-based
        * inference; here we use a simple forward analysis.
        *)
-      let param_tys = List.map (fun _p -> TWord 0) def.def_params in
-      (* Bind params and the function itself (for recursion) into the env *)
-      let ret_ty = TWord 0 in  (* placeholder *)
-      let fsig = { fsig_params = param_tys; fsig_return = ret_ty } in
-      let gamma' = env_bind_fun gamma def.def_name fsig in
-      let gamma' = List.fold_left2 (fun g pname pty ->
-        env_bind_val g pname pty
-      ) gamma' def.def_params param_tys in
-      (* Infer the body type *)
-      let body_ty = infer_expr gamma' [] def.def_body in
-      (* Re-register with inferred return type *)
-      let fsig' = { fsig_params = param_tys; fsig_return = body_ty } in
-      env_bind_fun gamma def.def_name fsig'
+      bind_function_def gamma def
     end
 
   (* [T-Weave] (section 3.10) *)
@@ -690,6 +1176,10 @@ let check_statement (gamma : env) (stmt : statement) : env =
     ) wb.weave_inputs in
     (* Build input boundary A *)
     let input_boundary = List.map (fun (_, se) -> se.strand_ty) sigma in
+    (* Strands are LINEAR (QTT quantity 1): used exactly once, and conserved
+       into the yield.  Checked before the body's type, so the diagnostic names
+       the strand rather than some downstream type mismatch. *)
+    check_strand_linearity sigma wb;
     (* Type-check the body in the strand context *)
     let body_ty = infer_expr gamma sigma wb.weave_body in
     (* Validate the body produces a Tangle type *)
@@ -750,6 +1240,7 @@ let check_statement (gamma : env) (stmt : statement) : env =
 type diagnostic = {
   diag_message : string;
   diag_level   : [`Error | `Warning];
+  diag_line    : int option;   (** 1-based source line, when known *)
 }
 
 (** Result of type-checking a program. *)
@@ -769,7 +1260,11 @@ type check_result = {
  *)
 let check_program (prog : program) : check_result =
   let errors = ref [] in
-  let add_error msg = errors := { diag_message = msg; diag_level = `Error } :: !errors in
+  let add_error_at line msg =
+    let diag_line = if line > 0 then Some line else None in
+    errors := { diag_message = msg; diag_level = `Error; diag_line } :: !errors
+  in
+  let add_error msg = add_error_at 0 msg in
 
   (* Pass 1a: collect all def names with placeholder types (forward refs).
    * This gives every name a preliminary entry so later defs can reference
@@ -800,30 +1295,27 @@ let check_program (prog : program) : check_result =
           let ty = infer_expr gamma [] def.def_body in
           env_bind_val gamma def.def_name ty
         end else begin
-          let param_tys = List.map (fun _p -> TWord 0) def.def_params in
-          let fsig_placeholder =
-            { fsig_params = param_tys; fsig_return = TWord 0 } in
-          let gamma' = env_bind_fun gamma def.def_name fsig_placeholder in
-          let gamma' = List.fold_left2 (fun g pname pty ->
-            env_bind_val g pname pty
-          ) gamma' def.def_params param_tys in
-          let body_ty = infer_expr gamma' [] def.def_body in
-          let fsig = { fsig_params = param_tys; fsig_return = body_ty } in
-          env_bind_fun gamma def.def_name fsig
+          bind_function_def gamma def
         end
       with Type_error msg ->
-        add_error (Printf.sprintf "In definition '%s': %s" def.def_name msg);
+        add_error_at def.def_line
+          (Printf.sprintf "In definition '%s': %s" def.def_name msg);
         gamma
       end
     | _ -> gamma
   ) gamma_placeholders prog in
 
-  (* Pass 2: type-check all statements against the complete environment *)
+  (* Pass 2: type-check the non-definition statements (assertions, computations,
+   * weave blocks).  Definitions are fully checked in pass 1b; re-checking them
+   * here would only duplicate their diagnostics. *)
   let _gamma_final = List.fold_left (fun gamma stmt ->
-    try check_statement gamma stmt
-    with Type_error msg ->
-      add_error msg;
-      gamma
+    match stmt with
+    | Definition _ -> gamma
+    | _ ->
+      try check_statement gamma stmt
+      with Type_error msg ->
+        add_error msg;
+        gamma
   ) gamma_pass1 prog in
 
   let diagnostics = List.rev !errors in

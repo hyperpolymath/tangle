@@ -85,11 +85,11 @@ let sigma_inv i = gen i (-1)
 
 (** Helper: make a simple value definition statement. *)
 let def_val name body =
-  Definition { def_name = name; def_params = []; def_body = body }
+  Definition { def_name = name; def_params = []; def_body = body; def_line = 0 }
 
 (** Helper: make a function definition statement. *)
 let def_fun name params body =
-  Definition { def_name = name; def_params = params; def_body = body }
+  Definition { def_name = name; def_params = params; def_body = body; def_line = 0 }
 
 (* ================================================================== *)
 (*  1. Literal types                                                   *)
@@ -357,6 +357,49 @@ let test_isotopy () =
     infer gamma (BinOp (Isotopy, Var "t1", Var "t2")) = TBool);
 
   (* Isotopy: non-topological types -> error *)
+  (* #96 [T-Twist-Strand] (D1.18): `(~a)` on a NAMED STRAND inside a weave.
+     Specified in FORMAL-SEMANTICS section 3.10 and in spec/grammar.ebnf, but
+     infer_expr rejected any strand name used as an expression, so the
+     construct was licensed by the spec and unimplemented.  Parallel to
+     [T-Self-Cross], which the spec presents alongside it. *)
+  test "#96 T-Twist-Strand: (~a) on a strand is Tangle[[T],[T]]" (fun () ->
+    let sigma = [("a", { strand_pos = 1; strand_ty = StrandNamed "Q" })] in
+    infer_expr [] sigma (Twist (Var "a"))
+      = TTangle ([StrandNamed "Q"], [StrandNamed "Q"]));
+
+  test "#96 twist agrees with the self-crossing rule it parallels" (fun () ->
+    (* [T-Self-Cross] types (a > a) the same way; the two must not diverge. *)
+    let sigma = [("a", { strand_pos = 1; strand_ty = StrandNamed "Q" })] in
+    infer_expr [] sigma (Twist (Var "a"))
+      = infer_expr [] sigma (Crossing ("a", Over, "a")));
+
+  test "#96 standalone twist on a Word is unchanged" (fun () ->
+    (* Regression guard: [T-Twist-Word] must still apply outside a weave. *)
+    infer [] (Twist (BraidLit [sigma 1])) = TWord 2);
+
+  test "#96 twist of a non-strand, non-word is still rejected" (fun () ->
+    (* `raises` is defined in a later group; inline it here. *)
+    try let _ = infer [] (Twist (StringLit "x")) in false
+    with Type_error _ -> true);
+
+  (* #94 JTV island typing: the Harvard judgement |-_hd, then Embed. *)
+  test "#94 add{} embeds Int as Num" (fun () ->
+    infer [] (AddBlock (HvBin (HvAdd, HvInt 1, HvInt 2))) = TNum);
+
+  test "#94 add{} embeds Bool as Bool" (fun () ->
+    infer [] (AddBlock (HvBool true)) = TBool);
+
+  test "#94 add{} comparison yields Bool" (fun () ->
+    infer [] (AddBlock (HvBin (HvLt, HvInt 1, HvInt 2))) = TBool);
+
+  test "#94 add{} rejects arithmetic on a Bool" (fun () ->
+    try let _ = infer [] (AddBlock (HvBin (HvAdd, HvBool true, HvInt 1))) in false
+    with Type_error _ -> true);
+
+  test "#94 add{} rejects if-branches that disagree (totality)" (fun () ->
+    try let _ = infer [] (AddBlock (HvIf (HvBool true, HvInt 1, HvStr "x"))) in false
+    with Type_error _ -> true);
+
   test "T-Isotopy (type error)" (fun () ->
     try
       let _ = infer [] (BinOp (Isotopy, IntLit 1, IntLit 2)) in
@@ -622,6 +665,81 @@ let test_functions () =
     let prog = [def_fun "f" ["x"] (Var "x")] in
     let r = check_ok prog in
     r.result_ok);
+
+  (* ---------------------------------------------------------------- *)
+  (* #88: recursive functions returning a SCALAR.                       *)
+  (* The return type occurs in its own derivation, so it must be a      *)
+  (* fixpoint. Previously the recursive call was typed at the hard-coded *)
+  (* [TWord 0] "placeholder" seed with nothing checking the result       *)
+  (* against it, so every one of these failed with                       *)
+  (*   "Cannot add Num and Word[0]"                                      *)
+  (* and recursive scalar functions were simply unwritable.              *)
+  (* ---------------------------------------------------------------- *)
+
+  test "#88 recursive fn returning Num (the examples/ `length` shape)" (fun () ->
+    (* def length(w) = match w with
+         | identity  => 0
+         | s1 . rest => 1 + length(rest)
+         | _         => 0 *)
+    let prog = [
+      def_fun "length" ["w"] (Match (Var "w", [
+        { arm_pattern = PatIdentity; arm_body = IntLit 0 };
+        { arm_pattern = PatCons ({ gpat_index = 1; gpat_exponent = 1 }, PatVar "rest");
+          arm_body = BinOp (Add, IntLit 1, Call ("length", [Var "rest"])) };
+        { arm_pattern = PatWildcard; arm_body = IntLit 0 };
+      ]))
+    ] in
+    let r = check_ok prog in
+    r.result_ok);
+
+  test "#88 recursive fn's return type is Num, not the seed" (fun () ->
+    (* Guard: it must not merely typecheck — the signature must be right,
+       otherwise callers would still see Word[0]. *)
+    let prog = [
+      def_fun "length" ["w"] (Match (Var "w", [
+        { arm_pattern = PatIdentity; arm_body = IntLit 0 };
+        { arm_pattern = PatCons ({ gpat_index = 1; gpat_exponent = 1 }, PatVar "rest");
+          arm_body = BinOp (Add, IntLit 1, Call ("length", [Var "rest"])) };
+        { arm_pattern = PatWildcard; arm_body = IntLit 0 };
+      ]))
+    ] in
+    let r = check_ok prog in
+    (match env_lookup r.result_env "length" with
+     | Some (EFun s) -> s.fsig_return = TNum
+     | _ -> false));
+
+  test "#88 recursive fn result is usable at Num by a caller" (fun () ->
+    let prog = [
+      def_fun "length" ["w"] (Match (Var "w", [
+        { arm_pattern = PatIdentity; arm_body = IntLit 0 };
+        { arm_pattern = PatCons ({ gpat_index = 1; gpat_exponent = 1 }, PatVar "rest");
+          arm_body = BinOp (Add, IntLit 1, Call ("length", [Var "rest"])) };
+        { arm_pattern = PatWildcard; arm_body = IntLit 0 };
+      ]));
+      (* Only well-typed if `length` really returns Num. *)
+      def_val "total" (BinOp (Add, Call ("length", [BraidLit [sigma 1]]), IntLit 1));
+    ] in
+    let r = check_ok prog in
+    r.result_ok);
+
+  test "#88 non-recursive definitions are unaffected" (fun () ->
+    (* Regression guard: the fixpoint search must only engage for genuinely
+       recursive bodies. A word-returning function still returns a word. *)
+    let prog = [def_fun "twice" ["x"] (BinOp (Compose, Var "x", Var "x"))] in
+    let r = check_ok prog in
+    r.result_ok &&
+    (match env_lookup r.result_env "twice" with
+     | Some (EFun s) -> s.fsig_return = TWord 0
+     | _ -> false));
+
+  test "#88 a genuinely ill-typed recursive fn still fails" (fun () ->
+    (* The fallback must not turn errors into silent successes: no candidate
+       return type makes `identity + 1` well-formed. *)
+    let prog = [
+      def_fun "bad" ["w"] (BinOp (Add, Identity, Call ("bad", [Var "w"])))
+    ] in
+    let r = check_ok prog in
+    not r.result_ok);
 
   (* [T-App]: function application *)
   test "T-App" (fun () ->
@@ -929,6 +1047,133 @@ let test_permutations () =
     b' = [StrandNamed "B"; StrandNamed "C"; StrandNamed "A"])
 
 (* ================================================================== *)
+(*  Echo / product types (structured loss)                             *)
+(* ================================================================== *)
+
+(* Pins infer_expr against the Lean HasType rules tEchoClose/tLower/tResidue/
+   tPair/tFst/tSnd/tEchoAdd/tEchoEq (proofs/Tangle.lean:260-290), plus the
+   same-width tightening of plain `Eq`. *)
+let test_echo_types () =
+  Printf.printf "\n=== Echo / product types ===\n";
+
+  let raises f = try let _ = f () in false with Type_error _ -> true in
+
+  (* echoClose b : Echo[Word[n], Word[0]]  (braid[s1] has width 2) *)
+  test "T-Echo-Close" (fun () ->
+    infer [] (EchoClose (BraidLit [sigma 1])) = TEcho (TWord 2, TWord 0));
+
+  (* lower projects to the result; residue to the residue *)
+  test "T-Lower" (fun () ->
+    infer [] (Lower (EchoClose (BraidLit [sigma 1]))) = TWord 0);
+  test "T-Residue" (fun () ->
+    infer [] (Residue (EchoClose (BraidLit [sigma 1]))) = TWord 2);
+
+  (* products, in left-to-right order *)
+  test "T-Pair" (fun () ->
+    infer [] (Pair (IntLit 1, StringLit "a")) = TProd (TNum, TStr));
+  test "T-Fst" (fun () ->
+    infer [] (Fst (Pair (IntLit 1, StringLit "a"))) = TNum);
+  test "T-Snd" (fun () ->
+    infer [] (Snd (Pair (IntLit 1, StringLit "a"))) = TStr);
+
+  (* echoAdd : Echo[(Num × Num), Num] *)
+  test "T-Echo-Add" (fun () ->
+    infer [] (EchoAdd (IntLit 1, IntLit 2)) = TEcho (TProd (TNum, TNum), TNum));
+
+  (* echoEq : Echo[(τ × τ), Bool], width-matched for words *)
+  test "T-Echo-Eq-Num" (fun () ->
+    infer [] (EchoEq (IntLit 1, IntLit 2)) = TEcho (TProd (TNum, TNum), TBool));
+  test "T-Echo-Eq-Str" (fun () ->
+    infer [] (EchoEq (StringLit "a", StringLit "b")) = TEcho (TProd (TStr, TStr), TBool));
+  test "T-Echo-Eq-Word (same width)" (fun () ->
+    infer [] (EchoEq (BraidLit [sigma 1], BraidLit [sigma 1]))
+      = TEcho (TProd (TWord 2, TWord 2), TBool));
+
+  (* ill-typed echo/product forms are rejected *)
+  test "lower of non-echo rejected" (fun () ->
+    raises (fun () -> infer [] (Lower (IntLit 1))));
+  test "fst of non-pair rejected" (fun () ->
+    raises (fun () -> infer [] (Fst (IntLit 1))));
+  test "echoAdd of non-num rejected" (fun () ->
+    raises (fun () -> infer [] (EchoAdd (IntLit 1, StringLit "a"))));
+  test "echoEq of mismatched word widths rejected" (fun () ->
+    raises (fun () -> infer [] (EchoEq (BraidLit [sigma 1], BraidLit [sigma 1; sigma 2]))));
+
+  (* plain `Eq`: same-width words / Num / Str / Bool accepted;
+     unequal-width words rejected (matches Lean tEqWord) *)
+  test "Eq: same-width words ok" (fun () ->
+    infer [] (BinOp (Eq, BraidLit [sigma 1], BraidLit [sigma 1])) = TBool);
+  test "Eq: Bool == Bool ok (extra-core)" (fun () ->
+    infer [] (BinOp (Eq, BoolLit true, BoolLit false)) = TBool);
+  (* #92: unequal widths are now WELL-TYPED. Bn embeds in Bn+1, the comparison
+     is decided in the larger group, and `Braid_equiv.equiv` has no width
+     parameter — it is only the typing rule that used to forbid this. *)
+  test "#92 Eq: unequal-width words are accepted" (fun () ->
+    infer [] (BinOp (Eq, BraidLit [sigma 1], BraidLit [sigma 1; sigma 2])) = TBool);
+
+  test "#92 Eq: identity == braid is accepted (the 'is it trivial?' shape)" (fun () ->
+    infer [] (BinOp (Eq, Identity, BraidLit [sigma 1])) = TBool);
+
+  test "#92 Eq: == and ~ now agree on what they accept" (fun () ->
+    (* They evaluate through the same Braid_equiv.equiv since TG-7; before #92
+       the typechecker accepted one and rejected the other. *)
+    let a = BraidLit [sigma 1] and b = BraidLit [sigma 2] in
+    infer [] (BinOp (Eq, a, b)) = infer [] (BinOp (Isotopy, a, b)));
+
+  test "#92 Eq: genuinely mismatched types are STILL rejected" (fun () ->
+    (* Widening must not become "anything compares to anything". *)
+    raises (fun () -> infer [] (BinOp (Eq, IntLit 1, BraidLit [sigma 1]))));
+
+  test "#92 match arms join on width instead of failing" (fun () ->
+    (* turing_complete.tangle's shape: arms at Word[0] and Word[2]. *)
+    let arms = [
+      { arm_pattern = PatIdentity;  arm_body = Identity };
+      { arm_pattern = PatWildcard;  arm_body = BraidLit [sigma 1] };
+    ] in
+    infer [] (Match (BraidLit [sigma 1], arms)) = TWord 2);
+
+  (* ---------------------------------------------------------------- *)
+  (* EPISTEMIC TYPES. The commitment is NON-FACTIVITY: holding a warrant  *)
+  (* is not holding the fact. `Evidence` is the ONLY elimination, and it  *)
+  (* yields the token type, never the claim type.                        *)
+  (* ---------------------------------------------------------------- *)
+
+  test "epi: warrant types as Epi[k, rho, tau]" (fun () ->
+    infer [] (Warrant (0, IntLit 1, BraidLit [sigma 1]))
+      = TEpi (0, TWord 2, TNum));
+
+  test "epi: evidence yields the EVIDENCE type, not the claim" (fun () ->
+    (* The heart of it. Claim is Num, evidence is Word[2]; the projection
+       must give Word[2]. If it gave Num, the warrant would be factive. *)
+    infer [] (Evidence (Warrant (0, IntLit 1, BraidLit [sigma 1])))
+      = TWord 2);
+
+  test "epi: NO elimination delivers the claim type" (fun () ->
+    (* Guard: evidence must never return the claim type when the two differ. *)
+    infer [] (Evidence (Warrant (0, StringLit "claimed", BraidLit [sigma 1])))
+      <> TStr);
+
+  test "epi: standpoints are distinguished" (fun () ->
+    infer [] (Warrant (1, IntLit 1, IntLit 2))
+      <> infer [] (Warrant (2, IntLit 1, IntLit 2)));
+
+  test "epi: composes over echo without collapsing into it" (fun () ->
+    (* EpistemicEcho from EchoBridge.agda: standpoint k with access to an
+       echo. The two modalities nest; neither absorbs the other. *)
+    infer [] (Warrant (1, IntLit 0, EchoClose (BraidLit [sigma 1])))
+      = TEpi (1, TEcho (TWord 2, TWord 0), TNum));
+
+  test "epi: evidence of a non-warrant is rejected" (fun () ->
+    raises (fun () -> infer [] (Evidence (IntLit 1))));
+
+  test "#92 match arms of genuinely different KINDS still fail" (fun () ->
+    let arms = [
+      { arm_pattern = PatIdentity;  arm_body = IntLit 1 };
+      { arm_pattern = PatWildcard;  arm_body = BraidLit [sigma 1] };
+    ] in
+    raises (fun () -> infer [] (Match (BraidLit [sigma 1], arms))))
+
+(* ================================================================== *)
 (*  Main: run all test groups                                          *)
 (* ================================================================== *)
 
@@ -942,6 +1187,7 @@ let () =
   test_tensor ();
   test_arithmetic ();
   test_equality ();
+  test_echo_types ();
   test_isotopy ();
   test_close ();
   test_cap_cup ();

@@ -88,6 +88,40 @@ let rec pp_pattern ctx = function
 (*  Expressions                                                        *)
 (* ------------------------------------------------------------------ *)
 
+let pp_typed_strand ctx ts =
+  emit ctx ts.strand_name;
+  match ts.strand_type with
+  | Some t -> emit ctx ": "; emit ctx t
+  | None -> ()
+
+let pp_strand_list ctx strands =
+  List.iteri (fun i s ->
+    if i > 0 then emit ctx ", ";
+    pp_typed_strand ctx s
+  ) strands
+
+(* Harvard data expressions print fully parenthesised: the island has its own
+   precedence, and re-parsing must not depend on the reader sharing TANGLE's. *)
+let rec pp_hv ctx = function
+  | HvInt n   -> emit ctx (string_of_int n)
+  | HvFloat f -> emit ctx (Printf.sprintf "%g" f)
+  | HvStr s   -> emit ctx (Printf.sprintf "%S" s)
+  | HvBool b  -> emit ctx (if b then "true" else "false")
+  | HvUn (op, a) ->
+    emit ctx "("; emit ctx (match op with HvNeg -> "-" | HvNot -> "!");
+    pp_hv ctx a; emit ctx ")"
+  | HvBin (op, a, b) ->
+    emit ctx "("; pp_hv ctx a;
+    emit ctx (match op with
+      | HvAdd -> " + " | HvSub -> " - " | HvMul -> " * " | HvDiv -> " / "
+      | HvMod -> " % " | HvEq -> " == " | HvNe -> " != " | HvLt -> " < "
+      | HvLe -> " <= " | HvGt -> " > " | HvGe -> " >= "
+      | HvAnd -> " && " | HvOr -> " || ");
+    pp_hv ctx b; emit ctx ")"
+  | HvIf (c, t, e) ->
+    emit ctx "(if "; pp_hv ctx c; emit ctx " then "; pp_hv ctx t;
+    emit ctx " else "; pp_hv ctx e; emit ctx ")"
+
 let rec pp_expr ctx = function
   | Match (scrut, arms) ->
     emit ctx "match ";
@@ -254,6 +288,30 @@ let rec pp_expr ctx = function
     ) args;
     emit ctx ")"
 
+  | Weave w ->
+    (* Same surface syntax as the statement form; in expression position it
+       re-parses via primary_expr, so TG-4's round-trip property holds. *)
+    emit ctx "weave strands ";
+    pp_strand_list ctx w.weave_inputs;
+    emit ctx " into ";
+    pp_expr ctx w.weave_body;
+    emit ctx " yield strands ";
+    pp_strand_list ctx w.weave_outputs
+
+  | AddBlock he ->
+    emit ctx "add{ "; pp_hv ctx he; emit ctx " }"
+
+  | Warrant (k, c, ev) ->
+    emit ctx "warrant["; emit ctx (string_of_int k); emit ctx "](";
+    pp_expr ctx c; emit ctx ", "; pp_expr ctx ev; emit ctx ")"
+
+  | EpiVal (k, c, ev) ->
+    emit ctx "epiVal["; emit ctx (string_of_int k); emit ctx "](";
+    pp_expr ctx c; emit ctx ", "; pp_expr ctx ev; emit ctx ")"
+
+  | Evidence e ->
+    emit ctx "evidence("; pp_expr ctx e; emit ctx ")"
+
   | Crossing (a, op, b) ->
     emit ctx "(";
     emit ctx a;
@@ -266,18 +324,6 @@ let rec pp_expr ctx = function
 (* ------------------------------------------------------------------ *)
 (*  Typed strands                                                      *)
 (* ------------------------------------------------------------------ *)
-
-let pp_typed_strand ctx ts =
-  emit ctx ts.strand_name;
-  match ts.strand_type with
-  | Some t -> emit ctx ": "; emit ctx t
-  | None -> ()
-
-let pp_strand_list ctx strands =
-  List.iteri (fun i s ->
-    if i > 0 then emit ctx ", ";
-    pp_typed_strand ctx s
-  ) strands
 
 (* ------------------------------------------------------------------ *)
 (*  Statements                                                         *)

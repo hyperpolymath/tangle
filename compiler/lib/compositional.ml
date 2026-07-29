@@ -27,6 +27,7 @@ type expr =
   | Compose of expr * expr
   | Tensor of expr * expr
   | Close of expr
+  | EchoClose of expr
 
 type compile_error = string
 
@@ -40,6 +41,7 @@ let braid gens = Braid gens
 let compose a b = Compose (a, b)
 let tensor a b = Tensor (a, b)
 let close e = Close e
+let echo_close e = EchoClose e
 
 (* ================================================================== *)
 (*  Planar diagram IR                                                  *)
@@ -63,6 +65,7 @@ type planar_diagram = {
 type compiled =
   | OpenWord of generator list
   | ClosedDiagram of planar_diagram
+  | EchoClosed of { residue : generator list; diagram : planar_diagram }
 
 (* ================================================================== *)
 (*  Skein hook payload                                                 *)
@@ -76,6 +79,25 @@ type skein_payload = {
 }
 
 type skein_sink = skein_payload -> unit
+
+(* ================================================================== *)
+(*  Echo-closed payload — carries residue braid alongside closed PD   *)
+(* ================================================================== *)
+
+(* Residue-carrying payload.  `residue_word` is the lossless machine-interchange
+   form (the structured field consumers read); `residue_blob` is a compact
+   human-readable rendering, e.g. "s1,s2^-1,s1" (serialize-only — there is no
+   reader, mirroring `pdv1_blob_of_pd`). *)
+type echo_closed_payload = {
+  name : string;
+  residue_blob : string;
+  residue_word : (int * int) list;
+  pd_blob : string;
+  pd_entries : (int * int * int * int * int) list;
+  crossing_number : int;
+}
+
+type echo_skein_sink = echo_closed_payload -> unit
 
 (* ================================================================== *)
 (*  Result helpers                                                     *)
@@ -141,9 +163,45 @@ let rec word_of_expr (e : expr) : (generator list, compile_error) result =
     ok (tensor_word wa wb)
   | Close _ ->
     err "nested close is not compositional in open-word context"
+  | EchoClose _ ->
+    err "nested echo-close is not compositional in open-word context"
 
 let expr_of_word (word : generator list) : expr =
   if word = [] then Identity else Braid word
+
+(* The *source* braid word, preserving generator exponents verbatim (no
+   unit-expansion).  This is the residue retained by `echoClose`: it must equal
+   the pre-closure braid `b` to match the Lean spec `echo_residue_recovers`
+   (proofs/Tangle.lean — keeps `braidLit gs` exactly) and the eval interpreter
+   (eval.ml — stores the evaluated value unchanged).  Diagram lowering still
+   uses the unit-expanded `word_of_expr` (PD lowering requires unit exponents);
+   only the residue is kept verbatim. *)
+let rec source_word_of_expr (e : expr) : (generator list, compile_error) result =
+  match e with
+  | Identity -> ok []
+  | Gen g ->
+    let* () = validate_generator g in
+    ok [g]
+  | Braid gens ->
+    let rec loop acc = function
+      | [] -> ok (List.rev acc)
+      | g :: rest ->
+        let* () = validate_generator g in
+        loop (g :: acc) rest
+    in
+    loop [] gens
+  | Compose (a, b) ->
+    let* wa = source_word_of_expr a in
+    let* wb = source_word_of_expr b in
+    ok (wa @ wb)
+  | Tensor (a, b) ->
+    let* wa = source_word_of_expr a in
+    let* wb = source_word_of_expr b in
+    ok (tensor_word wa wb)
+  | Close _ ->
+    err "nested close is not compositional in open-word context"
+  | EchoClose _ ->
+    err "nested echo-close is not compositional in open-word context"
 
 (* ================================================================== *)
 (*  Compiler: braid word -> PD IR                                      *)
@@ -339,6 +397,9 @@ let rec of_ast_expr (e : Ast.expr) : (expr, compile_error) result =
   | Ast.Close inner ->
     let* ci = of_ast_expr inner in
     ok (Close ci)
+  | Ast.EchoClose inner ->
+    let* ci = of_ast_expr inner in
+    ok (EchoClose ci)
   | _ ->
     err "expression is outside compositional subset (expected generators/compose/tensor/close)"
 
@@ -350,6 +411,7 @@ let rec to_ast_expr (e : expr) : Ast.expr =
   | Compose (a, b) -> Ast.BinOp (Ast.Compose, to_ast_expr a, to_ast_expr b)
   | Tensor (a, b) -> Ast.BinOp (Ast.Tensor, to_ast_expr a, to_ast_expr b)
   | Close x -> Ast.Close (to_ast_expr x)
+  | EchoClose x -> Ast.EchoClose (to_ast_expr x)
 
 let parse_expr (source : string) : (expr, compile_error) result =
   let wrapped = "def expr_tmp = " ^ source in
@@ -374,6 +436,14 @@ let compile (e : expr) : (compiled, compile_error) result =
     let* word = word_of_expr inner in
     let* pd = pd_of_closed_word word in
     ok (ClosedDiagram pd)
+  | EchoClose inner ->
+    (* Residue = the verbatim pre-closure braid (exponents preserved), matching
+       the Lean spec and the eval interpreter.  Diagram = the closure of the
+       unit-expanded word (PD lowering needs unit exponents). *)
+    let* residue = source_word_of_expr inner in
+    let* word = word_of_expr inner in
+    let* pd = pd_of_closed_word word in
+    ok (EchoClosed { residue; diagram = pd })
   | _ ->
     let* word = word_of_expr e in
     ok (OpenWord word)
@@ -386,6 +456,7 @@ let word_of_compiled (c : compiled) : generator list option =
   match c with
   | OpenWord w -> Some w
   | ClosedDiagram pd -> pd.source_word
+  | EchoClosed { residue; _ } -> Some residue
 
 (* ================================================================== *)
 (*  Skein hook helpers (pure data)                                     *)
@@ -416,3 +487,53 @@ let compile_and_send_to_skein
     let payload = skein_payload_of_pd ~name pd in
     send_to_skein sink payload;
     ok payload
+  | EchoClosed { diagram; _ } ->
+    (* Callers that don't need the residue can treat echo-closed as plain closed. *)
+    let payload = skein_payload_of_pd ~name diagram in
+    send_to_skein sink payload;
+    ok payload
+
+(* ================================================================== *)
+(*  Echo-closed Skein helpers — residue-carrying path                 *)
+(* ================================================================== *)
+
+let residue_blob_of_word (word : generator list) : string =
+  String.concat ","
+    (List.map (fun g ->
+       if g.exponent = 1 then Printf.sprintf "s%d" g.index
+       else Printf.sprintf "s%d^%d" g.index g.exponent
+     ) word)
+
+let echo_payload_of_residue_and_pd
+    ~name
+    (residue : generator list)
+    (pd : planar_diagram)
+  : echo_closed_payload =
+  let canonical = canonicalize_pd pd in
+  {
+    name;
+    residue_blob = residue_blob_of_word residue;
+    residue_word = List.map (fun g -> (g.index, g.exponent)) residue;
+    pd_blob = pdv1_blob_of_pd canonical;
+    pd_entries = entries_of_pd canonical;
+    crossing_number = List.length canonical.crossings;
+  }
+
+let send_to_echo_skein (sink : echo_skein_sink) (payload : echo_closed_payload) : unit =
+  sink payload
+
+let compile_echo_and_send_to_skein
+    (sink : echo_skein_sink)
+    ~(name : string)
+    (e : expr)
+  : (echo_closed_payload, compile_error) result =
+  let* c = compile e in
+  match c with
+  | EchoClosed { residue; diagram } ->
+    let payload = echo_payload_of_residue_and_pd ~name residue diagram in
+    send_to_echo_skein sink payload;
+    ok payload
+  | OpenWord _ ->
+    err "echo Skein hook expects an echoClose expression (got open word)"
+  | ClosedDiagram _ ->
+    err "echo Skein hook expects an echoClose expression (use compile_and_send_to_skein for plain close)"

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: MPL-2.0
+# Conformance (ILL-TYPED): contraction — the yield names a strand twice.
+#
+# A braid on n strands is a PERMUTATION of those n strands, so the output
+# boundary must be a permutation of the input boundary.  Yielding 'a' twice
+# manufactures a strand out of nothing.
+
+def duplicating =
+  weave strands a:Q, b:Q into
+    (a > b)
+  yield strands a:Q, b:Q, a:Q

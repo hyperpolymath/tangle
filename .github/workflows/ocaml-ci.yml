@@ -1,0 +1,151 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# OCaml compiler build + test gate.
+#
+# ── Why this exists ────────────────────────────────────────────────────────
+# Until 2026-07-29 the OCaml compiler — the lexer, parser, typechecker and
+# interpreter, plus a test suite of well over 4,000 assertions (TG-3 1008,
+# TG-5 189, TG-7 2220, TG-8 2311, and the parser/typecheck/eval/e2e/property/
+# round-trip suites) — was **not built or run by CI at all**.  Only the Lean
+# proofs were gated.  A semantics change to `eval.ml` could therefore land
+# fully green with nothing having compiled it.
+#
+# That gap was found while implementing the TG-7 ruling (#50), which changes
+# what `==` MEANS on braids.  A change of that weight must be gated, so this
+# workflow makes `dune build` + `dune test` the oracle: any PR that breaks the
+# compiler or a single assertion fails here rather than landing silently.
+#
+# ── Toolchain choice ───────────────────────────────────────────────────────
+# Debian/Ubuntu packages (`ocaml-dune`, `menhir`) rather than an OCaml setup
+# ACTION, deliberately: it adds no new third-party action pin to the estate's
+# allowlist, and no pin that can later become unresolvable — the failure mode
+# that produces a workflow with NO check run at all.
+
+name: OCaml CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'compiler/**'
+      - 'examples/**'
+      - 'conformance/**'
+      - 'scripts/check-corpus.sh'
+      - 'scripts/check-rsr-instantiation.sh'
+      - 'QUICKSTART-*.adoc'
+      - 'Justfile'
+      - '.machine_readable/**'
+      - '.github/workflows/ocaml-ci.yml'
+  pull_request:
+    paths:
+      - 'compiler/**'
+      - 'examples/**'
+      - 'conformance/**'
+      - 'scripts/check-corpus.sh'
+      - 'scripts/check-rsr-instantiation.sh'
+      - 'QUICKSTART-*.adoc'
+      - 'Justfile'
+      - '.machine_readable/**'
+      - '.github/workflows/ocaml-ci.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build + test the OCaml compiler
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install OCaml toolchain
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          # `just` is needed by the RSR guard's phantom-command check. Without
+          # it that half of the guard skips (loudly, but it still does not run)
+          # — which is how the QUICKSTARTs accumulated a dozen commands that
+          # were never recipes.
+          sudo apt-get install -y --no-install-recommends ocaml ocaml-dune menhir just
+          ocaml -version
+          dune --version
+          menhir --version
+          just --version
+
+      - name: Build
+        working-directory: compiler
+        run: dune build
+
+      - name: Test
+        working-directory: compiler
+        run: |
+          set -euo pipefail
+          # `dune test` exits non-zero if any suite fails. Also fail on any
+          # "FAIL" line: several suites print their own tally and would
+          # otherwise report failures while still exiting 0.
+          dune test --force 2>&1 | tee /tmp/dune-test.log
+          # Match a FAIL *marker* only: "FAIL" followed by ':' or whitespace.
+          # NOT case-insensitive, and NOT bare "FAIL" — several suites print a
+          # "Failed: 0" tally, which a looser pattern flags as a failure. (It
+          # did: this gate's first run went red on a suite reporting zero
+          # failures. A gate that cries wolf is worse than no gate.)
+          if grep -qE '^[[:space:]]*FAIL([:[:space:]])' /tmp/dune-test.log; then
+            echo "::error::A test reported FAIL — see the log above."
+            grep -nE '^[[:space:]]*FAIL([:[:space:]])' /tmp/dune-test.log | head -20
+            exit 1
+          fi
+          # Nonzero tallies, in either shape the suites use.
+          if grep -qE '([1-9][0-9]*) failed|Failed:[[:space:]]*[1-9]' /tmp/dune-test.log; then
+            echo "::error::A suite reported a nonzero failure count."
+            grep -nE '([1-9][0-9]*) failed|Failed:[[:space:]]*[1-9]' /tmp/dune-test.log
+            exit 1
+          fi
+          echo "OCaml compiler: build + all suites GREEN."
+
+      - name: Corpus gate (examples + conformance)
+        run: |
+          set -euo pipefail
+          # Runs the language's OWN programs. Neither examples/ nor conformance/
+          # was executed by anything before this, which is how
+          # examples/isotopy.tangle — the demonstration of the central claim —
+          # sat failing its own assertions until TG-7 (#87) fixed `~`.
+          bash scripts/check-corpus.sh
+
+      - name: RSR instantiation guard
+        run: |
+          set -euo pipefail
+          # methodology.a2ml has always declared a reject-if-contains rule for
+          # template residue, and nothing enforced it — so four contractiles
+          # named the upstream template as their SUBJECT indefinitely. This
+          # makes the repo's own rule real. It also checks the docs only name
+          # `just` recipes that exist: the QUICKSTARTs documented nine that
+          # never did. (Deliberately worded without the literal tokens, so the
+          # guard need not allowlist its own caller.)
+          bash scripts/check-rsr-instantiation.sh
+
+      - name: TG-7 semantics guard
+        working-directory: compiler
+        run: |
+          set -euo pipefail
+          # The TG-7 ruling (#50) is only real if `==` actually decides
+          # braid-group equality. These cases are FALSE under list equality,
+          # so their presence and passing is what distinguishes the two
+          # semantics — guard against a silent revert.
+          missing=0
+          for t in "braid relation s1.s2.s1 == s2.s1.s2" \
+                   "far commutation s1.s3 == s3.s1" \
+                   "non-equivalent braids still compare false"; do
+            grep -qF "$t" test/test_eval.ml || { echo "::error::TG-7 test missing: $t"; missing=1; }
+          done
+          [ "$missing" -eq 0 ] || exit 1
+          echo "TG-7 semantics tests present."

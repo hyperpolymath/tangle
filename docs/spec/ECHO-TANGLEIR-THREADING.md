@@ -1,5 +1,6 @@
 <!--
 SPDX-License-Identifier: MPL-2.0
+SPDX-License-Identifier: CC-BY-SA-4.0
 Owner: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
 # Echo residue threading into TangleIR — cross-repo contract
@@ -30,6 +31,19 @@ The seam with QuandleDB is exact, not incidental:
 same diagram while keeping distinct residues. Threading the residue therefore
 gives QuandleDB **provenance**: which braid produced a given closed diagram,
 disambiguating cases that plain `close` would conflate.
+**A note on what the Lean model proves.** The mechanized `close`/`lower`
+(`proofs/Tangle.lean`) is a *type-level* collapse: every braid reduces to the
+single `Word[0]` value `.identity` (a collapse to one point), **not** to a knot
+diagram. So `echo_distinguishes_collapsed` proves only that distinct braids
+share that identity result while their residues stay distinct — it is **not**
+the knot-theoretic statement "distinct braids close to the same knot diagram."
+That geometric closure is a separate notion, modelled by the compositional PD
+compiler (`compositional.ml`) and `FORMAL-SEMANTICS.md` (`close : Tangle[I,I]`),
+and is **not** mechanized here. What the proofs *do* establish — residue
+recovery (`echo_residue_recovers`) and type-safe round-trip
+(`echo_roundtrip_typed`) — is sufficient to justify threading the residue braid
+to QuandleDB for **provenance** (which braid produced a given closed diagram),
+even though the knot-level conflation itself is an external knot-theory fact.
 
 ## 2. The contract per layer
 
@@ -77,11 +91,28 @@ suffices — the residue path must agree with the diagram path on the quandle,
 and additionally retains `b` for provenance. This mirrors
 `echo_roundtrip_typed` (the residue/result projections are well-typed) and the
 `lower`/`residue` agreement in the Lean model.
+and additionally retains `b` for provenance.
+
+**This quandle invariant is an unproven knot-theoretic obligation** that
+QuandleDB must establish itself: it is *not* mechanized in Lean nor checked in
+OCaml (the word `quandle` appears in neither). The Lean theorem
+`echo_roundtrip_typed` only guarantees that the residue/result projections are
+**well-typed** (`residue : Word[n]`, `lower : Word[0]`); it says nothing about
+quandle equality, and `lower`/`residue` project *different* components (they
+diverge by design — `echo_distinguishes_collapsed` — they do not "agree"). The
+mechanized backing for threading is narrower than quandle agreement: residue
+recovery plus type-safe round-trip.
 
 ## 5. Scope / coordination
 
 - **No TangleIR or QuandleDB code is changed by this document.** Those are
   KRLAdapter.jl/quandledb (Julia) changes, to be made by the quandle session.
+- **An OCaml-side `EchoClosed` node now exists** in tangle's own compositional
+  PD compiler (`compiler/lib/compositional.ml`), reachable via `tanglec
+  --compile-pd`. It mirrors option (a) and emits the residue braid, but it is a
+  *different* IR from the Julia TangleIR this contract specifies — it is the
+  producer-side reference, not the interchange schema. The Julia TangleIR /
+  QuandleDB consumer work remains pending.
 - This contract is additive and conservative: plain `close` is untouched, so
   existing TangleIR producers/consumers keep working; echo-closed nodes are new.
 - Cross-reference: `proofs/Tangle.lean` (`echo_residue_recovers`,

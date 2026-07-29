@@ -3,7 +3,18 @@
 
 def trefoil = braid[s1, s1, s1]
 
+# mirror negates each exponent IN PLACE, preserving order.
 assert mirror(trefoil) == braid[s1^-1, s1^-1, s1^-1]
-assert reverse(braid[s1, s2]) == braid[s2, s1]
+
+# reverse reverses the word AND negates each exponent — it yields the INVERSE
+# braid, so reverse(s1 s2) = s2^-1 s1^-1, not s2 s1.
+#
+# This file previously asserted `== braid[s2, s1]`, which is false:
+# writhe(reverse(braid[s1,s2])) = -2 but writhe(braid[s2,s1]) = +2, and writhe
+# is invariant under the braid relations, so they cannot be the same element.
+# The same wrong assumption about `reverse` was also in examples/trefoil.tangle.
+# Neither was caught because nothing ever RAN these programs — the conformance
+# gate only checked that they parsed.
+assert reverse(braid[s1, s2]) == braid[s2^-1, s1^-1]
 
 compute writhe(close(trefoil))

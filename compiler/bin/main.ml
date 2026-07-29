@@ -49,12 +49,23 @@ let parse_file_recovering (filename : string) : Tangle.Ast.program * parse_diagn
     Lexing.pos_lnum = 1;
   };
   let diagnostics = ref [] in
-  let stmts = ref [] in
+  (* Accumulate SEGMENTS (each a statement list from one parser run), newest
+     first, and flatten in order at the end.
+     The previous code did `stmts := prog @ !stmts` and then `List.rev !stmts`.
+     That reversal is correct for an accumulator built by prepending single
+     items — as `diagnostics` is — but here whole segments are prepended, so
+     reversing the FLATTENED list reversed the statements themselves. On the
+     normal path (one successful parse) every program came out backwards:
+     `def x; def y; def z` parsed to [z; y; x], so any program whose statements
+     depend on order failed at evaluation with "Unbound variable".
+     The test suites never caught it because they call Tangle.Parser.program
+     directly; only the CLI goes through this recovering path. *)
+  let segments = ref [] in
   let at_eof = ref false in
   while not !at_eof do
     (try
        let prog = Tangle.Parser.program Tangle.Lexer.token lexbuf in
-       stmts := prog @ !stmts;
+       segments := prog :: !segments;
        at_eof := true
      with
      | Tangle.Lexer.Lexer_error msg ->
@@ -76,7 +87,8 @@ let parse_file_recovering (filename : string) : Tangle.Ast.program * parse_diagn
        } :: !diagnostics;
        at_eof := synchronize_tangle_lexer lexbuf)
   done;
-  (List.rev !stmts, List.rev !diagnostics)
+  (* Flatten oldest-segment-first, preserving order WITHIN each segment. *)
+  (List.concat (List.rev !segments), List.rev !diagnostics)
 
 (** Parse a TANGLE source file into a program AST. *)
 let parse_file (filename : string) : Tangle.Ast.program =
@@ -175,7 +187,20 @@ let dump_tokens (filename : string) : unit =
      | FST         -> print_string "FST"
      | SND         -> print_string "SND"
      | ECHOADD     -> print_string "ECHOADD"
-     | ECHOEQ      -> print_string "ECHOEQ");
+     | ECHOEQ      -> print_string "ECHOEQ"
+     | WARRANT     -> print_string "WARRANT"
+     | EVIDENCE    -> print_string "EVIDENCE"
+     | ADDBRACE    -> print_string "ADDBRACE"
+     | IF          -> print_string "IF"
+     | THEN        -> print_string "THEN"
+     | ELSE        -> print_string "ELSE"
+     | AMPAMP      -> print_string "AMPAMP"
+     | BARBAR      -> print_string "BARBAR"
+     | BANGEQ      -> print_string "BANGEQ"
+     | LE          -> print_string "LE"
+     | GE          -> print_string "GE"
+     | PERCENT     -> print_string "PERCENT"
+     | BANG        -> print_string "BANG");
     print_newline ();
     if tok <> EOF then loop ()
   in
@@ -183,6 +208,56 @@ let dump_tokens (filename : string) : unit =
   with Tangle.Lexer.Lexer_error msg ->
     Printf.eprintf "Lexer error in %s: %s\n" filename msg;
     exit 1
+
+(** Emit the judgement evidence graph for each definition in a file.
+    Every graph is CHECKED before being printed: an unchecked derivation is a
+    log, not evidence.  See jeg.mli. *)
+let derive_file ?(dot = false) (filename : string) : unit =
+  let prog = parse_file filename in
+  let gamma = ref [] in
+  let failures = ref 0 in
+  List.iter (fun stmt ->
+    match stmt with
+    | Tangle.Ast.Definition d when d.Tangle.Ast.def_params = [] ->
+      begin try
+        let dv = Tangle.Jeg.derive !gamma d.Tangle.Ast.def_body in
+        (* Re-validate independently before showing it. *)
+        begin match Tangle.Jeg.check dv with
+        | Ok () -> ()
+        | Error es ->
+          incr failures;
+          List.iter (fun (e : Tangle.Jeg.check_error) ->
+            Printf.eprintf "JEG CHECK FAILED [%s]: %s\n" e.Tangle.Jeg.ce_rule e.Tangle.Jeg.ce_reason) es
+        end;
+        if dot then print_string (Tangle.Jeg.to_dot dv)
+        else begin
+          (* Report coverage, not just size. A graph that checks is worth less
+             if some of its nodes were accepted without being re-derived, and
+             the reader cannot tell the difference from the tree alone. *)
+          let unchecked = Tangle.Jeg.unchecked dv in
+          let coverage =
+            match unchecked with
+            | [] -> "every node re-derived"
+            | us ->
+              Printf.sprintf "%d node(s) NOT re-derived: %s"
+                (List.length us)
+                (String.concat ", "
+                   (List.sort_uniq compare (List.map fst us)))
+          in
+          Printf.printf "== %s ==  (%d nodes, depth %d, %s)\n"
+            d.Tangle.Ast.def_name (Tangle.Jeg.size dv) (Tangle.Jeg.depth dv)
+            coverage;
+          print_string (Tangle.Jeg.to_string dv);
+          print_newline ()
+        end;
+        let ty = Tangle.Typecheck.infer_expr !gamma [] d.Tangle.Ast.def_body in
+        gamma := Tangle.Typecheck.env_bind_val !gamma d.Tangle.Ast.def_name ty
+      with Tangle.Typecheck.Type_error msg ->
+        Printf.eprintf "Type error in '%s': %s\n" d.Tangle.Ast.def_name msg
+      end
+    | _ -> ()
+  ) prog;
+  if !failures > 0 then exit 1
 
 (** Type-check and evaluate a TANGLE source file, printing results. *)
 let eval_file (filename : string) : unit =
@@ -206,6 +281,56 @@ let eval_file (filename : string) : unit =
     exit 1
   end
 
+(** Compile a TANGLE source file's compositional definitions to planar-diagram
+    payloads (the Skein / TangleIR ingestion path).  Each `def name = <expr>`
+    whose body is a closed or echo-closed compositional expression is lowered to
+    its canonical PDv1 blob; `echoClose` definitions additionally emit the
+    retained residue braid (the pre-closure word threaded for QuandleDB
+    provenance — see docs/spec/ECHO-TANGLEIR-THREADING.md). *)
+let compile_pd_file (filename : string) : unit =
+  let prog = parse_file filename in
+  List.iter (fun stmt ->
+    match stmt with
+    | Tangle.Ast.Definition d ->
+      begin match Tangle.Compositional.of_ast_expr d.Tangle.Ast.def_body with
+      | Error _ ->
+        Printf.printf "%s: (outside compositional subset — skipped)\n" d.Tangle.Ast.def_name
+      | Ok cexpr ->
+        begin match Tangle.Compositional.compile cexpr with
+        | Ok (Tangle.Compositional.ClosedDiagram pd) ->
+          let p = Tangle.Compositional.skein_payload_of_pd ~name:d.Tangle.Ast.def_name pd in
+          Printf.printf "%s: %s (crossings=%d)\n"
+            d.Tangle.Ast.def_name p.Tangle.Compositional.pd_blob p.Tangle.Compositional.crossing_number
+        | Ok (Tangle.Compositional.EchoClosed { residue; diagram }) ->
+          let p =
+            Tangle.Compositional.echo_payload_of_residue_and_pd
+              ~name:d.Tangle.Ast.def_name residue diagram
+          in
+          Printf.printf "%s: %s (crossings=%d) residue=%s\n"
+            d.Tangle.Ast.def_name p.Tangle.Compositional.pd_blob
+            p.Tangle.Compositional.crossing_number p.Tangle.Compositional.residue_blob
+        | Ok (Tangle.Compositional.OpenWord _) ->
+          Printf.printf "%s: (open word — not closed; no planar diagram)\n" d.Tangle.Ast.def_name
+        | Error msg ->
+          Printf.eprintf "%s: compile error: %s\n" d.Tangle.Ast.def_name msg
+        end
+      end
+    | _ -> ()
+  ) prog
+
+(** Emit the combined parse + type-check diagnostics for a file, one per line in
+    the machine-readable form the LSP consumes ("SEVERITY<TAB>LINE<TAB>COL<TAB>MESSAGE").
+    Exit 1 if any error diagnostic is present, 0 otherwise.  This is the single
+    diagnostic source the LSP delegates to (TG-9). *)
+let check_file (filename : string) : unit =
+  let ic = open_in filename in
+  let n = in_channel_length ic in
+  let source = really_input_string ic n in
+  close_in ic;
+  let diags = Tangle.Check.check_source source in
+  List.iter (fun d -> print_string (Tangle.Check.format_diag d); print_newline ()) diags;
+  if Tangle.Check.has_error diags then exit 1
+
 (** Print usage information. *)
 let usage () =
   Printf.eprintf "Usage: tanglec [OPTIONS] [file.tangle]\n";
@@ -213,6 +338,10 @@ let usage () =
   Printf.eprintf "Options:\n";
   Printf.eprintf "  --dump-tokens <file>   Dump lexer tokens\n";
   Printf.eprintf "  --eval <file>          Evaluate a program\n";
+  Printf.eprintf "  --check <file>         Emit parse + type diagnostics (LSP backend)\n";
+  Printf.eprintf "  --compile-pd <file>    Compile compositional defs to PD/Skein payloads\n";
+  Printf.eprintf "  --derive <file>        Emit the judgement evidence graph (proof tree)\n";
+  Printf.eprintf "  --derive-dot <file>    Emit the judgement evidence graph as Graphviz DOT\n";
   Printf.eprintf "  --repl                 Start interactive REPL\n";
   Printf.eprintf "  <file>                 Parse and pretty-print AST\n";
   exit 1
@@ -223,6 +352,14 @@ let () =
     dump_tokens filename
   | [_; "--eval"; filename] ->
     eval_file filename
+  | [_; "--check"; filename] ->
+    check_file filename
+  | [_; "--compile-pd"; filename] ->
+    compile_pd_file filename
+  | [_; "--derive"; filename] ->
+    derive_file filename
+  | [_; "--derive-dot"; filename] ->
+    derive_file ~dot:true filename
   | [_; "--repl"] ->
     Tangle.Repl.run ()
   | [_; filename] ->

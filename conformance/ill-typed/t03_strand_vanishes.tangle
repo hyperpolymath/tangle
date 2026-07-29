@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: MPL-2.0
+# Conformance (ILL-TYPED): weakening — a strand is dropped from the yield.
+#
+# This is the case that makes the discipline LINEAR rather than AFFINE.
+# Affine would permit discarding; braids conserve strand count, so it cannot.
+
+def vanishing =
+  weave strands a:Q, b:Q into
+    (a > b)
+  yield strands a:Q

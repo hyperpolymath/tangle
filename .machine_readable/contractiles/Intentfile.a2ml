@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
-# Intentfile (A2ML Canonical) — north-star contractile for rsr-template-repo
+# Intentfile (A2ML Canonical) — north-star contractile for tangle
 # Author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 #
 # Paired runner: intend.ncl
@@ -20,28 +20,40 @@
 #            contractile for hard gates.
 
 @abstract:
-North-star contractile for rsr-template-repo. This repository is the
-canonical template for Rhodium Standard Repository compliance. It provides
-the scaffold that all hyperpolymath repos should copy and customize.
+North-star contractile for tangle — a research language in which programs
+are structured as tangles (braids) and program equivalence is isotopy, not
+syntactic equality. Ships an OCaml compiler, mechanised Lean 4 metatheory
+(Progress / Preservation / Determinism / Type Safety), a Rust LSP and WASM
+backend, and a conformance corpus.
 @end
 
 ## Purpose
 
-The rsr-template-repo serves as the master template for all hyperpolymath
-repositories. It contains the complete set of contractile files, machine-readable
-specifications, and governance documentation that define the Rhodium Standard.
+tangle exists to make one claim precise and then hold itself to it:
+computation is the construction of structured objects, and meaning is
+preserved under valid transformation. Concretely that means equivalence is
+decided by braid-group equality (TG-7, #50) rather than by comparing
+representations, and that the core metatheory is machine-checked rather than
+asserted.
 
-Every new repository in the hyperpolymath estate should be initialized by
-copying this template and substituting the placeholder values with
-repo-specific content.
+The proof ladder (TG-0..TG-10, see PROOF-NEEDS.md) is the spine: each rung is
+either LANDED with a named artefact in proofs/Tangle.lean, or explicitly
+recorded as research-grade. Claims that are trusted rather than proven are
+registered in ASSUMPTIONS.md — currently A-TG-7.2, the correctness of the
+Dehornoy decision procedure that `==` now depends on.
 
 ## Anti-Purpose
 
 This repository is NOT:
-- A general-purpose project scaffold for external use (hyperpolymath-only)
-- A replacement for per-repo customization (all files must be bespoke)
-- A static template that never changes (evolves with RSR spec)
-- A runtime library or framework (build-time only)
+- A backend for KRL. KRL is QuandleDB's resolution language; it neither
+  compiles to nor depends on tangle, and the `TangleIR` layer that was
+  supposed to connect them exists in no source file in either repo. See the
+  erratum in AFFIRMATION.adoc and the de-conflation in #78.
+- A knot database. That is QuandleDB.
+- A production language. It is a research vehicle; the readiness grade is
+  tracked honestly in READINESS.md.
+- A proof of its own decision procedures. The metatheory is proven RELATIVE
+  to `braidEquiv`; see ASSUMPTIONS.md A-TG-7.2.
 
 ## If In Doubt
 

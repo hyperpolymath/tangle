@@ -4,7 +4,7 @@
 # tangle.directives.a2ml — directives for the bot fleet on hyperpolymath/tangle
 [metadata]
 version = "1.0.0"
-last-updated = "2026-06-05"
+last-updated = "2026-06-14"
 applies-to = ["hypatia", "gitbot-fleet", "git-private-farm"]
 
 [development]

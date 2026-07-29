@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
-# Adjustfile — Drift-tolerance contract for rsr-template-repo
+# Adjustfile — Drift-tolerance contract for tangle
 # Author: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 #
 # Cumulative-drift catchment: tolerance bands + corrective actions.
@@ -8,7 +8,7 @@
 # Fix with: adjust fix (applies deterministic patches; advisory otherwise)
 
 @abstract:
-Drift tolerances and corrective actions for rsr-template-repo. Unlike
+Drift tolerances and corrective actions for tangle. Unlike
 MUST (hard gate), ADJUST tracks cumulative drift against tolerance bands
 and proposes corrective actions. Advisory — it warns and trends, it does
 not block.

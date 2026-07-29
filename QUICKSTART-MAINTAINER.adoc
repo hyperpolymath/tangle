@@ -1,7 +1,6 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 // Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 // Template: QUICKSTART-MAINTAINER.adoc — packaging, deploying, and maintaining
-// Replace tangle, {{PACKAGE_NAME}}, {{DEPS}} with actuals
 = tangle — Quick Start for Platform Maintainers
 :toc:
 :toclevels: 2
@@ -13,18 +12,50 @@ distribution on your platform.
 
 == Runtime Dependencies
 
-{{DEPS}}
+The built compiler is a single self-contained OCaml native executable; at
+*runtime* it needs nothing beyond libc.
+
+*Build-time* dependencies: OCaml (>= 4.14; 5.3 tested), dune (>= 3.x), and
+menhir (parser generator for `compiler/lib/parser.mly`).
+
+On Debian/Ubuntu:
+
+[source,bash]
+----
+apt-get install -y ocaml ocaml-dune menhir
+----
+
+Optional, per component: *Lean 4* pinned `leanprover/lean4:v4.14.0` for
+re-checking `proofs/` (NOT required to build or run the compiler); a *Rust*
+toolchain for `compiler/tangle-lsp` and `compiler/tangle-wasm`; *Zig* for the
+`ffi/` bridge.
 
 == Build from Source
 
 [source,bash]
 ----
 git clone https://github.com/hyperpolymath/tangle.git
-cd tangle
-just build-release
+cd tangle/compiler
+dune build --profile release
 ----
 
-Output: `{{BUILD_OUTPUT_PATH}}`
+Output: `compiler/_build/default/bin/main.exe`
+
+NOTE: there is no `just build-release` recipe — `just --list` is
+authoritative. The binary is named `main.exe` (see `compiler/bin/dune`); the
+conformance runner assumed a `tangle` binary for a long time and silently
+failed because of it.
+
+The CLI:
+
+[source,bash]
+----
+main.exe <file>              # parse + pretty-print
+main.exe --eval <file>       # evaluate
+main.exe --check <file>      # parse + type diagnostics (LSP backend)
+main.exe --compile-pd <file> # compile compositional defs to PD/Skein payloads
+main.exe --repl              # interactive REPL
+----
 
 == Packaging
 
@@ -46,7 +77,8 @@ nix build
 
 [source,bash]
 ----
-just stapeln-export    # Generates Containerfile
+# NOTE: `just stapeln-export` does not exist. Write the Containerfile by
+# hand, or add the recipe first. `just --list` is authoritative.
 podman build -t tangle .
 ----
 
@@ -54,7 +86,8 @@ podman build -t tangle .
 
 [source,bash]
 ----
-just install --prefix=/usr/local
+# No `just install` recipe — install by copying the built binary:
+install -Dm755 compiler/_build/default/bin/main.exe /usr/local/bin/tanglec
 ----
 
 Files installed:
@@ -63,35 +96,32 @@ Files installed:
 |===
 | Path | Contents
 
-| `$PREFIX/bin/`
-| Executables
+| `$PREFIX/bin/tanglec`
+| The compiler binary — this is the whole install
 
-| `$PREFIX/share/{{PACKAGE_NAME}}/`
-| Data files, assets
-
-| `$PREFIX/share/doc/{{PACKAGE_NAME}}/`
-| Documentation
-
-| `$PREFIX/share/applications/`
-| .desktop file (Linux, if GUI)
-
-| `$PREFIX/share/man/man1/`
-| Man pages
+| `$PREFIX/share/doc/tangle/`
+| Documentation, if you choose to ship it
 |===
 
 == Configuration
 
-Default config location: `$XDG_CONFIG_HOME/{{PACKAGE_NAME}}/config.toml`
+None. `tanglec` reads no configuration file — verified: nothing under
+`compiler/lib/` or `compiler/bin/` references `config.toml` or
+`XDG_CONFIG_HOME`. Behaviour is determined entirely by the CLI flag and the
+input file.
 
-Fallback: `$HOME/.config/{{PACKAGE_NAME}}/config.toml`
+(The template asserted an `$XDG_CONFIG_HOME/tangle/config.toml`. It does not
+exist and never has.)
 
 == Health Checks
 
 [source,bash]
 ----
-just doctor            # Full diagnostic
-just run --version   # Version check
-just run --selftest  # Built-in self-test
+just doctor                    # full diagnostic
+just check-all                 # build + all suites + corpus gate
+tanglec --repl                 # smoke-test the installed binary
+# NOTE: there is no `just run`, no `--version`, no `--selftest`. The CLI
+# accepts: <file> | --eval | --check | --compile-pd | --repl.
 ----
 
 == Updating
@@ -99,11 +129,11 @@ just run --selftest  # Built-in self-test
 [source,bash]
 ----
 git pull
-just build-release
-just install --prefix=/usr/local
+cd compiler && dune build --profile release
+install -Dm755 _build/default/bin/main.exe /usr/local/bin/tanglec
 ----
 
-Or via OPSM: `opsm update {{PACKAGE_NAME}}`
+Or via OPSM: `opsm update tangle`
 
 == Security Notes
 
@@ -114,15 +144,12 @@ Or via OPSM: `opsm update {{PACKAGE_NAME}}`
 
 == Multi-Instance Deployment
 
-For deploying multiple instances (e.g., different users or tenants):
+Not applicable. `tanglec` is a compiler: a single stateless binary invoked per
+file. There is no daemon, no per-instance state, and nothing to isolate —
+install as many copies at different prefixes as you like, and they cannot
+interfere.
 
-[source,bash]
-----
-just install --prefix=/opt/{{PACKAGE_NAME}}-instance1 --config=/etc/{{PACKAGE_NAME}}/instance1.toml
-just install --prefix=/opt/{{PACKAGE_NAME}}-instance2 --config=/etc/{{PACKAGE_NAME}}/instance2.toml
-----
-
-Each instance has isolated config, data, and logs.
+(The template this file came from assumed a long-running service.)
 
 == Reporting Issues
 

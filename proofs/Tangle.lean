@@ -86,6 +86,26 @@ inductive Ty where
                            --   residue (domain witness x : A), τ is the result
                            --   (codomain point y).  See §ECHO-TYPES below.
   | prod : Ty → Ty → Ty     -- product (pair) type ρ × σ; residue carrier for lossy binary ops
+  | epi  : Nat → Ty → Ty → Ty
+                           -- Epi[κ, ρ, τ]: at STANDPOINT κ, evidence of type ρ
+                           --   purporting to support a claim of type τ.  The
+                           --   simply-typed shadow of epistemic-types'
+                           --   `Epi K κ A` (EpistemicTypes/Warrant.agda), whose
+                           --   record carries `warrant` + `evidence` and — the
+                           --   whole point — NO field of type A.
+                           --
+                           --   κ is a standpoint index: an agent, evidence
+                           --   state, accessibility context or warrant regime.
+                           --   Indexed by Nat, mirroring `word : Nat → Ty`.
+                           --
+                           --   NON-FACTIVE BY CONSTRUCTION: τ appears in the
+                           --   type but there is NO elimination rule producing
+                           --   τ.  Holding `Epi[κ,ρ,τ]` does not give you τ —
+                           --   that is the difference between knowing and
+                           --   having a warrant.  Upstream models the factive
+                           --   case as a SEPARATE record (`FactiveModality`
+                           --   with `reflect`), never as a modality with a
+                           --   missing proof; this mirrors that choice.
   deriving DecidableEq, Repr
 
 /-- Core expression AST. Mirrors the OCaml AST in compiler/lib/ast.ml.
@@ -117,6 +137,13 @@ inductive Expr where
   | pair    : Expr → Expr → Expr            -- product introduction
   | fst     : Expr → Expr                   -- first projection
   | snd     : Expr → Expr                   -- second projection
+  -- Epistemic (warranted claim).  `warrant κ c ev` is the redex; it reduces to
+  -- the formed value `epiVal κ c ev`.  The claim `c` is RETAINED in the value
+  -- (so typing stays unique) but is unreachable: `evidence` is the only
+  -- elimination, and it yields the token, never the claim.
+  | warrant  : Nat → Expr → Expr → Expr     -- warrant κ claim evidence (redex)
+  | epiVal   : Nat → Expr → Expr → Expr     -- formed warrant: standpoint, claim, token
+  | evidence : Expr → Expr                  -- project the evidence token (ONLY elimination)
   | echoAdd : Expr → Expr → Expr            -- echo-preserving addition (residue = pair of summands)
   | echoEq : Expr → Expr → Expr          -- echo-preserving equality (residue = operand pair)
   deriving DecidableEq, Repr
@@ -130,6 +157,7 @@ inductive IsValue : Expr → Prop where
   | braidLit : ∀ gs, IsValue (.braidLit gs)
   | echoVal : ∀ {r v}, IsValue r → IsValue v → IsValue (.echoVal r v)  -- a formed echo value (residue r, result v)
   | pair : ∀ {a b}, IsValue a → IsValue b → IsValue (.pair a b)
+  | epiVal : ∀ {κ c ev}, IsValue c → IsValue ev → IsValue (.epiVal κ c ev)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- WIDTH
@@ -144,6 +172,135 @@ def generatorWidth (gs : List Generator) : Nat :=
     shift(σᵢ, k) = σ_{i+k} per §4.6. -/
 def shiftGenerators (gs : List Generator) (n : Nat) : List Generator :=
   gs.map fun g => { g with idx := g.idx + n }
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- BRAID-GROUP EQUIVALENCE  (TG-7)
+-- ═══════════════════════════════════════════════════════════════════════
+--
+-- Owner ruling 2026-07-29 (tangle#50): `==` on braids decides braid-GROUP
+-- equivalence, NOT list equality.  Syntactic equality contradicts the
+-- language's own thesis — programs are topological objects and equivalence is
+-- isotopy — so `==` must not be the one place that quietly reverts to
+-- comparing representations.
+--
+-- This is a faithful port of `compiler/lib/braid_equiv.ml` (Dehornoy 1997,
+-- "A fast method for comparing braids").  A σᵢ-handle is a factor
+--     σᵢ^e · w₀ · σ_{i+1}^d · w₁ · ⋯ · σ_{i+1}^d · w_m · σᵢ^{-e}
+-- whose interior uses only σⱼ with j ≥ i+2 apart from same-sign σ_{i+1}.  It
+-- reduces to
+--     w₀ · (σ_{i+1}^{-e} σᵢ^d σ_{i+1}^e) · w₁ · ⋯ · w_m
+-- and a handle-free, freely-reduced word is empty iff the braid is trivial, so
+--     equiv u v  ⇔  reduce (u · v⁻¹) = ε.
+--
+-- ── TRUSTED, NOT PROVEN ────────────────────────────────────────────────
+-- These are DEFINITIONS, not axioms — nothing here is postulated, and the
+-- metatheory below (Progress / Preservation / Determinism) goes through for
+-- `braidEquiv` exactly as it did for list equality, because all three need
+-- only that it is a TOTAL FUNCTION into `Bool`.  Determinism in particular is
+-- unaffected: a function applied to fixed arguments yields a fixed result.
+--
+-- What is NOT established here is that `braidEquiv` DECIDES braid-group
+-- equality.  That is the mechanised Garside/Dehornoy correctness proof, which
+-- is research-grade and explicitly out of scope (tangle#51).  Until it exists,
+-- `braidEquiv` is trusted code that the `Step` relation is proven *relative
+-- to*.  The sorry/axiom gate passing does NOT mean this claim is proven; see
+-- PROOF-NARRATIVE.md §TG-7.
+--
+-- Termination is by an explicit FUEL parameter rather than a well-founded
+-- measure, mirroring the OCaml `max_steps` safety bound.  Dehornoy reduction
+-- does terminate, but proving that is precisely the research-grade obligation
+-- above; fuel keeps these definitions total and computable without smuggling
+-- in an unproven termination claim.
+
+/-- A braid word as unit letters: index ≥ 1 and sign ±1.
+    Mirrors `type letter` in braid_equiv.ml. -/
+structure Letter where
+  idx : Nat
+  sgn : Int
+  deriving DecidableEq, Repr
+
+/-- Expand generators with arbitrary nonzero exponents into unit letters. -/
+def unitsOf (gs : List Generator) : List Letter :=
+  gs.flatMap fun g =>
+    List.replicate g.exp.natAbs { idx := g.idx, sgn := if g.exp ≥ 0 then 1 else -1 }
+
+/-- Inverse braid word: reverse order, negate every sign.  (ab)⁻¹ = b⁻¹a⁻¹. -/
+def inverseWord (w : List Letter) : List Letter :=
+  (w.map fun l => { l with sgn := -l.sgn }).reverse
+
+/-- Free reduction: cancel adjacent σ·σ⁻¹. -/
+def freeReduce (w : List Letter) : List Letter :=
+  w.foldr (fun x acc =>
+    match acc with
+    | y :: rest => if x.idx = y.idx && x.sgn = -y.sgn then rest else x :: acc
+    | []        => [x]) []
+
+/-- Does the letter at the head open a handle over `rest`?  Returns the
+    interior and the tail after the closing letter, or `none`.
+    Mirrors `handle_at` / the `scan` loop in braid_equiv.ml. -/
+def scanHandle (i : Nat) (e : Int) :
+    List Letter → Option Int → List Letter → Option (List Letter × List Letter)
+  | [],       _,     _   => none                       -- no close → not a handle
+  | l :: ls,  dOpt,  acc =>
+    if l.idx = i then
+      if l.sgn = -e then some (acc.reverse, ls)        -- closes the handle
+      else none                                         -- same-sign σᵢ → blocked
+    else if l.idx < i then none                        -- σ_{<i} inside → blocked
+    else if l.idx = i + 1 then
+      match dOpt with
+      | none   => scanHandle i e ls (some l.sgn) (l :: acc)
+      | some d => if d = l.sgn then scanHandle i e ls dOpt (l :: acc)
+                  else none                             -- mixed σ_{i+1} signs
+    else scanHandle i e ls dOpt (l :: acc)             -- j ≥ i+2 → interior, ok
+
+/-- Rewrite a handle's interior: σ_{i+1}^d ↦ σ_{i+1}^{-e} σᵢ^d σ_{i+1}^e. -/
+def rewriteInterior (i : Nat) (e : Int) (interior : List Letter) : List Letter :=
+  interior.flatMap fun l =>
+    if l.idx = i + 1 then
+      [ { idx := i + 1, sgn := -e }, { idx := i, sgn := l.sgn }, { idx := i + 1, sgn := e } ]
+    else [l]
+
+/-- Reduce the leftmost handle; `none` if the word is handle-free. -/
+def reduceOne : List Letter → Option (List Letter)
+  | []      => none
+  | l :: ls =>
+    match scanHandle l.idx l.sgn ls none [] with
+    | some (interior, tail) => some (rewriteInterior l.idx l.sgn interior ++ tail)
+    | none =>
+      match reduceOne ls with
+      | some ls' => some (l :: ls')
+      | none     => none
+
+/-- Default fuel; mirrors `default_max_steps` in braid_equiv.ml. -/
+def defaultFuel : Nat := 1000000
+
+/-- Reduce to a handle-free, freely-reduced word (fuel-bounded). -/
+def reduceFuel : Nat → List Letter → List Letter
+  | 0,        w => w                                    -- safety net
+  | fuel + 1, w =>
+    match reduceOne w with
+    | none    => w
+    | some w' => reduceFuel fuel (freeReduce w')
+
+/-- Reduce with the default fuel. -/
+def reduceWord (w : List Letter) : List Letter :=
+  reduceFuel defaultFuel (freeReduce w)
+
+/-- A unit word is trivial iff it reduces to the empty word. -/
+def isTrivialWord (w : List Letter) : Bool := reduceWord w == []
+
+/-- A generator list denotes the trivial (identity) braid. -/
+def isTrivialBraid (gs : List Generator) : Bool := isTrivialWord (unitsOf gs)
+
+/-- **Braid-group equivalence**: `u ≡ v` iff `u · v⁻¹` is trivial.
+    This is what `==` on braids means (tangle#50). -/
+def braidEquiv (u v : List Generator) : Bool :=
+  isTrivialWord (unitsOf u ++ inverseWord (unitsOf v))
+
+/-- Writhe (exponent sum): invariant under the braid relations.  A necessary
+    condition for equivalence, exposed for testing. -/
+def writhe (gs : List Generator) : Int :=
+  gs.foldl (fun a g => a + g.exp) 0
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- DE BRUIJN SUBSTITUTION MACHINERY
@@ -176,6 +333,9 @@ def shift (d : Nat) (c : Nat) : Expr → Expr
   | .residue a   => .residue (shift d c a)
   | .echoVal a b => .echoVal (shift d c a) (shift d c b)
   | .pair a b    => .pair (shift d c a) (shift d c b)
+  | .warrant κ cl ev  => .warrant κ (shift d c cl) (shift d c ev)
+  | .epiVal κ cl ev   => .epiVal κ (shift d c cl) (shift d c ev)
+  | .evidence e       => .evidence (shift d c e)
   | .fst a       => .fst (shift d c a)
   | .snd a       => .snd (shift d c a)
   | .echoAdd a b => .echoAdd (shift d c a) (shift d c b)
@@ -202,6 +362,9 @@ def subst (j : Nat) (s : Expr) : Expr → Expr
   | .residue a   => .residue (subst j s a)
   | .echoVal a b => .echoVal (subst j s a) (subst j s b)
   | .pair a b    => .pair (subst j s a) (subst j s b)
+  | .warrant κ cl ev  => .warrant κ (subst j s cl) (subst j s ev)
+  | .epiVal κ cl ev   => .epiVal κ (subst j s cl) (subst j s ev)
+  | .evidence e       => .evidence (subst j s e)
   | .fst a       => .fst (subst j s a)
   | .snd a       => .snd (subst j s a)
   | .echoAdd a b => .echoAdd (subst j s a) (subst j s b)
@@ -245,9 +408,26 @@ inductive HasType : Ctx → Expr → Ty → Prop where
       HasType Γ e₁ .num →
       HasType Γ e₂ .num →
       HasType Γ (.add e₁ e₂) .num
-  | tEqWord (Γ : Ctx) (e₁ e₂ : Expr) (n : Nat) :            -- [T-Eq-Word]
+  -- [T-Eq-Word].  The two operands need NOT have the same width (#92).
+  --
+  -- Braid groups embed: Bₙ ↪ Bₙ₊₁ by adding a strand nothing touches.  A word
+  -- on n strands IS a word on max(n,m) strands, so the comparison is asked in
+  -- the larger group — which is exactly what `braidEquiv` already computes: it
+  -- takes two generator lists and has no width parameter at all.
+  --
+  -- Requiring n = n was inconsistent with the rest of the language:
+  --   * `tComposeWord` (below) already WIDENS to max n m, so a program could
+  --     compose two braids it was then forbidden to compare;
+  --   * `~` (isotopy) accepted differing widths in OCaml and, since TG-7,
+  --     evaluates through the SAME `braidEquiv` — identical operands and
+  --     identical answer, one rejected by the typechecker and one not;
+  --   * `eqIdBraid`/`eqBraidId` below decide "is this braid trivial?" against
+  --     `identity : word 0`, which under the old rule could only ever type
+  --     when the braid was empty.  The step relation had rules for a question
+  --     the typing rule forbade asking.
+  | tEqWord (Γ : Ctx) (e₁ e₂ : Expr) (n m : Nat) :          -- [T-Eq-Word]
       HasType Γ e₁ (.word n) →
-      HasType Γ e₂ (.word n) →
+      HasType Γ e₂ (.word m) →
       HasType Γ (.eq e₁ e₂) .bool
   | tEqNum (Γ : Ctx) (e₁ e₂ : Expr) :                       -- [T-Eq-Num]
       HasType Γ e₁ .num →
@@ -257,6 +437,22 @@ inductive HasType : Ctx → Expr → Ty → Prop where
       HasType Γ e₁ .str →
       HasType Γ e₂ .str →
       HasType Γ (.eq e₁ e₂) .bool
+  -- ── Epistemic (warranted claim) ─────────────────────────────────────
+  -- Note what is ABSENT: there is no rule with conclusion `HasType Γ _ τ`
+  -- from a premise `HasType Γ e (.epi κ ρ τ)`.  A warrant does not discharge
+  -- its claim.  Upstream states the same thing by giving `Warrant` only an
+  -- `Evidence` field and putting extraction in a separate `SoundWarrant`.
+  | tWarrant (Γ : Ctx) (κ : Nat) (c ev : Expr) (ρ τ : Ty) :  -- [T-Warrant]
+      HasType Γ c τ →                                        --   what is claimed
+      HasType Γ ev ρ →                                       --   the evidence token
+      HasType Γ (.warrant κ c ev) (.epi κ ρ τ)
+  | tEpiVal (Γ : Ctx) (κ : Nat) (c ev : Expr) (ρ τ : Ty) :   -- [T-Epi-Val]
+      HasType Γ c τ →
+      HasType Γ ev ρ →
+      HasType Γ (.epiVal κ c ev) (.epi κ ρ τ)
+  | tEvidence (Γ : Ctx) (e : Expr) (κ : Nat) (ρ τ : Ty) :    -- [T-Evidence]
+      HasType Γ e (.epi κ ρ τ) →
+      HasType Γ (.evidence e) ρ                              --   ρ, NEVER τ
   | tEchoClose (Γ : Ctx) (e : Expr) (n : Nat) :             -- [T-Echo-Close]
       HasType Γ e (.word n) →                               --   echo-intro for `close`:
       HasType Γ (.echoClose e) (.echo (.word n) (.word 0))  --   residue Word[n], result Word[0]
@@ -333,10 +529,20 @@ inductive Step : Expr → Expr → Prop where
   | eqRight      : IsValue e₁ → Step e₂ e₂' → Step (.eq e₁ e₂) (.eq e₁ e₂')
   | eqNums       : Step (.eq (.num n₁) (.num n₂)) (.boolLit (n₁ == n₂))
   | eqStrs       : Step (.eq (.str s₁) (.str s₂)) (.boolLit (s₁ == s₂))
-  | eqBraids     : Step (.eq (.braidLit gs₁) (.braidLit gs₂)) (.boolLit (gs₁ == gs₂))
+  | eqBraids     : Step (.eq (.braidLit gs₁) (.braidLit gs₂)) (.boolLit (braidEquiv gs₁ gs₂))
   | eqIdId       : Step (.eq .identity .identity) (.boolLit true)
-  | eqIdBraid    : Step (.eq .identity (.braidLit gs)) (.boolLit (gs == []))
-  | eqBraidId    : Step (.eq (.braidLit gs) .identity) (.boolLit (gs == []))
+  | eqIdBraid    : Step (.eq .identity (.braidLit gs)) (.boolLit (isTrivialBraid gs))
+  | eqBraidId    : Step (.eq (.braidLit gs) .identity) (.boolLit (isTrivialBraid gs))
+  -- Epistemic: `warrant` is a redex reducing into a formed `epiVal`; `evidence`
+  -- is the sole projection off it, and yields the TOKEN.  There is deliberately
+  -- no projection yielding the claim.
+  | warrantClaim : Step c c' → Step (.warrant κ c ev) (.warrant κ c' ev)
+  | warrantEv    : IsValue c → Step ev ev' → Step (.warrant κ c ev) (.warrant κ c ev')
+  | warrantForm  : IsValue c → IsValue ev → Step (.warrant κ c ev) (.epiVal κ c ev)
+  | epiValClaim  : Step c c' → Step (.epiVal κ c ev) (.epiVal κ c' ev)
+  | epiValEv     : IsValue c → Step ev ev' → Step (.epiVal κ c ev) (.epiVal κ c ev')
+  | evidenceStep : Step e e' → Step (.evidence e) (.evidence e')
+  | evidenceVal  : IsValue c → IsValue ev → Step (.evidence (.epiVal κ c ev)) ev
   -- Echo (structured loss): `echoClose` is a redex that reduces into a formed
   -- echo value `echoVal residue result`; `lower`/`residue` are the two generic
   -- projections off a formed echo value.  `lower` yields the result component
@@ -373,13 +579,13 @@ inductive Step : Expr → Expr → Prop where
   | echoEqStrs    : Step (.echoEq (.str s₁) (.str s₂))
                         (.echoVal (.pair (.str s₁) (.str s₂)) (.boolLit (s₁ == s₂)))
   | echoEqBraids  : Step (.echoEq (.braidLit gs₁) (.braidLit gs₂))
-                        (.echoVal (.pair (.braidLit gs₁) (.braidLit gs₂)) (.boolLit (gs₁ == gs₂)))
+                        (.echoVal (.pair (.braidLit gs₁) (.braidLit gs₂)) (.boolLit (braidEquiv gs₁ gs₂)))
   | echoEqIdId    : Step (.echoEq .identity .identity)
                         (.echoVal (.pair .identity .identity) (.boolLit true))
   | echoEqIdBraid : Step (.echoEq .identity (.braidLit gs))
-                        (.echoVal (.pair .identity (.braidLit gs)) (.boolLit (gs == [])))
+                        (.echoVal (.pair .identity (.braidLit gs)) (.boolLit (isTrivialBraid gs)))
   | echoEqBraidId : Step (.echoEq (.braidLit gs) .identity)
-                        (.echoVal (.pair (.braidLit gs) .identity) (.boolLit (gs == [])))
+                        (.echoVal (.pair (.braidLit gs) .identity) (.boolLit (isTrivialBraid gs)))
   -- Let-binding: congruence on the bound expression, then β-reduction once it
   -- is a value (the bound value is substituted into the body's variable 0).
   | letStep : Step e₁ e₁' → Step (.lett e₁ e₂) (.lett e₁' e₂)
@@ -399,6 +605,9 @@ theorem value_no_step {e e' : Expr} (hv : IsValue e) (hs : Step e e') : False :=
   | pair _ _ iha ihb => cases hs with
     | pairLeft h => exact iha h
     | pairRight _ h => exact ihb h
+  | epiVal _ _ ihc ihe => cases hs with
+    | epiValClaim h => exact ihc h
+    | epiValEv _ h => exact ihe h
   | _ => cases hs
 
 /-- Canonical forms for Num. -/
@@ -421,6 +630,7 @@ theorem canonical_word : IsValue e → HasType [] e (.word n) →
   | braidLit gs => right; cases ht with | tBraid => exact ⟨gs, rfl, rfl⟩
   | echoVal _ _ => cases ht
   | pair _ _ => cases ht
+  | epiVal _ _ => cases ht
 
 /-- Canonical forms for Echo[ρ, τ]: a value of echo type is a formed echo value
     `echoVal r v` whose residue `r` and result `v` are themselves values.  This
@@ -436,6 +646,25 @@ theorem canonical_echo : IsValue e → HasType [] e (.echo ρ τ) →
   | braidLit => cases ht
   | echoVal hr hv => exact ⟨_, _, rfl, hr, hv⟩
   | pair _ _ => cases ht
+  | epiVal _ _ => cases ht
+
+/-- Canonical forms for Epi[κ, ρ, τ]: a value of epistemic type is a formed
+    warrant `epiVal κ c ev` whose claim and token are themselves values.  This is
+    the canonical form that lets `evidence` make progress.  Note it yields the
+    TOKEN's value-hood, not the claim's truth — the claim rides along in the
+    value but no rule projects it out. -/
+theorem canonical_epi : IsValue e → HasType [] e (.epi κ ρ τ) →
+    ∃ c ev, e = .epiVal κ c ev ∧ IsValue c ∧ IsValue ev := by
+  intro hv ht
+  cases hv with
+  | num => cases ht
+  | str => cases ht
+  | boolLit => cases ht
+  | identity => cases ht
+  | braidLit => cases ht
+  | echoVal _ _ => cases ht
+  | pair _ _ => cases ht
+  | epiVal hc he => cases ht; exact ⟨_, _, rfl, hc, he⟩
 
 /-- Canonical forms for products: a value of product type is a `pair a b` whose
     components `a` and `b` are themselves values.  This is the canonical form
@@ -451,6 +680,7 @@ theorem canonical_prod : IsValue e → HasType [] e (.prod α β) →
   | braidLit => cases ht
   | echoVal _ _ => cases ht
   | pair ha hb => exact ⟨_, _, rfl, ha, hb⟩
+  | epiVal _ _ => cases ht
 
 -- Width distribution lemmas
 private theorem foldl_max_init (gs : List Generator) (a : Nat) :
@@ -558,7 +788,7 @@ theorem weakening {Γ₁ Γ₂ : Ctx} {e : Expr} {τ σ : Ty} :
     cases h; rename_i h₁ h₂; simp only [shift]; exact .tAddNum _ _ _ (iha h₁) (ihb h₂)
   | eq a b iha ihb =>
     cases h <;> simp only [shift]
-    · rename_i n h₁ h₂; exact .tEqWord _ _ _ n (iha h₁) (ihb h₂)
+    · rename_i n m h₁ h₂; exact .tEqWord _ _ _ n m (iha h₁) (ihb h₂)
     · rename_i h₁ h₂; exact .tEqNum _ _ _ (iha h₁) (ihb h₂)
     · rename_i h₁ h₂; exact .tEqStr _ _ _ (iha h₁) (ihb h₂)
   | echoClose a iha =>
@@ -571,6 +801,14 @@ theorem weakening {Γ₁ Γ₂ : Ctx} {e : Expr} {τ σ : Ty} :
     cases h; rename_i ρ τ' h₁ h₂; simp only [shift]; exact .tEchoVal _ _ _ ρ τ' (iha h₁) (ihb h₂)
   | pair a b iha ihb =>
     cases h; rename_i α β h₁ h₂; simp only [shift]; exact .tPair _ _ _ α β (iha h₁) (ihb h₂)
+  | warrant κ cl ev ihc ihe =>
+    cases h; rename_i ρ τ' h₁ h₂; simp only [shift]
+    exact .tWarrant _ _ _ _ _ _ (ihc h₁) (ihe h₂)
+  | epiVal κ cl ev ihc ihe =>
+    cases h; rename_i ρ τ' h₁ h₂; simp only [shift]
+    exact .tEpiVal _ _ _ _ _ _ (ihc h₁) (ihe h₂)
+  | evidence a iha =>
+    cases h; rename_i κ τ' h₁; simp only [shift]; exact .tEvidence _ _ _ _ _ (iha h₁)
   | fst a iha =>
     cases h; rename_i β h₁; simp only [shift]; exact .tFst _ _ _ β (iha h₁)
   | snd a iha =>
@@ -636,7 +874,7 @@ theorem subst_preserves {Γ₁ Γ₂ : Ctx} {e s : Expr} {τ σ : Ty} :
     cases h; rename_i h₁ h₂; simp only [subst]; exact .tAddNum _ _ _ (iha h₁ hs) (ihb h₂ hs)
   | eq a b iha ihb =>
     cases h <;> simp only [subst]
-    · rename_i n h₁ h₂; exact .tEqWord _ _ _ n (iha h₁ hs) (ihb h₂ hs)
+    · rename_i n m h₁ h₂; exact .tEqWord _ _ _ n m (iha h₁ hs) (ihb h₂ hs)
     · rename_i h₁ h₂; exact .tEqNum _ _ _ (iha h₁ hs) (ihb h₂ hs)
     · rename_i h₁ h₂; exact .tEqStr _ _ _ (iha h₁ hs) (ihb h₂ hs)
   | echoClose a iha =>
@@ -649,6 +887,14 @@ theorem subst_preserves {Γ₁ Γ₂ : Ctx} {e s : Expr} {τ σ : Ty} :
     cases h; rename_i ρ τ' h₁ h₂; simp only [subst]; exact .tEchoVal _ _ _ ρ τ' (iha h₁ hs) (ihb h₂ hs)
   | pair a b iha ihb =>
     cases h; rename_i α β h₁ h₂; simp only [subst]; exact .tPair _ _ _ α β (iha h₁ hs) (ihb h₂ hs)
+  | warrant κ cl ev ihc ihe =>
+    cases h; rename_i ρ τ' h₁ h₂; simp only [subst]
+    exact .tWarrant _ _ _ _ _ _ (ihc h₁ hs) (ihe h₂ hs)
+  | epiVal κ cl ev ihc ihe =>
+    cases h; rename_i ρ τ' h₁ h₂; simp only [subst]
+    exact .tEpiVal _ _ _ _ _ _ (ihc h₁ hs) (ihe h₂ hs)
+  | evidence a iha =>
+    cases h; rename_i κ τ' h₁; simp only [subst]; exact .tEvidence _ _ _ _ _ (iha h₁ hs)
   | fst a iha =>
     cases h; rename_i β h₁; simp only [subst]; exact .tFst _ _ _ β (iha h₁ hs)
   | snd a iha =>
@@ -803,6 +1049,30 @@ theorem progress : HasType [] e τ → IsValue e ∨ ∃ e', Step e e' := by
       · exact .inl (.pair hva hvb)
       · exact .inr ⟨_, .pairRight hva hsb⟩
     · exact .inr ⟨_, .pairLeft hsa⟩
+  | warrant κ cl ev ihc ihe =>
+    -- Always a redex: it forms once both components are values.
+    cases ht; rename_i hc he
+    right
+    rcases ihc hc with hvc | ⟨c', hsc⟩
+    · rcases ihe he with hve | ⟨ev', hse⟩
+      · exact ⟨_, .warrantForm hvc hve⟩
+      · exact ⟨_, .warrantEv hvc hse⟩
+    · exact ⟨_, .warrantClaim hsc⟩
+  | epiVal κ cl ev ihc ihe =>
+    -- A value iff both components are; otherwise the relevant one steps.
+    cases ht; rename_i hc he
+    rcases ihc hc with hvc | ⟨c', hsc⟩
+    · rcases ihe he with hve | ⟨ev', hse⟩
+      · exact .inl (.epiVal hvc hve)
+      · exact .inr ⟨_, .epiValEv hvc hse⟩
+    · exact .inr ⟨_, .epiValClaim hsc⟩
+  | evidence a iha =>
+    cases ht; rename_i κ τ' h
+    right
+    rcases iha h with hv | ⟨e', hs⟩
+    · obtain ⟨c, ev, rfl, hc, he⟩ := canonical_epi hv h
+      exact ⟨_, .evidenceVal hc he⟩
+    · exact ⟨_, .evidenceStep hs⟩
   | fst a iha =>
     cases ht; rename_i h
     right
@@ -923,21 +1193,21 @@ theorem preservation : HasType [] e τ → Step e e' → HasType [] e' τ := by
   | addNums => cases ht with | tAddNum => exact .tNum _ _
   | eqLeft hs ih =>
     cases ht with
-    | tEqWord _ _ _ n h₁ h₂ => exact .tEqWord _ _ _ n (ih h₁) h₂
+    | tEqWord _ _ _ n m h₁ h₂ => exact .tEqWord _ _ _ n m (ih h₁) h₂
     | tEqNum _ _ _ h₁ h₂ => exact .tEqNum _ _ _ (ih h₁) h₂
     | tEqStr _ _ _ h₁ h₂ => exact .tEqStr _ _ _ (ih h₁) h₂
   | eqRight _ hs ih =>
     cases ht with
-    | tEqWord _ _ _ n h₁ h₂ => exact .tEqWord _ _ _ n h₁ (ih h₂)
+    | tEqWord _ _ _ n m h₁ h₂ => exact .tEqWord _ _ _ n m h₁ (ih h₂)
     | tEqNum _ _ _ h₁ h₂ => exact .tEqNum _ _ _ h₁ (ih h₂)
     | tEqStr _ _ _ h₁ h₂ => exact .tEqStr _ _ _ h₁ (ih h₂)
   | eqNums => cases ht with
     | tEqNum => exact .tBool _ _
-    | tEqWord _ _ _ _ _ h₁ => cases h₁
+    | tEqWord _ _ _ _ _ _ h₁ => cases h₁
     | tEqStr _ _ _ _ h₁ => cases h₁
   | eqStrs => cases ht with
     | tEqStr => exact .tBool _ _
-    | tEqWord _ _ _ _ _ h₁ => cases h₁
+    | tEqWord _ _ _ _ _ _ h₁ => cases h₁
     | tEqNum _ _ _ _ h₁ => cases h₁
   | eqBraids => cases ht with
     | tEqWord => exact .tBool _ _
@@ -965,6 +1235,24 @@ theorem preservation : HasType [] e τ → Step e e' → HasType [] e' τ := by
   | echoCloseId =>
     cases ht with | tEchoClose _ _ n h =>
     cases h with | tIdentity => exact .tEchoVal _ _ _ _ _ (.tIdentity _) (.tIdentity _)
+  -- Epistemic. Note `evidenceVal`: it inverts tEvidence then tEpiVal and
+  -- returns the TOKEN's typing (he), never the claim's (hc). That asymmetry is
+  -- exactly non-factivity, discharged here by the type system.
+  | warrantClaim hs ih =>
+    cases ht with | tWarrant _ _ _ _ _ _ hc he => exact .tWarrant _ _ _ _ _ _ (ih hc) he
+  | warrantEv _ hs ih =>
+    cases ht with | tWarrant _ _ _ _ _ _ hc he => exact .tWarrant _ _ _ _ _ _ hc (ih he)
+  | warrantForm _ _ =>
+    cases ht with | tWarrant _ _ _ _ _ _ hc he => exact .tEpiVal _ _ _ _ _ _ hc he
+  | epiValClaim hs ih =>
+    cases ht with | tEpiVal _ _ _ _ _ _ hc he => exact .tEpiVal _ _ _ _ _ _ (ih hc) he
+  | epiValEv _ hs ih =>
+    cases ht with | tEpiVal _ _ _ _ _ _ hc he => exact .tEpiVal _ _ _ _ _ _ hc (ih he)
+  | evidenceStep hs ih =>
+    cases ht with | tEvidence _ _ _ _ _ h => exact .tEvidence _ _ _ _ _ (ih h)
+  | evidenceVal _ _ =>
+    cases ht with | tEvidence _ _ _ _ _ h =>
+    cases h with | tEpiVal _ _ _ _ _ _ hc he => exact he
   | echoValLeft hs ih =>
     cases ht with | tEchoVal _ _ _ _ _ hr hv => exact .tEchoVal _ _ _ _ _ (ih hr) hv
   | echoValRight _ hs ih =>
@@ -1190,6 +1478,33 @@ theorem determinism : Step e e₁ → Step e e₂ → e₁ = e₂ := by
   | echoCloseId => cases hs₂ with
     | echoCloseStep h => exact absurd h (value_no_step .identity)
     | echoCloseId => rfl
+  -- Epistemic: three-way races. `warrantForm` fires only when BOTH components
+  -- are values, so it never races its own congruence rules; `evidenceVal`
+  -- likewise fires only on a formed `epiVal`.
+  | warrantClaim hs ih => cases hs₂ with
+    | warrantClaim h => exact congrArg (Expr.warrant _ · _) (ih h)
+    | warrantEv hc _ => exact absurd hs (value_no_step hc)
+    | warrantForm hc _ => exact absurd hs (value_no_step hc)
+  | warrantEv hc hs ih => cases hs₂ with
+    | warrantClaim h => exact absurd h (value_no_step hc)
+    | warrantEv _ h => exact congrArg (Expr.warrant _ _ ·) (ih h)
+    | warrantForm _ he => exact absurd hs (value_no_step he)
+  | warrantForm hc he => cases hs₂ with
+    | warrantClaim h => exact absurd h (value_no_step hc)
+    | warrantEv _ h => exact absurd h (value_no_step he)
+    | warrantForm _ _ => rfl
+  | epiValClaim hs ih => cases hs₂ with
+    | epiValClaim h => exact congrArg (Expr.epiVal _ · _) (ih h)
+    | epiValEv hc _ => exact absurd hs (value_no_step hc)
+  | epiValEv hc hs ih => cases hs₂ with
+    | epiValClaim h => exact absurd h (value_no_step hc)
+    | epiValEv _ h => exact congrArg (Expr.epiVal _ _ ·) (ih h)
+  | evidenceStep hs ih => cases hs₂ with
+    | evidenceStep h => exact congrArg Expr.evidence (ih h)
+    | evidenceVal hc he => exact absurd hs (value_no_step (.epiVal hc he))
+  | evidenceVal hc he => cases hs₂ with
+    | evidenceStep h => exact absurd h (value_no_step (.epiVal hc he))
+    | evidenceVal _ _ => rfl
   | echoValLeft hs ih => cases hs₂ with
     | echoValLeft h => exact congrArg (Expr.echoVal · _) (ih h)
     | echoValRight hr _ => exact absurd hs (value_no_step hr)
@@ -1366,6 +1681,71 @@ theorem echo_roundtrip_typed (e : Expr) (n : Nat) (h : HasType [] e (.word n)) :
     HasType [] (.lower (.echoClose e)) (.word 0) :=
   ⟨.tResidue _ _ _ _ (.tEchoClose _ _ n h), .tLower _ _ _ _ (.tEchoClose _ _ n h)⟩
 
+-- ═══════════════════════════════════════════════════════════════════════
+-- EPISTEMIC CAPSTONES
+-- ═══════════════════════════════════════════════════════════════════════
+--
+-- The echo capstones show that a *lossy* operation can be made recoverable by
+-- carrying its residue.  The epistemic capstones show the dual discipline: a
+-- warrant carries evidence WITHOUT thereby discharging what it claims.  Where
+-- echo says "the witness is retained", epi says "the claim is not delivered".
+
+/-- `evidence ∘ warrant` recovers the token.  The warrant forms, then the sole
+    projection yields the evidence that was deposited. -/
+theorem epi_evidence_recovers (κ : Nat) (c ev : Expr) (hc : IsValue c) (he : IsValue ev) :
+    StepStar (.evidence (.warrant κ c ev)) ev :=
+  .head (.evidenceStep (.warrantForm hc he)) (.head (.evidenceVal hc he) .refl)
+
+/-- **The claim is opaque.**  Two warrants at the same standpoint carrying the
+    same evidence but asserting DIFFERENT claims are observationally identical:
+    every observation yields the token, never the claim.  This is the epistemic
+    dual of `echo_distinguishes_collapsed` — echo *reveals* what `close`
+    forgot; a warrant *withholds* what it purports.  Holding evidence is not
+    holding the fact. -/
+theorem epi_claim_is_opaque (κ : Nat) (c₁ c₂ ev : Expr)
+    (h₁ : IsValue c₁) (h₂ : IsValue c₂) (he : IsValue ev) :
+    StepStar (.evidence (.warrant κ c₁ ev)) ev ∧
+    StepStar (.evidence (.warrant κ c₂ ev)) ev :=
+  ⟨epi_evidence_recovers κ c₁ ev h₁ he, epi_evidence_recovers κ c₂ ev h₂ he⟩
+
+/-- **Non-factivity, at the type level.**  From `e : Epi[κ, ρ, τ]` the only
+    elimination yields ρ.  Contrast `tLower`, which *does* deliver an echo's
+    result τ.  A warrant is not knowledge: there is no rule taking you from a
+    warrant to the thing warranted.  Upstream models the factive case as a
+    SEPARATE record (`FactiveModality`, with `reflect : E κ A → A`) rather than
+    as a modality with a missing proof; the absence here is the same choice. -/
+theorem epi_only_yields_evidence (Γ : Ctx) (e : Expr) (κ : Nat) (ρ τ : Ty)
+    (h : HasType Γ e (.epi κ ρ τ)) :
+    HasType Γ (.evidence e) ρ :=
+  .tEvidence _ _ κ ρ τ h
+
+/-- Standpoints are distinguished: the same evidence for the same claim held at
+    different standpoints inhabits different types.  Warrant is indexed by who
+    holds it, so κ₁ ≠ κ₂ gives genuinely different epistemic positions. -/
+theorem epi_distinguishes_standpoints {κ₁ κ₂ : Nat} (ρ τ : Ty) (h : κ₁ ≠ κ₂) :
+    Ty.epi κ₁ ρ τ ≠ Ty.epi κ₂ ρ τ := by
+  intro heq; exact h (Ty.epi.inj heq).1
+
+/-- The epistemic round-trip is type-safe: from a claim at τ and evidence at ρ,
+    the warrant is `Epi[κ,ρ,τ]` and `evidence` recovers exactly ρ. -/
+theorem epi_roundtrip_typed (κ : Nat) (c ev : Expr) (ρ τ : Ty)
+    (hc : HasType [] c τ) (he : HasType [] ev ρ) :
+    HasType [] (.warrant κ c ev) (.epi κ ρ τ) ∧
+    HasType [] (.evidence (.warrant κ c ev)) ρ :=
+  ⟨.tWarrant _ κ _ _ ρ τ hc he, .tEvidence _ _ κ ρ τ (.tWarrant _ κ _ _ ρ τ hc he)⟩
+
+/-- Epistemic and echo COMPOSE without collapsing into each other:
+    `Epi[κ, Echo[ρ,τ], σ]` is a warrant, at standpoint κ, whose evidence is an
+    echo.  Mirrors `EpistemicEcho` in EpistemicTypes/EchoBridge.agda — "standpoint
+    κ has epistemic access to an echo of A".  The bridge module is explicit that
+    these are different modalities: echo grades irrecoverability, epi indexes
+    standpoints. -/
+theorem epi_over_echo_typed (κ : Nat) (c e : Expr) (n : Nat) (σ : Ty)
+    (hc : HasType [] c σ) (he : HasType [] e (.word n)) :
+    HasType [] (.warrant κ c (.echoClose e))
+              (.epi κ (.echo (.word n) (.word 0)) σ) :=
+  .tWarrant _ κ _ _ _ σ hc (.tEchoClose _ _ n he)
+
 /-- `echoAdd` recovers the summands: `add` discards which numbers were added,
     but the residue retains the pair. -/
 theorem echoAdd_residue_recovers (n₁ n₂ : Int) :
@@ -1440,10 +1820,26 @@ def infer (Γ : Ctx) : Expr → Option Ty
       | _, _ => none
   | .eq e₁ e₂ =>
       match infer Γ e₁, infer Γ e₂ with
-      | some (.word n), some (.word m) => if n = m then some .bool else none
+      -- Widths need not agree (#92): Bₙ ↪ Bₙ₊₁, so the comparison is decided
+      -- in the larger group. Mirrors the widened `tEqWord`.
+      | some (.word _), some (.word _) => some .bool
       | some .num, some .num => some .bool
       | some .str, some .str => some .bool
       | _, _ => none
+  -- Epistemic. `evidence` returns the EVIDENCE component ρ; there is no case
+  -- returning τ, which is where non-factivity lives in the algorithm.
+  | .warrant κ cl ev =>
+      match infer Γ cl, infer Γ ev with
+      | some τ, some ρ => some (.epi κ ρ τ)
+      | _, _ => none
+  | .epiVal κ cl ev =>
+      match infer Γ cl, infer Γ ev with
+      | some τ, some ρ => some (.epi κ ρ τ)
+      | _, _ => none
+  | .evidence e =>
+      match infer Γ e with
+      | some (.epi _ ρ _) => some ρ
+      | _ => none
   | .echoClose e =>
       match infer Γ e with
       | some (.word n) => some (.echo (.word n) (.word 0))
@@ -1529,14 +1925,25 @@ theorem infer_sound {Γ : Ctx} {e : Expr} {τ : Ty} :
       all_goals simp at h
   | eq e₁ e₂ ih₁ ih₂ =>
       intro h; simp only [infer] at h; split at h
+      -- No inner `split`: with widths free (#92) there is no `if n = m`
+      -- condition left to case on, so the word branch is now direct.
       next n m he₁ he₂ =>
-        split at h
-        next hnm =>
-          injection h with h; subst h; subst hnm
-          exact .tEqWord _ _ _ _ (ih₁ he₁) (ih₂ he₂)
-        next => simp at h
+        injection h with h; subst h
+        exact .tEqWord _ _ _ n m (ih₁ he₁) (ih₂ he₂)
       next he₁ he₂ => injection h with h; subst h; exact .tEqNum _ _ _ (ih₁ he₁) (ih₂ he₂)
       next he₁ he₂ => injection h with h; subst h; exact .tEqStr _ _ _ (ih₁ he₁) (ih₂ he₂)
+      all_goals simp at h
+  | warrant κ cl ev ihc ihe =>
+      intro h; simp only [infer] at h; split at h
+      next τ' ρ hc he => injection h with h; subst h; exact .tWarrant _ κ _ _ ρ τ' (ihc hc) (ihe he)
+      all_goals simp at h
+  | epiVal κ cl ev ihc ihe =>
+      intro h; simp only [infer] at h; split at h
+      next τ' ρ hc he => injection h with h; subst h; exact .tEpiVal _ κ _ _ ρ τ' (ihc hc) (ihe he)
+      all_goals simp at h
+  | evidence e ih =>
+      intro h; simp only [infer] at h; split at h
+      next κ ρ τ' he => injection h with h; subst h; exact .tEvidence _ _ κ _ τ' (ih he)
       all_goals simp at h
   | echoClose e ih =>
       intro h; simp only [infer] at h; split at h

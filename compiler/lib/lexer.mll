@@ -54,6 +54,20 @@
     | "snd"       -> SND
     | "echoAdd"   -> ECHOADD
     | "echoEq"    -> ECHOEQ
+    (* Epistemic forms (TG-11). `evidence` is the ONLY elimination — there is
+       deliberately no keyword that extracts the claim from a warrant. *)
+    | "warrant"   -> WARRANT
+    | "evidence"  -> EVIDENCE
+    (* JTV island (D2.1). `if`/`then`/`else` are island-only keywords — TANGLE
+       has no conditional of its own.
+       NOTE `add` is deliberately NOT here: it must stay a usable identifier
+       (`def add(a, b) = a + b` is valid TANGLE and appears in the e2e suite).
+       The island is entered by the two-character opener `add{`, lexed as a
+       single ADDBRACE token below — which is exactly the "Delimited Syntax"
+       principle in README-jtv.adoc: the delimiter is what prevents conflict. *)
+    | "if"        -> IF
+    | "then"      -> THEN
+    | "else"      -> ELSE
     | "jones"     -> JONES
     | "alexander" -> ALEXANDER
     | "homfly"    -> HOMFLY
@@ -96,6 +110,20 @@ rule token = parse
   | "=>"             { ARROW }
   | "=="             { EQEQ }
   | ">>"             { GTGT }
+  (* JTV island operators. `&&`, `||`, `!=`, `<=`, `>=`, `%` and `!` appear
+     only inside add{...}: TANGLE has no logical operators and no inequality,
+     so these cannot collide with core syntax. Multi-char forms must precede
+     the single-char rules below. *)
+  (* The island opener, matched as ONE token so `add` alone stays an IDENT.
+     Must precede the identifier rule. *)
+  | "add" [' ' '\t']* '{'   { ADDBRACE }
+  | "&&"             { AMPAMP }
+  | "||"             { BARBAR }
+  | "!="             { BANGEQ }
+  | "<="             { LE }
+  | ">="             { GE }
+  | '%'              { PERCENT }
+  | '!'              { BANG }
 
   (* Single-character operators and punctuation *)
   | '.'              { DOT }

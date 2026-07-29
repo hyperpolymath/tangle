@@ -42,6 +42,11 @@ type value =
   | VFun       of string list * expr * env  (** Closure: params, body, captured env *)
   | VUnit                             (** Unit / void result *)
   | VInvariant of string * string     (** Invariant name, result string *)
+  | VEpi       of int * value * value  (** Formed warrant: standpoint, claim, token.
+                                          The claim is CARRIED but has no
+                                          projection — `Evidence` is the only
+                                          elimination.  Mirrors epiVal in
+                                          proofs/Tangle.lean. *)
   | VEcho      of value * value       (** Formed echo: residue, result —
                                           mirrors [echoVal] in proofs/Tangle.lean *)
   | VPair      of value * value       (** Product value *)
@@ -92,6 +97,8 @@ let rec pp_value (v : value) : string =
   | VFun _        -> "<function>"
   | VUnit         -> "()"
   | VInvariant (name, result) -> Printf.sprintf "%s = %s" name result
+  | VEpi (k, c, ev) ->
+    Printf.sprintf "warrant[%d](%s, %s)" k (pp_value c) (pp_value ev)
   | VEcho (res, result) ->
     "echo(" ^ pp_value res ^ ", " ^ pp_value result ^ ")"
   | VPair (a, b) ->
@@ -120,6 +127,17 @@ let gen_of_ast (g : generator) : gen =
 (** Convert a list of AST generators to runtime generators. *)
 let gens_of_ast (gs : generator list) : gen list =
   List.map gen_of_ast gs
+
+(** Convert a runtime generator back to an AST generator.  The two records are
+    structurally identical but nominally distinct; [Braid_equiv] is written
+    against the AST type, so the braid-equivalence used by `==` and `~` (TG-7)
+    needs this direction too. *)
+let ast_of_gen (g : gen) : generator =
+  { gen_index = g.g_index; gen_exponent = g.g_exponent }
+
+(** Convert a list of runtime generators to AST generators. *)
+let ast_of_gens (gs : gen list) : generator list =
+  List.map ast_of_gen gs
 
 (** Compute the width (number of strands) of a braid word.
  *  width = max(index + 1) over all generators, or 0 if empty.
@@ -264,6 +282,85 @@ let gens_of_value (v : value) : gen list =
   | VTangle tv     -> tv.tv_word
   | _ -> eval_error "Expected a braid or tangle value, got %s" (pp_value v)
 
+(** Harvard data VALUES — the island's own value space, kept separate from
+    TANGLE's [value] so the two cannot be confused. *)
+type hv_value =
+  | HvVInt   of int
+  | HvVFloat of float
+  | HvVBool  of bool
+  | HvVStr   of string
+
+(** Evaluate a Harvard data expression.  Total by construction (D2.1): no
+    loops, no assignment, no side effects — every case is structural recursion
+    on a finite term, so this terminates.  Division by zero is the one runtime
+    error the fragment admits. *)
+let rec eval_hv (e : hv_expr) : hv_value =
+  let num2 f g a b =
+    match a, b with
+    | HvVInt x,   HvVInt y   -> HvVInt (f x y)
+    | HvVInt x,   HvVFloat y -> HvVFloat (g (float_of_int x) y)
+    | HvVFloat x, HvVInt y   -> HvVFloat (g x (float_of_int y))
+    | HvVFloat x, HvVFloat y -> HvVFloat (g x y)
+    | _ -> eval_error "add{}: arithmetic on non-numbers"
+  in
+  let cmp2 f g a b =
+    match a, b with
+    | HvVInt x,   HvVInt y   -> HvVBool (f x y)
+    | HvVInt x,   HvVFloat y -> HvVBool (g (float_of_int x) y)
+    | HvVFloat x, HvVInt y   -> HvVBool (g x (float_of_int y))
+    | HvVFloat x, HvVFloat y -> HvVBool (g x y)
+    | _ -> eval_error "add{}: comparison on non-numbers"
+  in
+  match e with
+  | HvInt n   -> HvVInt n
+  | HvFloat f -> HvVFloat f
+  | HvStr s   -> HvVStr s
+  | HvBool b  -> HvVBool b
+  | HvUn (HvNeg, a) ->
+    (match eval_hv a with
+     | HvVInt n -> HvVInt (-n) | HvVFloat f -> HvVFloat (-.f)
+     | _ -> eval_error "add{}: negation of a non-number")
+  | HvUn (HvNot, a) ->
+    (match eval_hv a with
+     | HvVBool b -> HvVBool (not b)
+     | _ -> eval_error "add{}: ! of a non-boolean")
+  | HvBin (op, a, b) ->
+    let va = eval_hv a and vb = eval_hv b in
+    begin match op with
+    | HvAdd -> num2 ( + ) ( +. ) va vb
+    | HvSub -> num2 ( - ) ( -. ) va vb
+    | HvMul -> num2 ( * ) ( *. ) va vb
+    | HvDiv ->
+      (match va, vb with
+       | _, HvVInt 0 -> eval_error "add{}: division by zero"
+       | _, HvVFloat 0.0 -> eval_error "add{}: division by zero"
+       | _ -> num2 ( / ) ( /. ) va vb)
+    | HvMod ->
+      (match va, vb with
+       | HvVInt _, HvVInt 0 -> eval_error "add{}: modulo by zero"
+       | HvVInt x, HvVInt y -> HvVInt (x mod y)
+       | _ -> eval_error "add{}: modulo requires integers")
+    | HvLt -> cmp2 ( < ) ( < ) va vb
+    | HvLe -> cmp2 ( <= ) ( <= ) va vb
+    | HvGt -> cmp2 ( > ) ( > ) va vb
+    | HvGe -> cmp2 ( >= ) ( >= ) va vb
+    | HvEq -> HvVBool (va = vb)
+    | HvNe -> HvVBool (va <> vb)
+    | HvAnd ->
+      (match va, vb with
+       | HvVBool x, HvVBool y -> HvVBool (x && y)
+       | _ -> eval_error "add{}: && on non-booleans")
+    | HvOr ->
+      (match va, vb with
+       | HvVBool x, HvVBool y -> HvVBool (x || y)
+       | _ -> eval_error "add{}: || on non-booleans")
+    end
+  | HvIf (c, t, e2) ->
+    (match eval_hv c with
+     | HvVBool true  -> eval_hv t
+     | HvVBool false -> eval_hv e2
+     | _ -> eval_error "add{}: if condition is not a boolean")
+
 (** Evaluate an expression in the given environment. *)
 let rec eval_expr (env : env) (e : expr) : value =
   match e with
@@ -373,6 +470,43 @@ let rec eval_expr (env : env) (e : expr) : value =
     | _ -> eval_error "Cannot simplify %s" (pp_value v)
     end
 
+  | Weave wb ->
+    (* The statement form is a no-op returning (env, None) — the value was
+       unreachable, which is what made weave inert.  In expression position the
+       body IS the value: it denotes the morphism from the input strands to the
+       output strands, so evaluate it and present it as a tangle. *)
+    begin match eval_expr env wb.weave_body with
+    | VTangle _ as t -> t
+    | VBraid gens    -> VTangle { tv_word = gens; tv_closed = false }
+    | v -> eval_error "Weave body must evaluate to a braid or tangle, got %s"
+             (pp_value v)
+    end
+
+  (* Epistemic.  `warrant` forms the value; `evidence` is the sole projection
+     and yields the TOKEN.  There is deliberately no operation returning the
+     claim — holding a warrant is not holding the fact. *)
+  (* The add{} island evaluates in its own world and crosses back as a TANGLE
+     value.  Total and pure: every case terminates, nothing escapes. *)
+  | AddBlock he ->
+    begin match eval_hv he with
+    | HvVInt n   -> VInt n
+    | HvVFloat f -> VFloat f
+    | HvVBool b  -> VBool b
+    | HvVStr s   -> VString s
+    end
+
+  | Warrant (k, claim, ev) ->
+    VEpi (k, eval_expr env claim, eval_expr env ev)
+
+  | EpiVal (k, claim, ev) ->
+    VEpi (k, eval_expr env claim, eval_expr env ev)
+
+  | Evidence e ->
+    begin match eval_expr env e with
+    | VEpi (_, _, ev) -> ev
+    | v -> eval_error "evidence requires a warrant, got %s" (pp_value v)
+    end
+
   | Cap (_e1, _e2) ->
     (* Cap creates a tangle that absorbs two strands — a single-crossing
        cup/cap pair.  Represented as an empty closed tangle. *)
@@ -382,6 +516,18 @@ let rec eval_expr (env : env) (e : expr) : value =
     (* Cup creates a tangle that emits two strands — a single-crossing
        cup/cap pair.  Represented as an empty closed tangle. *)
     VTangle { tv_word = []; tv_closed = true }
+
+  (* [T-Twist-Strand]: `(~a)` on a NAMED STRAND inside a weave.  Treated as
+     structural, exactly as `Crossing` is below — weave bodies describe a
+     morphism, and the interpreter carries no strand context at runtime.
+     A single-strand twist is in any case invisible to the braid WORD: it is a
+     framing change (Reidemeister I), which the braid group does not see.
+
+     Safe to detect by "a Var the environment does not bind": the typechecker
+     runs first and accepts `Twist (Var a)` ONLY when `a` is in the strand
+     context, so a genuinely unbound variable never reaches here. *)
+  | Twist (Var a) when env_lookup env a = None ->
+    ignore a; VBraid []
 
   | Twist e1 ->
     let v = eval_expr env e1 in
@@ -575,28 +721,53 @@ and eval_binop (op : binop) (v1 : value) (v2 : value) : value =
     | _ -> eval_error "Cannot divide %s by %s" (pp_value v1) (pp_value v2)
     end
 
-  (* Equality: structural comparison *)
+  (* Equality.  Scalars compare structurally; BRAIDS compare up to braid-GROUP
+     equivalence (TG-7, owner ruling tangle#50).  Syntactic equality would
+     contradict the language's own thesis — programs are topological objects and
+     equivalence is isotopy — so `==` must not be the one place that quietly
+     reverts to comparing representations.  Mirrored by the Lean `Step.eqBraids`
+     rule, which uses `braidEquiv`.
+
+     `Identity` evaluates to `VBraid []`, so identity comparisons flow through
+     this same case and correctly ask "is this word trivial?".
+
+     Correctness of the decision procedure is established by testing
+     (compiler/test/tg7), NOT by proof — see braid_equiv.ml and
+     PROOF-NARRATIVE.md §TG-7. *)
   | Eq ->
     begin match v1, v2 with
     | VInt a, VInt b       -> VBool (a = b)
     | VFloat a, VFloat b   -> VBool (a = b)
     | VBool a, VBool b     -> VBool (a = b)
     | VString a, VString b -> VBool (a = b)
-    | VBraid g1, VBraid g2 -> VBool (g1 = g2)
+    | VBraid g1, VBraid g2 -> VBool (Braid_equiv.equiv (ast_of_gens g1) (ast_of_gens g2))
     | _ -> eval_error "Cannot compare %s == %s" (pp_value v1) (pp_value v2)
     end
 
-  (* Isotopy: compare simplified braid words *)
+  (* Isotopy.  For BRAIDS, isotopy IS equality in the braid group, so `~` and
+     `==` denote the same relation and must agree.  This previously compared
+     `simplify_gens`, which only cancels adjacent inverses (Reidemeister II) and
+     does not implement the braid relation σᵢσⱼσᵢ = σⱼσᵢσⱼ — an incomplete
+     decision procedure.  Leaving it that way while `==` became complete would
+     have made `a == b` provable with `a ~ b` false, which is incoherent.  This
+     is therefore a COMPLETENESS fix, not a change of intended meaning.
+
+     CAVEAT for closed tangles: isotopy of a LINK (the closure of a braid) is
+     Markov equivalence — braid-group equality plus conjugation and
+     stabilisation.  Those moves are NOT implemented.  Braid equality is
+     sufficient but not necessary for closures to be isotopic, so on
+     `tv_closed` tangles this remains a SOUND but INCOMPLETE under-approximation:
+     `true` is trustworthy, `false` only means "not equal as braids". *)
   | Isotopy ->
     begin match v1, v2 with
     | VBraid g1, VBraid g2 ->
-      VBool (simplify_gens g1 = simplify_gens g2)
+      VBool (Braid_equiv.equiv (ast_of_gens g1) (ast_of_gens g2))
     | VTangle t1, VTangle t2 ->
-      VBool (simplify_gens t1.tv_word = simplify_gens t2.tv_word)
+      VBool (Braid_equiv.equiv (ast_of_gens t1.tv_word) (ast_of_gens t2.tv_word))
     | VBraid g1, VTangle t2 ->
-      VBool (simplify_gens g1 = simplify_gens t2.tv_word)
+      VBool (Braid_equiv.equiv (ast_of_gens g1) (ast_of_gens t2.tv_word))
     | VTangle t1, VBraid g2 ->
-      VBool (simplify_gens t1.tv_word = simplify_gens g2)
+      VBool (Braid_equiv.equiv (ast_of_gens t1.tv_word) (ast_of_gens g2))
     | _ -> eval_error "Cannot test isotopy of %s ~ %s" (pp_value v1) (pp_value v2)
     end
 

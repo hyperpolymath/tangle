@@ -1,5 +1,5 @@
 <!--
-SPDX-License-Identifier: MPL-2.0
+SPDX-License-Identifier: CC-BY-SA-4.0
 Owner: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
 # Proof Narrative — Tangle
@@ -31,7 +31,7 @@ Tangle is the **semantic core** of a four-layer federated stack:
                   ▼
 ┌─────────────────────────────────────────────────────────┐
 │  Tangle CORE  (THIS REPO)                               │
-│    proofs/Tangle.lean — 16 mechanised results           │
+│    proofs/Tangle.lean — mechanised results (26 HasType, 55 Step) │
 │    compiler/lib/*.ml — OCaml implementation             │
 │    compiler/tangle-wasm — WASM backend                  │
 │    compiler/tangle-lsp — LSP server                     │
@@ -51,8 +51,8 @@ delivered slice and the remaining gap explicit.
 
 ## 2. Proven now
 
-All 16 results live in [`proofs/Tangle.lean`](proofs/Tangle.lean)
-(Lean 4, ~570 LoC, no `sorry`, no `axiom`).
+All results live in [`proofs/Tangle.lean`](proofs/Tangle.lean)
+(Lean 4, no `sorry`, no `axiom`).
 
 **Build oracle.** As of 2026-06-01 (PR closing TG-0, hyperpolymath/tangle#32),
 the file is verified at every push/PR by `.github/workflows/lean-proofs.yml`,
@@ -86,27 +86,30 @@ See PROOF-NARRATIVE §2.5.
 
 | ID | Statement | Where |
 |----|-----------|-------|
-| **T-Progress** | Every well-typed closed term is either a value or can take a step. | `Tangle.lean:247-326` |
-| **T-Preservation** | Stepping preserves types: `Γ ⊢ e : τ ∧ e → e' ⟹ Γ ⊢ e' : τ`. | `Tangle.lean:333-415` |
-| **T-Determinism** | The step relation is deterministic: `e → e₁ ∧ e → e₂ ⟹ e₁ = e₂`. | `Tangle.lean:422-549` |
-| **T-TypeSafety** | Well-typed closed terms never get stuck (Progress + Preservation corollary). | `Tangle.lean:556-558` |
+| **T-Progress** | Every well-typed closed term is either a value or can take a step. | `Tangle.lean:670` |
+| **T-Preservation** | Stepping preserves types: `Γ ⊢ e : τ ∧ e → e' ⟹ Γ ⊢ e' : τ`. | `Tangle.lean:870` |
+| **T-Determinism** | The step relation is deterministic: `e → e₁ ∧ e → e₂ ⟹ e₁ = e₂`. | `Tangle.lean:1053` |
+| **T-TypeSafety** | Well-typed closed terms never get stuck (Progress + Preservation corollary). | `Tangle.lean:1303` |
 
-Each is proven for the **let-free fragment** of the core: numerals,
-strings, booleans, identity, braid literals, composition, tensor,
-pipeline, close, addition, and equality.
+Each is proven for the **full core fragment**: numerals, strings, booleans, identity,
+braid literals, composition, tensor, pipeline, close, addition, equality, variables,
+let-binding, the complete echo/product fragment (see §2.5), and decidable type
+inference (see §2.7). The "let-free fragment" caveat is retired — TG-1 and TG-2 are both landed.
 
 ### Supporting lemmas
 
 | ID | Statement | Where |
 |----|-----------|-------|
-| T-ValueNoStep | Values are normal forms: `IsValue e ⟹ ¬ Step e e'`. | `Tangle.lean:189` |
-| T-CanonicalNum | A typed-Num value is `.num n` for some `n`. | `Tangle.lean:193-194` |
-| T-CanonicalStr | A typed-Str value is `.str s` for some `s`. | `Tangle.lean:197-198` |
-| T-CanonicalWord | A typed-Word[n] value is `.identity` (n=0) or `.braidLit gs` (n = width gs). | `Tangle.lean:201-209` |
-| T-WidthAppend | `width(gs₁ ++ gs₂) = max(width gs₁, width gs₂)`. | `Tangle.lean:219-221` |
-| T-WidthShift | `width(shift gs n) = if gs=[] then 0 else width gs + n`. | `Tangle.lean:235-238` |
-| T-FoldlMaxInit (private) | Algebraic identity for the width fold. | `Tangle.lean:212-217` |
-| T-FoldlShiftInit (private) | Algebraic identity for the shifted width fold. | `Tangle.lean:223-233` |
+| T-ValueNoStep | Values are normal forms: `IsValue e ⟹ ¬ Step e e'`. | `Tangle.lean:394` |
+| T-CanonicalNum | A typed-Num value is `.num n` for some `n`. | `Tangle.lean:405` |
+| T-CanonicalStr | A typed-Str value is `.str s` for some `s`. | `Tangle.lean:409` |
+| T-CanonicalWord | A typed-Word[n] value is `.identity` (n=0) or `.braidLit gs`. | `Tangle.lean:413` |
+| T-CanonicalEcho | A typed-Echo value is `.echoVal r v` for values r, v. | `Tangle.lean:428` |
+| T-CanonicalProd | A typed-Prod value is `.pair a b` for values a, b. | `Tangle.lean:443` |
+| T-WidthAppend | `width(gs₁ ++ gs₂) = max(width gs₁, width gs₂)`. | `Tangle.lean:466` |
+| T-WidthShift | `width(shift gs n) = if gs=[] then 0 else width gs + n`. | `Tangle.lean:485` |
+| **T-Weakening** | Inserting a fresh hypothesis at de Bruijn position `Γ₁.length` preserves typing (TG-1). | `Tangle.lean:521` |
+| **T-SubstPreserves** | Typing is preserved under capture-avoiding substitution of a typed term for a variable (TG-1). | `Tangle.lean:589` |
 
 ### Type-system and step-relation definitions
 
@@ -116,11 +119,13 @@ themselves proofs of the form "these are the rules"):
 - **`Expr`** — the AST (mirrors `compiler/lib/ast.ml`)
 - **`Ty`** — `num`, `str`, `bool`, `word n`
 - **`IsValue`** — value predicate
-- **`HasType`** — typing judgment, 16 rules (`tNum`, `tStr`, `tBool`,
+- **`HasType`** — typing judgment, 26 rules: 13 base (`tNum`, `tStr`, `tBool`,
   `tIdentity`, `tBraid`, `tComposeWord`, `tTensorWord`, `tPipeline`,
-  `tCloseWord`, `tAddNum`, `tEqWord`, `tEqNum`, `tEqStr`, plus the echo
-  rules `tEchoClose`, `tLower`, `tResidue`)
-- **`Step`** — small-step semantics, 31 rules (26 base + 5 echo)
+  `tCloseWord`, `tAddNum`, `tEqWord`, `tEqNum`, `tEqStr`); 4 echo-close
+  (`tEchoClose`, `tLower`, `tResidue`, `tEchoVal`); 7 product+echo-binary
+  (`tPair`, `tFst`, `tSnd`, `tEchoAdd`, `tEchoEqWord`, `tEchoEqNum`,
+  `tEchoEqStr`); 2 let/var (`tVar`, `tLet`)
+- **`Step`** — small-step semantics, 55 rules: 27 base, 9 echo-close/lower/residue, 6 product, 11 echoAdd/echoEq, 2 let (plus a separate 2-constructor `StepStar` reflexive-transitive closure: `refl`, `head`)
 
 These are the formal spec the OCaml implementation is meant to refine
 (see TG-3 below).
@@ -145,6 +150,11 @@ type system*.
 | `echoClose e` | `Word[n] → Echo (Word[n]) (Word[0])` | `echo-intro close` |
 | `lower e` | `Echo ρ τ → τ` — project to result (forget residue) | the collapse / `proj₂` |
 | `residue e` | `Echo ρ τ → ρ` — recover the witness braid | `proj₁` |
+| `pair(a, b)` | `α → β → α × β` — product introduction | `Echo.Pair` (product as residue carrier) |
+| `fst(e)` | `α × β → α` — first projection | `proj₁` |
+| `snd(e)` | `α × β → β` — second projection | `proj₂` |
+| `echoAdd(a, b)` | `Num → Num → Echo (Num × Num) Num` — addition with summand residue | `echo-intro add` |
+| `echoEq(a, b)` | `ρ → ρ → Echo (ρ × ρ) Bool` — equality with operand residue | `echo-intro eq` |
 
 **Metatheory.** Progress, Preservation, Determinism, and Type Safety all
 cover `echoClose`/`lower`/`residue` (the inductions are exhaustive over
@@ -167,72 +177,175 @@ its residue `v` is.
 
 Tracked as obligation **TG-10** in PROOF-NEEDS.md (landed).
 
+## 2.6 OCaml implementation completeness
+
+As of 2026-06-14 (PRs #45–#46), the OCaml pipeline (`compiler/lib/`) covers the
+complete echo + product fragment described in §2.5:
+
+| Layer | Echo/product coverage |
+|-------|-----------------------|
+| `ast.ml` | `EchoClose`, `Lower`, `Residue`, `Pair`, `Fst`, `Snd`, `EchoAdd`, `EchoEq` in `expr`; `TProd`, `TEcho` in `ty` |
+| `typecheck.ml` | 8 `infer_expr` rules matching Lean `HasType`; `pp_ty` made `rec` |
+| `eval.ml` | `VEcho`, `VPair` values; 8 `eval_expr` arms; `pp_value` made `rec` |
+| `lexer.mll` / `parser.mly` / `token.ml` | Keyword tokens + grammar productions for all 8 surface forms |
+| `pretty.ml` | Pretty-printers for all 8 forms |
+| `test_roundtrip.ml` | TG-4 round-trip property test: 26-entry corpus including all 8 echo/product constructors |
+
+**Build oracle**: `dune build` + `dune test` green (run `dune runtest` for the
+live count — ~597 across 8 suites). The
+pre-PR #46 `main` did not compile due to two `Warning 8` exhaustiveness gaps
+(both fixed: `strand_type_of_ty` in `typecheck.ml`; debug token printer in `bin/main.ml`).
+
+**TG-3 landed** (translation validation): the OCaml typechecker is proven to
+refine `HasType` on the core fragment — `proofs/TG3Differential.lean` emits 496
+obligations generated from `infer_expr` that Lean's proven `infer` kernel-checks,
+plus a closure proof and 1008 OCaml `--check` assertions. The two documented
+divergences are `close` (D1) and `bool == bool` (D2). See `proofs/TG3-REFINEMENT.md`
+and §TG-3 below.
+
+## 2.7 Let-binding and decidability (TG-1 + TG-2)
+
+Both obligations landed in `proofs/Tangle.lean` and are documented in §TG-1 and
+§TG-2 of the remaining-obligations section below (those sections now carry LANDED
+verdicts). Key structural points:
+
+- **TG-1 (let-binding)**: `weakening` + `subst_preserves` use the de Bruijn
+  combined-context invariant — `subst_preserves` types the substitutee in
+  `Γ₁ ++ Γ₂`, not merely `Γ₂`. This is the genuine inductive invariant; the
+  `letRed` consumer uses `Γ₁ := []` where both forms coincide.
+
+- **TG-2 (decidability)**: `infer` is a single structural recursion covering all
+  26 `HasType` rules. Both soundness and completeness are proven; `type_unique`
+  follows as a corollary. The `decidableHasType` instance makes `HasType [] e τ`
+  a decidable proposition directly usable by Lean's typeclass system.
+
+## 2.8 Echo-types grade semiring — design note
+
+`hyperpolymath/echo-types` (commit `f7a965f`, 2026-06-14) added an experimental
+ℕ∪{∞} min-plus grade semiring (`experimental/echo-additive/Grade.agda`) and a
+variance gate (`VarianceGate.agda`). Key findings and their implications for Tangle:
+
+- The **combining direction** (`D_r(D_s A) → D_{r+s} A`) has **monadic** variance.
+  Tangle's `echoAdd`/`echoEq` use exactly this direction: two residues are merged
+  into a `pair` (the lax monoidal μ map). The current implementation is correct for
+  this reading.
+
+- The **splitting direction** (`D_{r+s} A → D_r(D_s A)`) has **comonadic** variance
+  and requires a full graded adjunction F_r ⊣ U_r. If Tangle ever needs to split an
+  `Echo(ρ×σ)` value back into independent `Echo(ρ)` and `Echo(σ)`, that is a
+  non-trivial structural addition — it cannot be derived from the combining map alone.
+
+- The **grade semiring** (`fin n` = information count, `inf` = total collapse) is a
+  candidate carrier for a future grade-indexed type former `Echo[n] ρ τ` in Tangle.
+  `echoAdd` would then have type `Num → Num → Echo[2] (Num×Num) Num` (2 units of
+  information retained). This is prospective; the experimental subtree is firewalled
+  until the comparative protocol (monadic vs comonadic) concludes.
+
+- **No Tangle design change is required now.** The current `Ty.echo`/`Ty.prod`
+  fragment is faithful to the monadic/combining direction and the experimental work
+  is explicitly gated (`experimental/echo-additive/` is not imported by any shipped
+  module in echo-types or Tangle).
+
 ## 3. Remaining obligations (the narrative arc)
 
 What's not yet proven, why it matters, and what assumption each rests on.
 
 ### TG-1 — Type safety extended to `let`-binding
 
-**Claim.** Type safety extends to the language fragment with `let`.
+**Status: LANDED** (`proofs/Tangle.lean` §METATHEORY, lines 492–668).
 
-**Why valuable.** The header comment of `Tangle.lean` explicitly
-parks this: "T-Let: ... a future version can add the full substitution
-machinery from e.g. Autosubst." Until then T-TypeSafety is for the
-let-free fragment only. `let` is in the surface language (`compiler/
-lib/ast.ml`), so users can write programs the proof doesn't cover.
+**Claim.** Type safety (Progress, Preservation, Determinism, TypeSafety) extends
+to the full core language including `var` and `let`.
 
-**Assumptions.**
-- [[A-TG-1.1]] Capture-avoiding substitution is well-defined on the
-  de Bruijn representation already used by `HasType`.
-- [[A-TG-1.2]] The standard "weakening" and "substitution" lemmas hold
-  for the existing `HasType` rules.
+**What was proven.**
+- `weakening` (line 521) — inserting a fresh hypothesis `σ` at de Bruijn position
+  `Γ₁.length` preserves typing, with the term shifted by `shift 1 Γ₁.length`.
+- `subst_preserves` (line 589) — typing is closed under replacing the variable at
+  `Γ₁.length` by a well-typed term `s`. The substitutee is typed in the combined
+  context `Γ₁ ++ Γ₂` (the genuine inductive invariant; the `letRed` consumer
+  instantiates `Γ₁ := []`).
+- All four main theorems (Progress, Preservation, Determinism, TypeSafety) were
+  extended with `var` and `letStep`/`letRed` cases. `Step` gained `letStep` and
+  `letRed`; `HasType` gained `tVar` and `tLet`.
 
-**How to discharge.** Add the substitution lemma, extend `Step` with
-a `let`-reduction rule, extend each cases-on-`hs` block in
-preservation. Standard POPLmark machinery; ~150 LoC.
+**Implementation notes.**
+- Variable lookup uses `List.getElem?` (not the deprecated `List.get?`); the
+  append splits go through `List.getElem?_append_left` / `_append_right`.
+- Each derivation is taken apart with `cases h; rename_i` rather than
+  `cases h with | tCtor`, because under `induction e` the binder arguments
+  unify with the context and positional arm naming doesn't align.
+- The `subst_preserves` combined-context invariant closes the `var = Γ₁.length`
+  case by `exact hs` with no separate shift-composition lemma needed.
+
+**Assumptions discharged.**
+- [[A-TG-1.1]] ✓ — `subst` is defined by structural recursion on `Expr`, covering all 22 constructors.
+- [[A-TG-1.2]] ✓ — `weakening` and `subst_preserves` both proven.
 
 ### TG-2 — Decidability of type checking
+
+**Status: LANDED** (`proofs/Tangle.lean` §TG-2, lines 1399–1604).
 
 **Claim.** There is a total function `infer : Expr → Option Ty` such
 that `infer e = some τ ↔ HasType [] e τ`.
 
-**Why valuable.** `Tangle.lean` establishes the *relation* `HasType`
-but not the *algorithm* `typecheck.ml`. Without TG-2 we have a proven
-type system but no proof that the OCaml type checker actually decides
-it.
+**What was proven.**
+- `infer` (line 1410) — total structural recursion on `Expr`; covers all 26 `HasType`
+  rules including the echo/product fragment and let-binding.
+- `infer_complete` (line 1487) — `HasType Γ e τ → infer Γ e = some τ`.
+- `infer_sound` (line 1493) — `infer Γ e = some τ → HasType Γ e τ`.
+- `infer_iff_hasType` (line 1588) — the biconditional packaging both directions.
+- `type_unique` (line 1593) — `HasType Γ e τ₁ → HasType Γ e τ₂ → τ₁ = τ₂` (follows
+  from `infer_complete` + `infer_sound`).
+- `decidableHasType` (line 1601) — `Decidable (HasType [] e τ)` instance via `infer`.
 
-**Assumptions.**
-- [[A-TG-2.1]] Type-checking proceeds by syntactic recursion on `Expr`
-  (no impredicative steps).
-- [[A-TG-2.2]] Equality on `Ty` is decidable (it is — `deriving DecidableEq`).
-
-**How to discharge.** Define `infer` in Lean as a structural recursion
-on `Expr`. Prove the `↔` by case analysis matching the structure of
-`HasType`'s rules.
+**Assumptions discharged.**
+- [[A-TG-2.1]] ✓ — `infer` is defined by structural recursion; Lean's termination
+  checker accepts it without any additional annotation.
+- [[A-TG-2.2]] ✓ — `Ty` carries `deriving DecidableEq`; `Ty` comparisons in `infer`
+  use it directly.
 
 ### TG-3 — OCaml impl refines the Lean spec
 
-**Claim.** For every `e` accepted by `compiler/lib/typecheck.ml` with
-type `τ`, the Lean-level proposition `HasType [] e τ` holds (and
-conversely).
+**Status: LANDED** (2026-06-14, translation-validation level). Full write-up:
+`proofs/TG3-REFINEMENT.md`.
 
-**Why valuable.** Bridges the metatheory (Lean) to the implementation
-(OCaml). Right now we have two systems claiming to be the same; the
-claim is unchecked.
+**Claim.** For every core-fragment `e` accepted by `compiler/lib/typecheck.ml`
+with type `τ`, the Lean-level proposition `HasType [] e (T τ)` holds (and
+conversely on rejection), where `T` is the type translation
+`TNum↦num … TWord n↦word n, TEcho↦echo, TProd↦prod`.
 
-**Assumptions.**
-- [[A-TG-3.1]] The OCaml AST in `compiler/lib/ast.ml` is in bijection
-  with the Lean AST in `Tangle.lean`.
-- [[A-TG-3.2]] OCaml's `String.equal`, `Int.equal` etc. coincide with
-  Lean's notions on the values used.
+**Why valuable.** Bridges the metatheory (Lean) to the implementation (OCaml) —
+the two systems are now checked to be the same on the modelled fragment.
 
-**How to discharge.** Two routes:
-1. _Translation validation._ Generate Lean witnesses from OCaml's
-   typecheck results on a test corpus. Cheap but only empirical.
-2. _Refinement._ Mechanise the OCaml algorithm in Lean and prove
-   equivalence to `HasType`. Expensive but airtight.
+**How it was discharged.**
+1. **Reduction (via TG-2).** `infer_iff_hasType` gives `infer ≡ HasType`, so the
+   claim becomes "OCaml `infer_expr` ≡ Lean `infer` on the core fragment".
+2. **Closure proof.** `infer_expr` keeps core terms inside the translatable types
+   (never `TTangle`), under a strengthened *entire-type-tree* IH. `close` is the
+   sole core gateway out of `T`'s domain and is excluded.
+3. **Machine-checked half.** `proofs/TG3Differential.lean` — 496 obligations
+   `infer [] e = T(infer_expr e) := by decide`, generated from the OCaml checker
+   by `compiler/test/tg3/tg3_emit.ml`, verified by `proofs/check-tg3-differential.sh`.
+4. **OCaml half.** `compiler/test/tg3` `--check`: 1008 `dune runtest` assertions
+   (closure invariant, curated pins, named→de Bruijn translation, divergences).
+
+**Divergences (complete).** D1 `close` (`Tangle[I,I]` vs `word 0`) + family
+D1b/c/d through pipeline/compose/add; D2 `bool == bool` (OCaml accepts, Lean
+rejects). Both sides pinned.
+
+**Assumptions / boundary.**
+- [[A-TG-3.1]] The core OCaml AST/`ty` is in bijection with the Lean AST/`Ty`
+  under `T` (`TTangle` has no image — handled by the closure proof).
+- Not claimed: a universal Lean theorem over all OCaml runs (route 2 below);
+  extra-core features are excluded, not modelled; refinement is OCaml→Lean only.
+- Future route 2 (_airtight refinement_): mechanise the OCaml algorithm in Lean
+  and prove equivalence to `HasType` — out of scope here (see §7 of TG3-REFINEMENT.md).
 
 ### TG-4 — Pretty-print/parse round-trip
+
+**Status: LANDED** (PR #46). `compiler/test/test_roundtrip.ml` is a 26-entry
+corpus including all 8 echo/product constructors (52 round-trip runs); the
+full suite is green (run `dune runtest` for the live total).
 
 **Claim.** `parse(pretty e) = e` for every closed value `e`.
 
@@ -245,7 +358,7 @@ viewer" tooling that re-parses what `pretty` emitted.
 - [[A-TG-4.2]] Lexer never strips information needed by the parser
   (e.g. whitespace within braid literals).
 
-**How to discharge.** Property test in `compiler/test/`.
+**How to discharge.** Property test in `compiler/test/` — discharged.
 
 ### TG-5 — `compositional.ml` rewriter preserves types
 
@@ -300,17 +413,56 @@ by isotopy." Currently `eqBraids` only checks list equality, so
 `σ_1 σ_2 σ_1` and `σ_2 σ_1 σ_2` are reported unequal. That's the
 trivial reading.
 
-**Status.** Current `eqBraids` is a soundness floor (if equal lists
-then equal braids), not a completeness ceiling. Promoting it to
-braid-group equivalence is a research-grade extension.
+**Status — LANDED 2026-07-29 (owner ruling #50), with a stated trusted base.**
+`==` on braids now decides braid-group equivalence in both engines:
+
+- **OCaml** — `eval.ml` `Eq` (and `Isotopy`, which for braids denotes the
+  *same* relation) route through `compiler/lib/braid_equiv.ml` (Dehornoy
+  handle reduction). `Identity` is `VBraid []`, so identity comparisons flow
+  through the same case.
+- **Lean** — `Step.eqBraids` / `eqIdBraid` / `eqBraidId`, and the three
+  `echoEq` counterparts, use `braidEquiv` / `isTrivialBraid`: a faithful
+  in-Lean port of the same procedure, in §BRAID-GROUP EQUIVALENCE of
+  `Tangle.lean`.
+
+`σ₁σ₂σ₁ == σ₂σ₁σ₂` is now `true`, which is what the README's "equivalence is
+defined by isotopy" always claimed. Progress / Preservation / Determinism were
+re-verified **unchanged** — all three need only that the right-hand side is a
+*total function into `Bool`*, which `braidEquiv` is; Determinism in particular
+is immediate, since a function applied to fixed arguments yields a fixed result.
+
+> ### ⚠ TRUSTED, NOT PROVEN — the honest boundary
+> `braidEquiv` is a **definition**, not an axiom: nothing is postulated, and
+> the sorry/axiom gate passes legitimately. But **the gate passing does NOT
+> mean this claim is proven.** What is established is that the metatheory
+> holds *relative to* `braidEquiv`. What is **not** established is that
+> `braidEquiv` correctly **decides** braid-group equality — that is the
+> mechanised Garside/Dehornoy correctness proof, which remains research-grade
+> and out of scope (#51).
+>
+> Correctness is currently evidenced **by testing only**: `compiler/test/tg7`
+> (2220 assertions — defining relations, 400 constructed-equivalent pairs,
+> invariant-distinguished negatives) plus 8 semantics-distinguishing cases in
+> `test_eval.ml`. Testing is not proof.
+>
+> Termination in the Lean port is by an explicit **fuel** bound mirroring the
+> OCaml `max_steps`, not by a well-founded measure. Dehornoy reduction does
+> terminate, but proving that *is* the research obligation above; fuel keeps
+> the definitions total without smuggling in an unproven termination claim.
 
 **Assumptions.**
 - [[A-TG-7.1]] Word problem in the braid group is solvable in
   polynomial time on finitely many strands (Birman–Ko–Lee /
   Garside-normal-form algorithm — known true).
+- [[A-TG-7.2]] `braidEquiv` (Lean) and `braid_equiv.ml` (OCaml) implement
+  Dehornoy handle reduction *correctly*, and agree with each other. Evidenced
+  by testing, not proof. **This is the load-bearing unproven assumption of
+  TG-7.**
 
-**How to discharge.** Implement Birman–Ko–Lee normal form;
-re-prove `Step.eqBraids` against the normal form.
+**How to discharge the remainder.** Mechanise the Dehornoy correctness
+argument (or a Birman–Ko–Lee normal form) in Lean, prove `braidEquiv u v =
+true ↔ u ≡ v` in the braid group, and prove termination to replace the fuel
+bound. That retires [[A-TG-7.2]].
 
 ### TG-8 — Dialect conservativity
 
@@ -334,7 +486,7 @@ weakening core soundness.
 **How to discharge.** Per dialect: define `HasType_dialect` in Lean as
 `HasType` plus new rules; prove embedding preservation.
 
-### TG-9 — LSP diagnostics ⊆ `HasType` failures
+### TG-9 — LSP diagnostics ⊆ `HasType` failures — **LANDED**
 
 **Claim.** Every diagnostic emitted by `tangle-lsp` corresponds to a
 failure of the `HasType` judgment in `Tangle.lean`. (No
@@ -344,13 +496,39 @@ LSP-only diagnostics that the spec doesn't reject.)
 Without it, users get red squigglies in the editor for things that
 compile, or vice versa.
 
-**Assumptions.**
-- [[A-TG-9.1]] `tangle-lsp` shares the OCaml `typecheck.ml` as its
-  diagnostic engine (true by construction; verify after each refactor).
+**How discharged (by construction, not by proof).** The audit found the
+LSP was emitting several **LSP-only false positives** from a hand-rolled
+lexical scan: it skipped `--` comments (Tangle uses `#` / `(* *)`),
+counted delimiters inside string literals, incremented block-depth on
+every `def` (firing "unclosed block" on every multi-def file), and
+flagged function parameters as "possibly undefined". None of these
+corresponded to a `HasType` failure.
 
-**How to discharge.** Audit `tangle-lsp/src/` for any
-LSP-only diagnostic emission; route everything through `typecheck.ml`.
-Single-PR scope.
+The refactor removes all hand-rolled diagnostics and routes the LSP
+through the real compiler:
+- `compiler/lib/check.ml` (`check_source`) is the single diagnostic
+  source — parse-with-recovery + `Typecheck.check_program`.
+- `tanglec --check` exposes it as `SEVERITY⇥LINE⇥COL⇥MESSAGE`.
+- `tangle-lsp` shells out to `tanglec --check` and forwards exactly those
+  diagnostics (`run_compiler_diagnostics`); the lexical scan now only
+  extracts definitions/references for navigation. If the binary is
+  absent it emits nothing — `∅ ⊆ HasType failures`, never a false positive.
+
+So the subset relation holds *by construction*: the LSP cannot author a
+diagnostic the compiler would not produce.
+
+**Evidence.** `compiler/test/test_check.ml` (the diagnostic source is
+exactly parse + type failures) and `tangle-lsp`'s unit tests
+(`parse_check_line`, `analyze` authors no diagnostics, and a gated
+end-to-end delegation test against a real `tanglec`).
+
+**Locations.** Type errors scoped to a definition now carry that `def`'s
+source line (`def_line`, threaded from the parser through `check_program`),
+and the former duplicate diagnostic (pass 1b + pass 2 both reporting a def
+error) is removed. Statement-level errors (assertions / computations /
+weave blocks) are not yet located and still surface at the file top; column
+spans for expressions remain future work. None of this affects the subset
+property — only where a diagnostic points.
 
 ## 4. The "stupid proof" exclusions
 

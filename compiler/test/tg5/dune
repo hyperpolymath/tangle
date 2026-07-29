@@ -1,0 +1,15 @@
+; SPDX-License-Identifier: MPL-2.0
+; TG-5 structural-invariant property test for the compositional PD lowering.
+;   dune runtest  -> runs ./tg5_invariants.exe --check.
+; Provenance ledger:
+;   dune exec ./test/tg5/tg5_invariants.exe -- --emit <path>
+
+(executable
+ (name tg5_invariants)
+ (modules tg5_invariants)
+ (libraries tangle))
+
+(rule
+ (alias runtest)
+ (deps tg5_invariants.exe)
+ (action (run ./tg5_invariants.exe --check)))

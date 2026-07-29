@@ -36,7 +36,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
         with:
           persist-credentials: false
 
@@ -74,7 +74,15 @@ jobs:
           set -euo pipefail
           banned_count=0
           for pat in '\bsorry\b' '\baxiom\b' '\badmit\b' '\bAdmitted\b'; do
-            matches=$(grep -nE "$pat" Tangle.lean | grep -vE "^\s*--|^\s*/--|/-" || true)
+            # NB the comment filter must account for grep -n's "<line>:" prefix.
+            # The previous pattern anchored on "^\s*--", which could NEVER match
+            # once -n had prepended "178:" — so the documented "outside comments"
+            # exemption was dead, and only the unanchored "/-" alternative
+            # excluded anything. It went unnoticed purely because no comment had
+            # yet contained one of these words; the TG-7 trusted-base note does.
+            # Anchoring after the prefix restores the intended behaviour and is
+            # STRICTER than the old unanchored "/-" catch-all.
+            matches=$(grep -nE "$pat" Tangle.lean | grep -vE "^[0-9]+:[[:space:]]*(--|/--|/-)" || true)
             if [ -n "$matches" ]; then
               echo "::error::Forbidden token matching '$pat' in Tangle.lean:"
               echo "$matches"
@@ -85,3 +93,13 @@ jobs:
             exit 1
           fi
           echo "No sorry/axiom/admit/Admitted found outside comments."
+
+      - name: Verify TG-3 translation-validation obligations
+        run: |
+          set -euo pipefail
+          # TG3Differential.lean is generated from OCaml `infer_expr` (see
+          # compiler/test/tg3/tg3_emit.ml) and asserts OCaml ≡ Lean `infer`
+          # on the core fragment.  This builds Tangle to an .olean and
+          # kernel-checks every obligation (the machine-checked half of TG-3;
+          # argument half in proofs/TG3-REFINEMENT.md).
+          bash proofs/check-tg3-differential.sh

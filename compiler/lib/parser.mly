@@ -34,6 +34,9 @@
 
 (* Echo / product forms — surface syntax mirrors pretty.ml output *)
 %token ECHOCLOSE LOWER RESIDUE PAIR FST SND ECHOADD ECHOEQ
+%token WARRANT EVIDENCE
+%token ADDBRACE IF THEN ELSE
+%token AMPAMP BARBAR BANGEQ LE GE PERCENT BANG
 
 (* Invariant names *)
 %token JONES ALEXANDER HOMFLY KAUFFMAN WRITHE LINKING
@@ -87,9 +90,21 @@ statement:
 
 definition:
   | DEF name = IDENT LPAREN ps = param_list RPAREN EQ body = expr
-    { { def_name = name; def_params = ps; def_body = body } }
+    { { def_name = name; def_params = ps; def_body = body; def_line = $startpos(name).Lexing.pos_lnum } }
   | DEF name = IDENT EQ body = expr
-    { { def_name = name; def_params = []; def_body = body } }
+    { { def_name = name; def_params = []; def_body = body; def_line = $startpos(name).Lexing.pos_lnum } }
+  (* Weave as a DEFINITION BODY specifically, rather than as a general
+     primary_expr.  Admitting it into primary_expr made the grammar ambiguous:
+     inside a comma context such as `pair(weave ... yield strands a, b)` the
+     parser cannot tell whether the comma continues the strand list or
+     separates arguments, and menhir resolved that arbitrarily.  Definition
+     bodies are not comma-delimited, so this position is unambiguous — and it
+     is the only position the construct is actually used in
+     (conformance/valid/v02, v08, v09, v12). *)
+  | DEF name = IDENT EQ w = weave_block
+    { { def_name = name; def_params = []; def_body = Weave w; def_line = $startpos(name).Lexing.pos_lnum } }
+  | DEF name = IDENT LPAREN ps = param_list RPAREN EQ w = weave_block
+    { { def_name = name; def_params = ps; def_body = Weave w; def_line = $startpos(name).Lexing.pos_lnum } }
   ;
 
 param_list:
@@ -278,6 +293,23 @@ unary_expr:
     { EchoAdd (e1, e2) }
   | ECHOEQ LPAREN e1 = expr COMMA e2 = expr RPAREN
     { EchoEq (e1, e2) }
+  (* ---- Epistemic (TG-11) ----
+     `warrant[k](claim, evidence)` — at standpoint k, evidence purporting to
+     support claim.  The standpoint is bracketed like a braid index because it
+     is an index, not an operand.
+     `evidence(e)` is the sole elimination: it yields the TOKEN.  There is no
+     surface form that extracts the claim, because there is no such rule —
+     see epi_only_yields_evidence in proofs/Tangle.lean. *)
+  | WARRANT LBRACKET k = INT RBRACKET LPAREN c = expr COMMA ev = expr RPAREN
+    { Warrant (k, c, ev) }
+  | EVIDENCE LPAREN e = expr RPAREN
+    { Evidence e }
+  (* ---- JTV injection island (D2.1) ----
+     `add{ he }` switches to the Harvard DATA grammar entirely. The island is
+     delimited precisely so its operators cannot conflict with TANGLE's:
+     `+` here is arithmetic, `+` outside is connect-sum. *)
+  | ADDBRACE he = hv_expr RBRACE
+    { AddBlock he }
   | t = twist_expr                     { t }
   | MINUS e = primary_expr             { UnaryOp (Neg, e) }
   | e = primary_expr                   { e }
@@ -321,6 +353,66 @@ primary_expr:
     { e }
   | LBRACE e = expr RBRACE
     { e }
+  ;
+
+(* ================================================================== *)
+(*  JTV Harvard DATA grammar (spec section 6.2)                        *)
+(* ================================================================== *)
+(* A SEPARATE hierarchy from TANGLE's. Precedence, loosest to tightest:
+     if/then/else  <  ||  <  &&  <  comparison  <  + -  <  * / %  <  unary
+   Note `if` is total: both branches are required (D2.1). *)
+
+hv_expr:
+  | IF c = hv_expr THEN t = hv_expr ELSE e = hv_expr  { HvIf (c, t, e) }
+  | e = hv_or                                          { e }
+  ;
+
+hv_or:
+  | a = hv_or BARBAR b = hv_and   { HvBin (HvOr, a, b) }
+  | e = hv_and                    { e }
+  ;
+
+hv_and:
+  | a = hv_and AMPAMP b = hv_cmp  { HvBin (HvAnd, a, b) }
+  | e = hv_cmp                    { e }
+  ;
+
+hv_cmp:
+  | a = hv_sum EQEQ   b = hv_sum  { HvBin (HvEq, a, b) }
+  | a = hv_sum BANGEQ b = hv_sum  { HvBin (HvNe, a, b) }
+  | a = hv_sum LT     b = hv_sum  { HvBin (HvLt, a, b) }
+  | a = hv_sum LE     b = hv_sum  { HvBin (HvLe, a, b) }
+  | a = hv_sum GT     b = hv_sum  { HvBin (HvGt, a, b) }
+  | a = hv_sum GE     b = hv_sum  { HvBin (HvGe, a, b) }
+  | e = hv_sum                    { e }
+  ;
+
+hv_sum:
+  | a = hv_sum PLUS  b = hv_prod  { HvBin (HvAdd, a, b) }
+  | a = hv_sum MINUS b = hv_prod  { HvBin (HvSub, a, b) }
+  | e = hv_prod                   { e }
+  ;
+
+hv_prod:
+  | a = hv_prod STAR    b = hv_unary { HvBin (HvMul, a, b) }
+  | a = hv_prod SLASH   b = hv_unary { HvBin (HvDiv, a, b) }
+  | a = hv_prod PERCENT b = hv_unary { HvBin (HvMod, a, b) }
+  | e = hv_unary                     { e }
+  ;
+
+hv_unary:
+  | MINUS e = hv_unary  { HvUn (HvNeg, e) }
+  | BANG  e = hv_unary  { HvUn (HvNot, e) }
+  | e = hv_atom         { e }
+  ;
+
+hv_atom:
+  | n = INT                      { HvInt n }
+  | f = FLOAT                    { HvFloat f }
+  | s = STRING                   { HvStr s }
+  | TRUE                         { HvBool true }
+  | FALSE                        { HvBool false }
+  | LPAREN e = hv_expr RPAREN    { e }
   ;
 
 (* ---- Crossings: (a > b) or (a < b) ---- *)

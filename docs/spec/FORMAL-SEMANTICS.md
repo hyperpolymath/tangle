@@ -1,5 +1,5 @@
 <!--
-SPDX-License-Identifier: MPL-2.0
+SPDX-License-Identifier: CC-BY-SA-4.0
 Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
 # TANGLE & TANGLE-JTV Formal Semantics
@@ -57,11 +57,19 @@ e  ::=  x                                    -- variable reference
      |  cap                                  -- cap primitive
      |  cup                                  -- cup primitive
      |  mirror(e)                            -- mirror image
-     |  reverse(e)                           -- reverse word
+     |  reverse(e)                           -- inverse braid (see §Reverse)
      |  simplify(e)                          -- Reidemeister simplification
      |  f(e₁, ..., eₖ)                      -- function application
      |  match e with arm₁ | ... | armₖ end  -- pattern matching
      |  let x = e₁ in e₂                    -- let binding
+     |  echoClose(e)                              -- echo-close (structured loss)
+     |  lower(e)                                  -- project to result (forget residue)
+     |  residue(e)                                -- recover the witness
+     |  pair(e₁, e₂)                             -- product introduction
+     |  fst(e)                                    -- first projection
+     |  snd(e)                                    -- second projection
+     |  echoAdd(e₁, e₂)                          -- addition with summand residue
+     |  echoEq(e₁, e₂)                           -- equality with operand residue
 ```
 
 ### 1.3 Generators
@@ -83,7 +91,19 @@ p  ::=  identity           -- matches empty word
      |  _                  -- wildcard (matches anything, binds nothing)
 ```
 
-### 1.5 Strand Declarations
+### 1.5 Types (Extended)
+
+The type language is extended with two new type formers:
+
+```
+τ  ::=  ...                           -- (all prior types)
+     |  Echo ρ τ                      -- echo type: result τ carrying witness ρ
+     |  ρ × σ                         -- product type (residue carrier for binary lossy ops)
+```
+
+`Echo ρ τ` is introduced by `echoClose`, `echoAdd`, `echoEq` and eliminated by `lower` (project result) and `residue` (recover witness). `ρ × σ` is the residue carrier type for binary operations: `echoAdd` has residue type `Num × Num`; `echoEq` has residue type `ρ × ρ`.
+
+### 1.6 Strand Declarations
 
 ```
 S  ::=  a₁:T₁, ..., aₙ:Tₙ     -- named typed strand list
@@ -352,7 +372,22 @@ With explicit strand types (in weave context):
 Γ ⊢ mirror(e) : Word[n]
 ```
 
-**Reverse** — inverts all generators in a word:
+**Reverse** — the INVERSE braid. It reverses the word **and** negates every
+exponent:
+
+```
+reverse(g₁ g₂ … gₙ)  =  gₙ⁻¹ … g₂⁻¹ g₁⁻¹        i.e.  reverse(w) = w⁻¹
+```
+
+So `reverse(braid[s1, s2]) = braid[s2^-1, s1^-1]` — NOT `braid[s2, s1]`.
+
+This is easy to get wrong, and was: both `examples/trefoil.tangle` and
+`conformance/valid/v16_close_mirror_reverse.tangle` asserted that `reverse`
+merely reverses order, which is false. `writhe` disproves it — writhe is the
+exponent sum and is invariant under the braid relations, so `w` and `w⁻¹`
+differ in writhe by twice the writhe of `w` and cannot be equal unless the
+writhe is 0. Contrast **mirror**, which negates exponents *in place* and
+leaves the order alone.
 
 ```
 Γ ⊢ e : Word[n]
@@ -441,6 +476,65 @@ yield declarations match B
 ```
 
 Weave blocks can reference all definitions in Γ (D2.8).
+
+#### 3.10.1 Strand quantities — the linear discipline
+
+The rule above has two side conditions that were, until the quantity semiring
+landed, written down and never enforced: the `i ≠ j` on `[T-Cross-Over]` /
+`[T-Cross-Under]` below, and "yield declarations match B". Both are instances
+of one law, so both are now discharged by one check.
+
+TANGLE annotates resources with a quantity from the QTT semiring
+{0, 1, ω} (Atkey 2018), rather than committing the whole language to a single
+substructural discipline:
+
+| quantity | reading | who carries it |
+|---|---|---|
+| `0` | erased — present for typing, absent at runtime | the claim in `Epi[κ, ρ, τ]` (see A-TG-11.1) |
+| `1` | linear — used **exactly** once | **strands** inside a `weave` |
+| `ω` | unrestricted — used freely | braid **words**, and every ordinary binding |
+
+Why a semiring and not a choice:
+
+- **Words are ω.** `x . x` is σ₁², a perfectly good braid. A blanket linear
+  discipline would reject a valid program.
+- **Strands are 1, and linear rather than affine.** A strand is a physical
+  thread. A braid on *n* strands is a *permutation* of those *n* strands, so
+  strand count is a conservation law: a strand may be neither duplicated
+  (contraction) nor dropped (weakening). Affine permits the second, so affine
+  is specifically the wrong discipline here — this is the case that decides it.
+
+Independent uses combine with semiring addition, so two uses of one strand give
+`1 + 1 = ω`, and `ω` is not permitted where `1` was declared.
+
+```
+Σ = {a₁ : (1, T₁), ..., aₙ : (n, Tₙ)}
+uses(body, aᵢ) = 1                    for every i        (no contraction, no
+                                                          unused strand)
+⟦b₁, ..., bₘ⟧ is a permutation of ⟦a₁, ..., aₙ⟧          (m = n; conservation)
+────────────────────────────────────────────────────────── [T-Weave-Linear]
+Σ ⊢ weave strands a₁,...,aₙ into body yield strands b₁,...,bₘ  linear
+```
+
+`uses` is defined by structural recursion over the body, mapping into the
+semiring: a strand occurrence contributes `1`, the two operands of a crossing
+and the two sides of any binary form combine with `+`, and non-strand leaves
+contribute `0`.
+
+Four programs this rejects, each previously accepted in silence:
+
+| program | violated law |
+|---|---|
+| `weave strands a, b into (a > a) yield strands a, b` | contraction (also the spec's `i ≠ j`) |
+| `weave strands a, b into (a > b) yield strands a, b, a` | contraction in the yield |
+| `weave strands a, b into (a > b) yield strands a` | weakening — a strand vanished |
+| `weave strands a, b into (a > b) yield strands a, c` | `c` is not in the input boundary |
+
+**Scope.** This is the semiring applied *to strands*, which is where the
+discipline bites and where the soundness gap was. TANGLE's core judgement is
+still `Γ ⊢ e : τ` without quantities on ordinary bindings; a full QTT judgement
+`Γ ⊢ e :^q τ` would change the judgement shape and require re-proving the
+metatheory, and is tracked separately.
 
 **Crossing in weave context**:
 
@@ -601,7 +695,60 @@ result_type(linking)   = Num     -- integer or half-integer (linking number)
 MVP note: Polynomials are evaluated at fixed values, returning Num. Future versions
 may return a Polynomial type for symbolic manipulation.
 
-### 3.16 Program Typing (D1.13)
+### 3.16 Echo Types and Product Types
+
+```
+                Γ ⊢ e : Word[n]
+─────────────────────────────────────────────────  [T-Echo-Close]
+  Γ ⊢ echoClose(e) : Echo (Word[n]) (Word[0])
+
+
+        Γ ⊢ e : Echo ρ τ
+─────────────────────────────  [T-Lower]
+      Γ ⊢ lower(e) : τ
+
+
+        Γ ⊢ e : Echo ρ τ
+─────────────────────────────  [T-Residue]
+     Γ ⊢ residue(e) : ρ
+
+
+    Γ ⊢ e₁ : α    Γ ⊢ e₂ : β
+─────────────────────────────────  [T-Pair]
+    Γ ⊢ pair(e₁, e₂) : α × β
+
+
+      Γ ⊢ e : α × β
+─────────────────────────  [T-Fst]
+      Γ ⊢ fst(e) : α
+
+
+      Γ ⊢ e : α × β
+─────────────────────────  [T-Snd]
+      Γ ⊢ snd(e) : β
+
+
+    Γ ⊢ e₁ : Num    Γ ⊢ e₂ : Num
+────────────────────────────────────────────────────  [T-Echo-Add]
+   Γ ⊢ echoAdd(e₁, e₂) : Echo (Num × Num) Num
+
+
+       Γ ⊢ e₁ : Word[n]    Γ ⊢ e₂ : Word[n]
+──────────────────────────────────────────────────────────  [T-Echo-Eq-Word]
+   Γ ⊢ echoEq(e₁, e₂) : Echo (Word[n] × Word[n]) Bool
+
+         Γ ⊢ e₁ : Num    Γ ⊢ e₂ : Num
+──────────────────────────────────────────────────────  [T-Echo-Eq-Num]
+   Γ ⊢ echoEq(e₁, e₂) : Echo (Num × Num) Bool
+
+         Γ ⊢ e₁ : Str    Γ ⊢ e₂ : Str
+──────────────────────────────────────────────────────  [T-Echo-Eq-Str]
+   Γ ⊢ echoEq(e₁, e₂) : Echo (Str × Str) Bool
+```
+
+(Note: `T-Echo-Val` is an internal rule for the `echoVal(r, v)` intermediate form produced during evaluation; it does not appear in surface typing.)
+
+### 3.17 Program Typing (D1.13)
 
 A program is well-typed if all statements typecheck under the accumulated Γ.
 
@@ -854,7 +1001,109 @@ tw = twist_generators(n)       -- full twist on n strands
 Where `twist_generators(n)` produces the canonical full twist braid word
 Δ² = (s₁ s₂ ... s_{n-1})ⁿ (the Garside element squared).
 
-### 4.10 Evaluation Rules — Pattern Matching
+### 4.10 Evaluation Rules — Echo Types and Product Types
+
+**Echo-close reduction:**
+
+```
+        e → e'
+─────────────────────────────────────  [E-Echo-Close-Step]
+  echoClose(e) → echoClose(e')
+
+─────────────────────────────────────────────────────────  [E-Echo-Close-Word]
+  echoClose(braid[gs]) → echoVal(braid[gs], identity)
+
+─────────────────────────────────────────────────────────  [E-Echo-Close-Id]
+  echoClose(identity) → echoVal(identity, identity)
+```
+
+**Lower / residue projection:**
+
+```
+          e → e'
+──────────────────────────  [E-Lower-Step]
+   lower(e) → lower(e')
+
+  isValue(r)  isValue(v)
+──────────────────────────  [E-Lower-Val]
+ lower(echoVal(r, v)) → v
+
+          e → e'
+─────────────────────────────  [E-Residue-Step]
+  residue(e) → residue(e')
+
+   isValue(r)  isValue(v)
+─────────────────────────────  [E-Residue-Val]
+residue(echoVal(r, v)) → r
+```
+
+**Product introduction and projection:**
+
+```
+        e₁ → e₁'
+─────────────────────────────────  [E-Pair-Left]
+  pair(e₁, e₂) → pair(e₁', e₂)
+
+    isValue(v₁)    e₂ → e₂'
+─────────────────────────────────  [E-Pair-Right]
+  pair(v₁, e₂) → pair(v₁, e₂')
+
+         e → e'
+──────────────────────────  [E-Fst-Step]
+   fst(e) → fst(e')
+
+  isValue(v₁)  isValue(v₂)
+──────────────────────────────  [E-Fst-Pair]
+  fst(pair(v₁, v₂)) → v₁
+
+         e → e'
+──────────────────────────  [E-Snd-Step]
+   snd(e) → snd(e')
+
+  isValue(v₁)  isValue(v₂)
+──────────────────────────────  [E-Snd-Pair]
+  snd(pair(v₁, v₂)) → v₂
+```
+
+**Echo-preserving addition:**
+
+```
+              e₁ → e₁'
+──────────────────────────────────────────────  [E-EchoAdd-Left]
+  echoAdd(e₁, e₂) → echoAdd(e₁', e₂)
+
+      isValue(v₁)    e₂ → e₂'
+──────────────────────────────────────────────  [E-EchoAdd-Right]
+  echoAdd(v₁, e₂) → echoAdd(v₁, e₂')
+
+──────────────────────────────────────────────────────────────────────  [E-EchoAdd-Nums]
+  echoAdd(n₁, n₂) → echoVal(pair(n₁, n₂), n₁ + n₂)
+```
+
+**Echo-preserving equality (shown for Num; analogous for Str, Word[n], identity):**
+
+```
+              e₁ → e₁'
+──────────────────────────────────────────────  [E-EchoEq-Left]
+  echoEq(e₁, e₂) → echoEq(e₁', e₂)
+
+      isValue(v₁)    e₂ → e₂'
+──────────────────────────────────────────────  [E-EchoEq-Right]
+  echoEq(v₁, e₂) → echoEq(v₁, e₂')
+
+──────────────────────────────────────────────────────────────────────────────────  [E-EchoEq-Nums]
+  echoEq(n₁, n₂) → echoVal(pair(n₁, n₂), n₁ == n₂)
+
+─────────────────────────────────────────────────────────────────────────  [E-EchoEq-Strs]
+  echoEq(s₁, s₂) → echoVal(pair(s₁, s₂), s₁ == s₂)
+
+──────────────────────────────────────────────────────────────────────────────────────────────  [E-EchoEq-Braids]
+  echoEq(braid[gs₁], braid[gs₂]) → echoVal(pair(braid[gs₁], braid[gs₂]), gs₁ == gs₂)
+```
+
+(Additional rules `E-EchoEq-IdId`, `E-EchoEq-IdBraid`, `E-EchoEq-BraidId` handle identity/braid combinations analogously.)
+
+### 4.11 Evaluation Rules — Pattern Matching
 
 **Successful match** (D1.4):
 
@@ -887,7 +1136,7 @@ match(v, x)                    = {x ↦ v}                              -- [M-Va
 match(v, _)                    = {}                                    -- [M-Wildcard]
 ```
 
-### 4.11 Evaluation Rules — Let Bindings
+### 4.12 Evaluation Rules — Let Bindings
 
 ```
 ρ ⊢ e₁ ⇓ v₁       ρ, x ↦ v₁ ⊢ e₂ ⇓ v₂
@@ -895,7 +1144,7 @@ match(v, _)                    = {}                                    -- [M-Wil
 ρ ⊢ let x = e₁ in e₂ ⇓ v₂
 ```
 
-### 4.12 Evaluation Rules — Function Application
+### 4.13 Evaluation Rules — Function Application
 
 ```
 ρ(f) = closure(x₁, ..., xₖ, body)
@@ -907,7 +1156,7 @@ match(v, _)                    = {}                                    -- [M-Wil
 
 Note: f is in ρ (recursive calls resolve to the same closure), enabling recursion (D1.3).
 
-### 4.13 Evaluation Rules — Assertions
+### 4.14 Evaluation Rules — Assertions
 
 Assertions evaluate the expression and check for truth:
 
@@ -926,7 +1175,7 @@ For `assert e₁ ~ e₂`, evaluation first reduces `e₁ ~ e₂` via [E-Isotopy]
 to `bool(b)`, then [E-Assert-Pass] or [E-Assert-Fail] applies.
 Similarly for `assert e₁ == e₂` via [E-Eq-*].
 
-### 4.14 Evaluation Rules — Invariant Computation
+### 4.15 Evaluation Rules — Invariant Computation
 
 ```
 ρ ⊢ e ⇓ v       v is closed tangle or word
@@ -937,7 +1186,7 @@ result = compute_invariant(inv, v)
 
 `compute_invariant` dispatches to the backend/plugin for the named invariant (D1.12).
 
-### 4.15 Error Propagation
+### 4.16 Error Propagation
 
 Errors propagate strictly (halt short-circuits evaluation):
 
@@ -954,7 +1203,7 @@ Errors propagate strictly (halt short-circuits evaluation):
 
 This applies uniformly to all binary operators and function arguments.
 
-### 4.16 Program Evaluation (D1.13)
+### 4.17 Program Evaluation (D1.13)
 
 ```
 ρ₀ = ·
