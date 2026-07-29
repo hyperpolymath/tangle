@@ -198,6 +198,42 @@ let dump_tokens (filename : string) : unit =
     Printf.eprintf "Lexer error in %s: %s\n" filename msg;
     exit 1
 
+(** Emit the judgement evidence graph for each definition in a file.
+    Every graph is CHECKED before being printed: an unchecked derivation is a
+    log, not evidence.  See jeg.mli. *)
+let derive_file ?(dot = false) (filename : string) : unit =
+  let prog = parse_file filename in
+  let gamma = ref [] in
+  let failures = ref 0 in
+  List.iter (fun stmt ->
+    match stmt with
+    | Tangle.Ast.Definition d when d.Tangle.Ast.def_params = [] ->
+      begin try
+        let dv = Tangle.Jeg.derive !gamma d.Tangle.Ast.def_body in
+        (* Re-validate independently before showing it. *)
+        begin match Tangle.Jeg.check dv with
+        | Ok () -> ()
+        | Error es ->
+          incr failures;
+          List.iter (fun (e : Tangle.Jeg.check_error) ->
+            Printf.eprintf "JEG CHECK FAILED [%s]: %s\n" e.Tangle.Jeg.ce_rule e.Tangle.Jeg.ce_reason) es
+        end;
+        if dot then print_string (Tangle.Jeg.to_dot dv)
+        else begin
+          Printf.printf "== %s ==  (%d nodes, depth %d)\n"
+            d.Tangle.Ast.def_name (Tangle.Jeg.size dv) (Tangle.Jeg.depth dv);
+          print_string (Tangle.Jeg.to_string dv);
+          print_newline ()
+        end;
+        let ty = Tangle.Typecheck.infer_expr !gamma [] d.Tangle.Ast.def_body in
+        gamma := Tangle.Typecheck.env_bind_val !gamma d.Tangle.Ast.def_name ty
+      with Tangle.Typecheck.Type_error msg ->
+        Printf.eprintf "Type error in '%s': %s\n" d.Tangle.Ast.def_name msg
+      end
+    | _ -> ()
+  ) prog;
+  if !failures > 0 then exit 1
+
 (** Type-check and evaluate a TANGLE source file, printing results. *)
 let eval_file (filename : string) : unit =
   let prog = parse_file filename in
@@ -279,6 +315,8 @@ let usage () =
   Printf.eprintf "  --eval <file>          Evaluate a program\n";
   Printf.eprintf "  --check <file>         Emit parse + type diagnostics (LSP backend)\n";
   Printf.eprintf "  --compile-pd <file>    Compile compositional defs to PD/Skein payloads\n";
+  Printf.eprintf "  --derive <file>        Emit the judgement evidence graph (proof tree)\n";
+  Printf.eprintf "  --derive-dot <file>    Emit the judgement evidence graph as Graphviz DOT\n";
   Printf.eprintf "  --repl                 Start interactive REPL\n";
   Printf.eprintf "  <file>                 Parse and pretty-print AST\n";
   exit 1
@@ -293,6 +331,10 @@ let () =
     check_file filename
   | [_; "--compile-pd"; filename] ->
     compile_pd_file filename
+  | [_; "--derive"; filename] ->
+    derive_file filename
+  | [_; "--derive-dot"; filename] ->
+    derive_file ~dot:true filename
   | [_; "--repl"] ->
     Tangle.Repl.run ()
   | [_; filename] ->
