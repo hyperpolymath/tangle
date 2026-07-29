@@ -74,3 +74,13 @@ crg-badge:
 
 secret-scan-trufflehog:
     @command -v trufflehog >/dev/null && trufflehog filesystem . --only-verified || true
+
+# Run the language's own programs (examples/ + conformance/) — same gate as CI
+corpus:
+    @cd compiler && dune build
+    @bash scripts/check-corpus.sh
+
+# Compiler build + full test suite (4,000+ assertions) + the corpus gate.
+check-all:
+    @cd compiler && dune build && dune test --force
+    @bash scripts/check-corpus.sh
