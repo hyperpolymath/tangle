@@ -470,79 +470,29 @@ let rec infer_expr (gamma : env) (sigma : strand_ctx) (e : expr) : ty =
 
   (* ---- Unary operators ---- *)
 
-  | UnaryOp (Neg, e1) ->
-    let t = infer_expr gamma sigma e1 in
-    begin match t with
-    | TNum -> TNum
-    | _    -> type_error "Negation requires Num, got %s" (pp_ty t)
-    end
-
-  | UnaryOp (Not, e1) ->
-    let t = infer_expr gamma sigma e1 in
-    begin match t with
-    | TBool -> TBool
-    | _     -> type_error "Logical not requires Bool, got %s" (pp_ty t)
-    end
+  | UnaryOp (op, e1) -> infer_unop op (infer_expr gamma sigma e1)
 
   (* ---- Tier 1 primitives ---- *)
 
   (* [T-Close-Word], [T-Close-Tangle] *)
-  | Close e1 ->
-    let t = infer_expr gamma sigma e1 in
-    begin match t with
-    | TWord _        -> TTangle (empty_boundary, empty_boundary)
-    | TTangle (a, b) ->
-      if List.length a <> List.length b then
-        type_error "close requires |A| = |B|, got |%s| = %d and |%s| = %d"
-          (pp_boundary a) (List.length a)
-          (pp_boundary b) (List.length b);
-      TTangle (empty_boundary, empty_boundary)
-    | _ -> type_error "close requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
-    end
+  | Close e1 -> infer_close (infer_expr gamma sigma e1)
 
   (* [T-Mirror-Word], [T-Mirror-Tangle] *)
-  | Mirror e1 ->
-    let t = infer_expr gamma sigma e1 in
-    begin match t with
-    | TWord n        -> TWord n
-    | TTangle (a, b) -> TTangle (b, a)
-    | _ -> type_error "mirror requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
-    end
+  | Mirror e1 -> infer_mirror (infer_expr gamma sigma e1)
 
   (* [T-Reverse] *)
-  | Reverse e1 ->
-    let t = infer_expr gamma sigma e1 in
-    begin match t with
-    | TWord n -> TWord n
-    | _       -> type_error "reverse requires Word[n], got %s" (pp_ty t)
-    end
+  | Reverse e1 -> infer_reverse (infer_expr gamma sigma e1)
 
   (* [T-Simplify-Word], [T-Simplify-Tangle] *)
-  | Simplify e1 ->
-    let t = infer_expr gamma sigma e1 in
-    begin match t with
-    | TWord n        -> TWord n
-    | TTangle (a, b) -> TTangle (a, b)
-    | _ -> type_error "simplify requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
-    end
+  | Simplify e1 -> infer_simplify (infer_expr gamma sigma e1)
 
   (* [T-Cap], [T-Cap-Typed] *)
   | Cap (e1, e2) ->
-    let t1 = infer_expr gamma sigma e1 in
-    let t2 = infer_expr gamma sigma e2 in
-    (* Cap creates a tangle that absorbs two strands from above *)
-    let s1 = strand_type_of_ty t1 in
-    let s2 = strand_type_of_ty t2 in
-    TTangle ([s1; s2], empty_boundary)
+    infer_cap (infer_expr gamma sigma e1) (infer_expr gamma sigma e2)
 
   (* [T-Cup], [T-Cup-Typed] *)
   | Cup (e1, e2) ->
-    let t1 = infer_expr gamma sigma e1 in
-    let t2 = infer_expr gamma sigma e2 in
-    (* Cup creates a tangle that emits two strands below *)
-    let s1 = strand_type_of_ty t1 in
-    let s2 = strand_type_of_ty t2 in
-    TTangle (empty_boundary, [s1; s2])
+    infer_cup (infer_expr gamma sigma e1) (infer_expr gamma sigma e2)
 
   (* [T-Twist-Word], [T-Twist-Tangle] (D1.18) *)
   | Twist e1 ->
@@ -566,12 +516,7 @@ let rec infer_expr (gamma : env) (sigma : strand_ctx) (e : expr) : ty =
       TTangle ([strand_to_type ea.strand_ty], [strand_to_type ea.strand_ty])
     | _ ->
       (* [T-Twist-Word] / [T-Twist-Tangle]: the standalone forms. *)
-      let t = infer_expr gamma sigma e1 in
-      begin match t with
-      | TWord n        -> TWord n
-      | TTangle (a, b) -> TTangle (a, b)
-      | _ -> type_error "twist requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
-      end
+      infer_twist (infer_expr gamma sigma e1)
     end
 
   (* ---- Crossings in weave context [T-Cross-Over], [T-Cross-Under] ---- *)
@@ -624,12 +569,7 @@ let rec infer_expr (gamma : env) (sigma : strand_ctx) (e : expr) : ty =
        requiring equal widths.  Arms at Word[0] and Word[2] describe the same
        kind of thing at different strand counts; the join is the wider.
        Everything else must still match exactly. *)
-    let join_ty a b =
-      match a, b with
-      | TWord n, TWord m -> Some (TWord (max n m))
-      | x, y when x = y  -> Some x
-      | _                -> None
-    in
+    let join_ty = join_arm_ty in
     let result_ty =
       List.fold_left (fun acc ty ->
         match acc with
@@ -661,56 +601,26 @@ let rec infer_expr (gamma : env) (sigma : strand_ctx) (e : expr) : ty =
    *   [T-Echo-Add]   echoAdd a b  : Echo[Num × Num, Num]
    *   [T-Echo-Eq]    echoEq a b   : Echo[ρ × ρ, Bool]        for ρ ∈ {Num, Str, Word[n]}
    *)
-  | EchoClose e1 ->
-    begin match infer_expr gamma sigma e1 with
-    | TWord n -> TEcho (TWord n, TWord 0)
-    | t -> type_error "echoClose requires Word[n], got %s" (pp_ty t)
-    end
+  | EchoClose e1 -> infer_echo_close (infer_expr gamma sigma e1)
 
-  | Lower e1 ->
-    begin match infer_expr gamma sigma e1 with
-    | TEcho (_, t) -> t
-    | t -> type_error "lower requires Echo[_, _], got %s" (pp_ty t)
-    end
+  | Lower e1 -> infer_lower (infer_expr gamma sigma e1)
 
-  | Residue e1 ->
-    begin match infer_expr gamma sigma e1 with
-    | TEcho (r, _) -> r
-    | t -> type_error "residue requires Echo[_, _], got %s" (pp_ty t)
-    end
+  | Residue e1 -> infer_residue (infer_expr gamma sigma e1)
 
   | Pair (e1, e2) ->
     let t1 = infer_expr gamma sigma e1 in
     let t2 = infer_expr gamma sigma e2 in
     TProd (t1, t2)
 
-  | Fst e1 ->
-    begin match infer_expr gamma sigma e1 with
-    | TProd (a, _) -> a
-    | t -> type_error "fst requires a product, got %s" (pp_ty t)
-    end
+  | Fst e1 -> infer_fst (infer_expr gamma sigma e1)
 
-  | Snd e1 ->
-    begin match infer_expr gamma sigma e1 with
-    | TProd (_, b) -> b
-    | t -> type_error "snd requires a product, got %s" (pp_ty t)
-    end
+  | Snd e1 -> infer_snd (infer_expr gamma sigma e1)
 
   | EchoAdd (e1, e2) ->
-    begin match infer_expr gamma sigma e1, infer_expr gamma sigma e2 with
-    | TNum, TNum -> TEcho (TProd (TNum, TNum), TNum)
-    | t1, t2 -> type_error "echoAdd requires Num, Num, got %s, %s" (pp_ty t1) (pp_ty t2)
-    end
+    infer_echo_add (infer_expr gamma sigma e1) (infer_expr gamma sigma e2)
 
   | EchoEq (e1, e2) ->
-    begin match infer_expr gamma sigma e1, infer_expr gamma sigma e2 with
-    | TNum, TNum -> TEcho (TProd (TNum, TNum), TBool)
-    | TStr, TStr -> TEcho (TProd (TStr, TStr), TBool)
-    | TWord n, TWord m when n = m -> TEcho (TProd (TWord n, TWord n), TBool)
-    | t1, t2 ->
-      type_error "echoEq requires matching Num/Str/Word[n] operands, got %s, %s"
-        (pp_ty t1) (pp_ty t2)
-    end
+    infer_echo_eq (infer_expr gamma sigma e1) (infer_expr gamma sigma e2)
 
 (** Infer the type of a binary operation given operand types.
  *  Implements rules from sections 3.4, 3.5, 3.6.
@@ -859,6 +769,138 @@ and check_compatible (expected : ty) (actual : ty) (fname : string) : unit =
   | _ ->
     type_error "Function '%s': expected %s but got %s"
       fname (pp_ty expected) (pp_ty actual)
+
+(* ================================================================== *)
+(*  Type-level rule functions                                          *)
+(* ================================================================== *)
+(* One function per typing rule, taking the PREMISE types and returning the
+   conclusion type (or raising Type_error).  [infer_binop] was always written
+   this way; these bring the remaining rules into the same shape.
+
+   The point is not tidiness.  The Judgement Evidence Graph (jeg.ml) has to
+   re-derive each rule in order to reject forged derivations, and a JEG that
+   re-implements the rules independently can DRIFT from the typechecker — at
+   which point it certifies a rule the compiler does not actually apply, and
+   the evidence is worthless.  Sharing one definition makes drift impossible
+   by construction: there is nothing to keep in sync. *)
+
+and infer_unop (op : unaryop) (t : ty) : ty =
+  match op, t with
+  | Neg, TNum  -> TNum
+  | Neg, _     -> type_error "Negation requires Num, got %s" (pp_ty t)
+  | Not, TBool -> TBool
+  | Not, _     -> type_error "Logical not requires Bool, got %s" (pp_ty t)
+
+(** [T-Close-Word], [T-Close-Tangle].  Closure needs |A| = |B| — you cannot
+    join a boundary to one of a different size. *)
+and infer_close (t : ty) : ty =
+  match t with
+  | TWord _        -> TTangle (empty_boundary, empty_boundary)
+  | TTangle (a, b) ->
+    if List.length a <> List.length b then
+      type_error "close requires |A| = |B|, got |%s| = %d and |%s| = %d"
+        (pp_boundary a) (List.length a) (pp_boundary b) (List.length b);
+    TTangle (empty_boundary, empty_boundary)
+  | _ -> type_error "close requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
+
+(** [T-Mirror-Word], [T-Mirror-Tangle].  Mirroring a tangle swaps its
+    boundaries; mirroring a word keeps its width. *)
+and infer_mirror (t : ty) : ty =
+  match t with
+  | TWord n        -> TWord n
+  | TTangle (a, b) -> TTangle (b, a)
+  | _ -> type_error "mirror requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
+
+(** [T-Reverse].  Words only — reverse is w^-1, and inversion is not defined
+    on a tangle's boundary pair. *)
+and infer_reverse (t : ty) : ty =
+  match t with
+  | TWord n -> TWord n
+  | _       -> type_error "reverse requires Word[n], got %s" (pp_ty t)
+
+(** [T-Simplify-Word], [T-Simplify-Tangle].  Reidemeister reduction preserves
+    the type: it changes the representative, not what it is a representative
+    of. *)
+and infer_simplify (t : ty) : ty =
+  match t with
+  | TWord n        -> TWord n
+  | TTangle (a, b) -> TTangle (a, b)
+  | _ -> type_error "simplify requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
+
+(** [T-Twist-Word], [T-Twist-Tangle] — the STANDALONE forms only.
+    [T-Twist-Strand] is not here because it reads the strand context rather
+    than a premise type, so it has no type-in/type-out shape. *)
+and infer_twist (t : ty) : ty =
+  match t with
+  | TWord n        -> TWord n
+  | TTangle (a, b) -> TTangle (a, b)
+  | _ -> type_error "twist requires Word[n] or Tangle[A,B], got %s" (pp_ty t)
+
+(** [T-Cap] — absorbs two strands from above. *)
+and infer_cap (t1 : ty) (t2 : ty) : ty =
+  TTangle ([strand_type_of_ty t1; strand_type_of_ty t2], empty_boundary)
+
+(** [T-Cup] — emits two strands below. *)
+and infer_cup (t1 : ty) (t2 : ty) : ty =
+  TTangle (empty_boundary, [strand_type_of_ty t1; strand_type_of_ty t2])
+
+(** [T-Echo-Close].  Residue-retaining closure: the word that was closed is
+    kept as the residue rather than discarded. *)
+and infer_echo_close (t : ty) : ty =
+  match t with
+  | TWord n -> TEcho (TWord n, TWord 0)
+  | _ -> type_error "echoClose requires Word[n], got %s" (pp_ty t)
+
+(** [T-Lower] — project an echo to its result, discarding the residue. *)
+and infer_lower (t : ty) : ty =
+  match t with
+  | TEcho (_, r) -> r
+  | _ -> type_error "lower requires Echo[_, _], got %s" (pp_ty t)
+
+(** [T-Residue] — recover the witness. *)
+and infer_residue (t : ty) : ty =
+  match t with
+  | TEcho (r, _) -> r
+  | _ -> type_error "residue requires Echo[_, _], got %s" (pp_ty t)
+
+(** [T-Fst], [T-Snd]. *)
+and infer_fst (t : ty) : ty =
+  match t with
+  | TProd (a, _) -> a
+  | _ -> type_error "fst requires a product, got %s" (pp_ty t)
+
+and infer_snd (t : ty) : ty =
+  match t with
+  | TProd (_, b) -> b
+  | _ -> type_error "snd requires a product, got %s" (pp_ty t)
+
+(** [T-Echo-Add] — addition that keeps both summands as residue. *)
+and infer_echo_add (t1 : ty) (t2 : ty) : ty =
+  match t1, t2 with
+  | TNum, TNum -> TEcho (TProd (TNum, TNum), TNum)
+  | _ -> type_error "echoAdd requires Num, Num, got %s, %s" (pp_ty t1) (pp_ty t2)
+
+(** [T-Echo-Eq] — equality that keeps both operands as residue.  This is the
+    operation that makes loss structured: ordinary `==` forgets what it
+    compared, and the residue is exactly what it forgot. *)
+and infer_echo_eq (t1 : ty) (t2 : ty) : ty =
+  match t1, t2 with
+  | TNum, TNum -> TEcho (TProd (TNum, TNum), TBool)
+  | TStr, TStr -> TEcho (TProd (TStr, TStr), TBool)
+  | TWord n, TWord m when n = m -> TEcho (TProd (TWord n, TWord n), TBool)
+  | _ ->
+    type_error "echoEq requires matching Num/Str/Word[n] operands, got %s, %s"
+      (pp_ty t1) (pp_ty t2)
+
+(** The join used by [T-Match] to reconcile arm types.  Words agree UP TO
+    WIDTH (#92): arms at Word[0] and Word[2] describe the same kind of thing
+    at different strand counts, and the join is the wider.  Everything else
+    must match exactly. *)
+and join_arm_ty (a : ty) (b : ty) : ty option =
+  match a, b with
+  | TWord n, TWord m -> Some (TWord (max n m))
+  | x, y when x = y  -> Some x
+  | _                -> None
 
 (** Extract a strand_type from a type expression for cap/cup.
  *  Numbers/strings produce default strands; this is a simplified model.
