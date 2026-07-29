@@ -29,10 +29,16 @@ on:
     branches: [main]
     paths:
       - 'compiler/**'
+      - 'examples/**'
+      - 'conformance/**'
+      - 'scripts/check-corpus.sh'
       - '.github/workflows/ocaml-ci.yml'
   pull_request:
     paths:
       - 'compiler/**'
+      - 'examples/**'
+      - 'conformance/**'
+      - 'scripts/check-corpus.sh'
       - '.github/workflows/ocaml-ci.yml'
   workflow_dispatch: {}
 
@@ -92,6 +98,15 @@ jobs:
             exit 1
           fi
           echo "OCaml compiler: build + all suites GREEN."
+
+      - name: Corpus gate (examples + conformance)
+        run: |
+          set -euo pipefail
+          # Runs the language's OWN programs. Neither examples/ nor conformance/
+          # was executed by anything before this, which is how
+          # examples/isotopy.tangle — the demonstration of the central claim —
+          # sat failing its own assertions until TG-7 (#87) fixed `~`.
+          bash scripts/check-corpus.sh
 
       - name: TG-7 semantics guard
         working-directory: compiler
