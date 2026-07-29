@@ -1,14 +1,23 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
 // Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-// Template: QUICKSTART-DEV.adoc — clone → build → test → PR
-// Replace tangle, {{BUILD_CMD}}, {{TEST_CMD}}, {{LANG_STACK}} with actuals
+// QUICKSTART-DEV.adoc — clone → build → test → PR (instantiated for tangle, #56)
 = tangle — Quick Start for Developers
 :toc:
 :toclevels: 2
 
 == Tech Stack
 
-{{LANG_STACK}}
+* *OCaml* (27 files) — the compiler: lexer (`ocamllex`), parser (`menhir`),
+  typechecker, tree-walking interpreter, and the TG-3/5/7/8 checkers.
+  Built with *dune*.
+* *Lean 4* (pinned `leanprover/lean4:v4.14.0`) — the mechanised proofs in
+  `proofs/Tangle.lean`: Progress, Preservation, Determinism, Type Safety, plus
+  the TG-2 decidability results and the TG-7 braid-group equivalence port.
+* *Rust* (18 files) — `compiler/tangle-lsp` (language server) and
+  `compiler/tangle-wasm` (WASM backend + differential tests).
+* *Zig* (3 files) — `ffi/` bridge.
+
+Guix is the primary environment (`guix.scm`).
 
 == Set Up Development Environment
 
@@ -32,21 +41,46 @@ nix develop
 ----
 git clone https://github.com/hyperpolymath/tangle.git
 cd tangle
-just setup-dev
+
+# OCaml toolchain (Debian/Ubuntu). `just setup-dev` never existed.
+sudo apt-get install -y ocaml ocaml-dune menhir
+cd compiler && dune build
+
+# Lean toolchain, pinned — only needed if you touch proofs/
+bash proofs/bootstrap-lean.sh
 ----
 
 == Build
 
 [source,bash]
 ----
-{{BUILD_CMD}}
+cd compiler && dune build      # the OCaml compiler -> _build/default/bin/main.exe
+----
+
+The Lean proofs are checked separately (they need the pinned toolchain):
+
+[source,bash]
+----
+bash proofs/bootstrap-lean.sh  # installs the pinned Lean, or reuses it
+cd proofs && lean Tangle.lean  # must report 0 errors
 ----
 
 == Test
 
 [source,bash]
 ----
-{{TEST_CMD}}
+just check-all                 # build + full suite (4,000+ assertions) + corpus gate
+----
+
+Or the pieces individually:
+
+[source,bash]
+----
+cd compiler && dune test --force   # TG-3 1008, TG-5 189, TG-7 2220, TG-8 2311,
+                                   # plus parser/typecheck/eval/e2e/property suites
+just corpus                        # run the language's OWN programs
+                                   # (examples/ + conformance/) — see #89
+bash proofs/check-tg3-differential.sh   # 496 kernel-checked TG-3 obligations
 ----
 
 == Project Structure
@@ -54,15 +88,22 @@ just setup-dev
 [source]
 ----
 tangle/
-├── src/                  # Source code
-├── src/abi/              # Idris2 ABI definitions (if applicable)
-├── ffi/zig/              # Zig FFI bridge (if applicable)
-├── tests/                # Test suite
-├── docs/                 # Documentation
-├── .machine_readable/    # Checkpoint files (STATE, META, ECOSYSTEM)
-├── Justfile              # Task runner recipes
-├── guix.scm              # Guix environment
-├── flake.nix             # Nix environment (fallback)
+├── compiler/             # THE compiler (OCaml, dune)
+│   ├── lib/              #   lexer, parser, typecheck, eval, braid_equiv, dialects
+│   ├── bin/main.ml       #   CLI: <file> | --eval | --check | --compile-pd | --repl
+│   ├── test/             #   suites incl. tg3/ tg5/ tg7/ tg8/
+│   ├── tangle-lsp/       #   language server (Rust)
+│   └── tangle-wasm/      #   WASM backend + differential tests (Rust)
+├── proofs/               # Lean 4 — Tangle.lean, TG3Differential.lean
+├── examples/             # runnable .tangle programs (gated, see #89)
+├── conformance/          # valid/ + invalid/ corpus + runner
+├── dialects/             # per-dialect specs (TG-8)
+├── spec/                 # language specification
+├── ffi/                  # Zig FFI bridge
+├── scripts/              # check-corpus.sh, check-rsr-instantiation.sh
+├── .machine_readable/    # A2ML checkpoints + contractiles
+├── Justfile              # task runner (authoritative recipe list)
+├── guix.scm              # Guix environment (primary)
 └── 0-AI-MANIFEST.a2ml    # AI agent entry point
 ----
 
@@ -70,29 +111,56 @@ tangle/
 
 [source,bash]
 ----
-just build          # Build the project
-just test           # Run tests
-just doctor         # Self-diagnostic
-just lint           # Lint and format
-just panic-scan     # Security scan via panic-attacker
-just tour           # Guided tour of the codebase
+just check-all      # build + full test suite + corpus gate  (the one to use)
+just corpus         # run examples/ + conformance/ against the built compiler
+just doctor         # self-diagnostic
+just tour           # guided tour of the codebase
+just must-check     # all MUST invariants
+just trust-verify   # all TRUST invariants
+just crg-grade      # current readiness grade
+just llm-context    # dump context for an LLM agent
 ----
+
+NOTE: `just --list` is authoritative. This list is checked by
+`scripts/check-rsr-instantiation.sh`, so a recipe named here that does not
+exist fails CI — the previous version of this file advertised `just build`,
+`just test`, `just lint` and `just panic-scan`, none of which were ever
+recipes.
 
 == Before Submitting a PR
 
 [source,bash]
 ----
-just lint           # Format and lint
-just test           # All tests pass
-just panic-scan     # No new security issues
+just check-all      # build + all suites + corpus gate must be green
+just must-check     # MUST invariants
+just trust-verify   # TRUST invariants
 ----
+
+If you touched `proofs/`, also run `cd proofs && lean Tangle.lean` (0 errors)
+and `bash proofs/check-tg3-differential.sh`.
 
 == Contractile Invariants
 
 Read `.machine_readable/MUST.contractile` before making changes.
 Key invariants that must never be violated:
 
-{{MUST_INVARIANTS}}
+Run `just must-check` to verify all of them:
+
+* `must-license-present` — a `LICENSE` file exists.
+* `must-readme-present` — a `README` exists.
+* `must-spdx-headers` — source files carry SPDX licence headers.
+* `must-no-banned-files` — no `Dockerfile`s or `Makefile`s (estate policy:
+  Containerfile + Justfile).
+
+Beyond the Mustfile, two invariants are enforced by CI and matter most here:
+
+* *The proofs must stay clean.* `proofs/Tangle.lean` must report *0 errors* and
+  contain no `sorry` / `axiom` / `admit` outside comments. Note this proves the
+  metatheory *relative to* `braidEquiv` — see `PROOF-NARRATIVE.md` §TG-7 and
+  assumption A-TG-7.2 for what is trusted rather than proven.
+* *The corpus must keep running.* `examples/` and `conformance/` are gated by
+  `scripts/check-corpus.sh` as a ratchet: nothing working may break, and
+  anything that starts working must be promoted out of the known-bad list.
 
 == LLM/AI Agent Development
 

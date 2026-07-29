@@ -52,10 +52,20 @@ perfective = 10   # % for SPDX headers, doc updates, formatting, style
 # UNIQUE STRENGTH (when mode = divergent)
 # ============================================================================
 # What makes this project special. Agents should DEEPEN this, not broaden it.
-# Customise this per project — the template default is generic.
-
 [methodology.unique-strength]
-description = "{{PROJECT_UNIQUE_STRENGTH}}"
+description = """
+Tangle's distinctive asset is that its central claim is MECHANISED rather
+than asserted. Progress, Preservation, Determinism and Type Safety are
+proven in Lean 4 over the same core the OCaml compiler implements, and the
+two are tied together by translation validation (TG-3: 496 kernel-checked
+obligations asserting OCaml infer_expr refines the Lean spec).
+
+Since TG-7 (#50) the language's `==` decides braid-GROUP equivalence, so
+"equivalence is isotopy" is executable rather than aspirational.
+
+Deepen this, do not broaden it: the value is the proof-to-implementation
+tie, and every claim carries an explicit trusted base (ASSUMPTIONS.md).
+"""
 deepen-not-broaden = true
 
 # ============================================================================

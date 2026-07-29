@@ -32,6 +32,10 @@ on:
       - 'examples/**'
       - 'conformance/**'
       - 'scripts/check-corpus.sh'
+      - 'scripts/check-rsr-instantiation.sh'
+      - 'QUICKSTART-*.adoc'
+      - 'Justfile'
+      - '.machine_readable/**'
       - '.github/workflows/ocaml-ci.yml'
   pull_request:
     paths:
@@ -39,6 +43,10 @@ on:
       - 'examples/**'
       - 'conformance/**'
       - 'scripts/check-corpus.sh'
+      - 'scripts/check-rsr-instantiation.sh'
+      - 'QUICKSTART-*.adoc'
+      - 'Justfile'
+      - '.machine_readable/**'
       - '.github/workflows/ocaml-ci.yml'
   workflow_dispatch: {}
 
@@ -64,10 +72,15 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends ocaml ocaml-dune menhir
+          # `just` is needed by the RSR guard's phantom-command check. Without
+          # it that half of the guard skips (loudly, but it still does not run)
+          # — which is how the QUICKSTARTs accumulated a dozen commands that
+          # were never recipes.
+          sudo apt-get install -y --no-install-recommends ocaml ocaml-dune menhir just
           ocaml -version
           dune --version
           menhir --version
+          just --version
 
       - name: Build
         working-directory: compiler
@@ -107,6 +120,18 @@ jobs:
           # examples/isotopy.tangle — the demonstration of the central claim —
           # sat failing its own assertions until TG-7 (#87) fixed `~`.
           bash scripts/check-corpus.sh
+
+      - name: RSR instantiation guard
+        run: |
+          set -euo pipefail
+          # methodology.a2ml has always declared a reject-if-contains rule for
+          # template residue, and nothing enforced it — so four contractiles
+          # named the upstream template as their SUBJECT indefinitely. This
+          # makes the repo's own rule real. It also checks the docs only name
+          # `just` recipes that exist: the QUICKSTARTs documented nine that
+          # never did. (Deliberately worded without the literal tokens, so the
+          # guard need not allowlist its own caller.)
+          bash scripts/check-rsr-instantiation.sh
 
       - name: TG-7 semantics guard
         working-directory: compiler

@@ -84,3 +84,7 @@ corpus:
 check-all:
     @cd compiler && dune build && dune test --force
     @bash scripts/check-corpus.sh
+
+# Verify this repo is instantiated, not a copy of the RSR template
+rsr-check:
+    @bash scripts/check-rsr-instantiation.sh

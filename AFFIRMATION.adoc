@@ -284,3 +284,74 @@ not the same claim in general: an `axiom` stub compiles cleanly while proving
 nothing. Here they coincide, and that was checked rather than assumed.
 
 The OCaml compiler remains unbuilt — no workflow in this repository builds it.
+
+== Erratum — 2026-07-29
+
+A second dated correction, appended under the same convention: the text above
+is left intact, because an affirmation is a claim about a past state and
+amending it in place would falsify a record.
+
+=== Correction 3 — the template residue is cleared
+
+The affirmation records as honest debt:
+
+[quote]
+5 `{{PLACEHOLDER}}` files + 8 `rsr-template-repo` references
+
+Both counts were low, and the classification conflated two different things.
+Re-measured 2026-07-29: *8* files matched `{{...}}` and *21* lines matched
+`rsr-template-repo` — but most were *meta-references*, i.e. files describing
+the debt rather than carrying it. Three are worth naming, because a naive
+search-and-replace would have damaged them:
+
+* `src/rust/src/eval.rs` — `"...add{{}} block"` is a Rust `format!` *escape*
+  (`{{}}` renders as a literal `{}`) describing the `add{}` language
+  construct. It is code, not a placeholder.
+* `.machine_readable/bot_directives/methodology.a2ml` — the string appears
+  inside `reject-if-contains`, which exists precisely to *forbid* it.
+* `AFFIRMATION.adoc` (this file) and `docs/identity-fabric/` — prose recording
+  the debt.
+
+The *genuine* residue was: `{{DEPS}}`, `{{BUILD_OUTPUT_PATH}}`,
+`{{PACKAGE_NAME}}` in `QUICKSTART-MAINTAINER.adoc`; `{{LANG_STACK}}`,
+`{{BUILD_CMD}}`, `{{TEST_CMD}}`, `{{MUST_INVARIANTS}}` in
+`QUICKSTART-DEV.adoc`; `{{PROJECT_UNIQUE_STRENGTH}}` in `methodology.a2ml`;
+and four contractiles (`Intentfile`, `Trustfile`, `Mustfile`, `Adjustfile`)
+plus `docs/CITATIONS.adoc` whose *subject was still rsr-template-repo* —
+`Intentfile` asserted "This repository is the canonical template for Rhodium
+Standard Repository compliance", and the citation guide credited
+"Polymath, Hyper" for "RSR-template-repo". All are now instantiated for
+tangle.
+
+A worse class surfaced while fixing it: both QUICKSTARTs documented *commands
+that do not exist* — `just build`, `just test`, `just lint`, `just panic-scan`,
+`just setup-dev`, `just build-release`, `just install`, `just run`,
+`just stapeln-export` — and asserted an `$XDG_CONFIG_HOME/tangle/config.toml`
+that the compiler never reads. Documentation that fails when followed is worse
+than none, so the recipe lists are now checked against `just --list` by
+`scripts/check-rsr-instantiation.sh`.
+
+=== Correction 4 — the OCaml compiler is no longer unbuilt
+
+The closing line of the 2026-07-21 erratum reads:
+
+[quote]
+The OCaml compiler remains unbuilt — no workflow in this repository builds it.
+
+That was true when written and is no longer. `.github/workflows/ocaml-ci.yml`
+(added 2026-07-29, PR #87) builds the compiler and runs the full suite — over
+4,000 assertions — on every relevant push and PR, and PR #89 added a gate over
+the runnable corpus (`examples/` + `conformance/`).
+
+That gate immediately earned itself: `examples/isotopy.tangle`, the program
+whose purpose is to demonstrate the language's central claim, was *failing its
+own assertions* and had been for as long as `~` used free reduction. It passes
+only since TG-7 (#50/#87) made `~` decide real braid-group equivalence.
+
+=== Correction 5 — `==` is no longer list equality
+
+Anywhere the affirmation or its sources describe braid `==` as list equality:
+that ceased to be true on 2026-07-29. Owner ruling #50 chose braid-*group*
+equivalence, implemented in PR #87 across both engines. The metatheory is
+proven *relative to* the decision procedure; its correctness is registered as
+assumption *A-TG-7.2* and is not claimed as proven.
