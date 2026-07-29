@@ -321,6 +321,8 @@ primary_expr:
     { e }
   | LBRACE e = expr RBRACE
     { e }
+  | w = weave_block
+    { Weave w }
   ;
 
 (* ---- Crossings: (a > b) or (a < b) ---- *)

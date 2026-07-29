@@ -189,6 +189,35 @@ let rec infer_expr (gamma : env) (sigma : strand_ctx) (e : expr) : ty =
     let n = width_of_generators gens in
     TWord n
 
+  (* [T-Weave] in expression position.
+     The statement form computed this same Tangle[A,B] and then DISCARDED it
+     (`let _weave_ty = ... in gamma`), which is why weave was inert.  Here the
+     type is the expression's type, so the result can be bound and used. *)
+  | Weave wb ->
+    let sigma' = List.mapi (fun i ts ->
+      let sty = match ts.strand_type with
+        | Some name -> StrandNamed name
+        | None      -> StrandDefault
+      in
+      (ts.strand_name, { strand_pos = i + 1; strand_ty = sty })
+    ) wb.weave_inputs in
+    let input_boundary = List.map (fun (_, se) -> se.strand_ty) sigma' in
+    (* The body is checked in the strand context, exactly as the statement
+       form does — strand names are only meaningful there. *)
+    let body_ty = infer_expr gamma sigma' wb.weave_body in
+    begin match body_ty with
+    | TTangle (_, _) | TWord _ -> ()   (* words coerce to tangles *)
+    | _ ->
+      type_error "Weave body must produce a Word or Tangle type, got %s"
+        (pp_ty body_ty)
+    end;
+    let output_boundary = List.map (fun ts ->
+      match ts.strand_type with
+      | Some name -> StrandNamed name
+      | None      -> StrandDefault
+    ) wb.weave_outputs in
+    TTangle (input_boundary, output_boundary)
+
   (* ---- Variables [T-Var] ---- *)
 
   | Var name ->
@@ -668,6 +697,7 @@ let rec expr_calls (f : string) (e : expr) : bool =
   | EchoAdd (e1, e2) | EchoEq (e1, e2) -> go e1 || go e2
   | UnaryOp (_, e1) | Close e1 | Mirror e1 | Reverse e1 | Simplify e1
   | Twist e1 | EchoClose e1 | Lower e1 | Residue e1 | Fst e1 | Snd e1 -> go e1
+  | Weave wb -> go wb.weave_body
   | BraidLit _ | Identity | BoolLit _ | IntLit _ | FloatLit _
   | StringLit _ | Var _ | Crossing _ -> false
 

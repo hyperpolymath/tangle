@@ -176,7 +176,47 @@ let test_weave_blocks () =
         (List.nth w.weave_inputs 0).strand_type;
       assert_eq "output1 type" (Some "Strand")
         (List.nth w.weave_outputs 0).strand_type
-    | _ -> failwith "expected single WeaveBlock")
+    | _ -> failwith "expected single WeaveBlock");
+
+  (* ---------------------------------------------------------------- *)
+  (* #88(B): weave in EXPRESSION position.                             *)
+  (* It was a statement only, and as a statement it is inert — eval     *)
+  (* returns (env, None) and the typechecker discards the Tangle[A,B]   *)
+  (* it computes, so the construct could be written but never bound.    *)
+  (* conformance/valid/v02, v08, v09 and v12 have always used the       *)
+  (* `def x = weave ...` form; they could not parse until now.          *)
+  (* ---------------------------------------------------------------- *)
+
+  test "#88 weave as a definition body (the conformance form)" (fun () ->
+    let prog = parse_ok
+      "def simple_crossing = weave strands a:Q, b:Q into (a > b) yield strands b:Q, a:Q" in
+    match prog with
+    | [Definition d] ->
+      (match d.def_body with
+       | Weave w ->
+         assert_eq "inputs" 2 (List.length w.weave_inputs);
+         assert_eq "outputs" 2 (List.length w.weave_outputs);
+         assert_eq "input1 type" (Some "Q") (List.nth w.weave_inputs 0).strand_type
+       | _ -> failwith "expected the body to be a Weave expression")
+    | _ -> failwith "expected a single Definition");
+
+  test "#88 weave expression round-trips (TG-4 property)" (fun () ->
+    (* The pretty-printed form must re-parse to the same AST, or TG-4's
+       parse(pretty(e)) = e obligation would no longer hold for weave. *)
+    let src =
+      "def x = weave strands a: Q, b: Q into (a > b) yield strands b: Q, a: Q" in
+    let p1 = parse_ok src in
+    let printed = Tangle.Pretty.program_to_string p1 in
+    let p2 = parse_ok printed in
+    assert_eq "pretty then re-parse yields the same AST" p1 p2);
+
+  test "#88 weave is still valid as a statement" (fun () ->
+    (* Regression guard: the change is additive. *)
+    let prog = parse_ok
+      "weave strands a, b into (a > b) yield strands c" in
+    match prog with
+    | [WeaveBlock _] -> ()
+    | _ -> failwith "expected the statement form to still parse")
 
 (* ================================================================== *)
 (*  3. Invariant computations                                          *)

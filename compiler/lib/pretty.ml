@@ -88,6 +88,18 @@ let rec pp_pattern ctx = function
 (*  Expressions                                                        *)
 (* ------------------------------------------------------------------ *)
 
+let pp_typed_strand ctx ts =
+  emit ctx ts.strand_name;
+  match ts.strand_type with
+  | Some t -> emit ctx ": "; emit ctx t
+  | None -> ()
+
+let pp_strand_list ctx strands =
+  List.iteri (fun i s ->
+    if i > 0 then emit ctx ", ";
+    pp_typed_strand ctx s
+  ) strands
+
 let rec pp_expr ctx = function
   | Match (scrut, arms) ->
     emit ctx "match ";
@@ -254,6 +266,16 @@ let rec pp_expr ctx = function
     ) args;
     emit ctx ")"
 
+  | Weave w ->
+    (* Same surface syntax as the statement form; in expression position it
+       re-parses via primary_expr, so TG-4's round-trip property holds. *)
+    emit ctx "weave strands ";
+    pp_strand_list ctx w.weave_inputs;
+    emit ctx " into ";
+    pp_expr ctx w.weave_body;
+    emit ctx " yield strands ";
+    pp_strand_list ctx w.weave_outputs
+
   | Crossing (a, op, b) ->
     emit ctx "(";
     emit ctx a;
@@ -266,18 +288,6 @@ let rec pp_expr ctx = function
 (* ------------------------------------------------------------------ *)
 (*  Typed strands                                                      *)
 (* ------------------------------------------------------------------ *)
-
-let pp_typed_strand ctx ts =
-  emit ctx ts.strand_name;
-  match ts.strand_type with
-  | Some t -> emit ctx ": "; emit ctx t
-  | None -> ()
-
-let pp_strand_list ctx strands =
-  List.iteri (fun i s ->
-    if i > 0 then emit ctx ", ";
-    pp_typed_strand ctx s
-  ) strands
 
 (* ------------------------------------------------------------------ *)
 (*  Statements                                                         *)
