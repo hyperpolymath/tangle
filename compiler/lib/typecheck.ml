@@ -165,6 +165,77 @@ let apply_perm (b : boundary) (gens : generator list) : boundary =
 (* ================================================================== *)
 
 (* ================================================================== *)
+(*  Strand linearity (QTT quantities applied to weave)                  *)
+(* ================================================================== *)
+
+(** Count how many times each STRAND is used in a weave body, in the {0,1,omega}
+    semiring.  Independent uses combine with semiring ADDITION, so two uses of
+    the same strand give 1 + 1 = omega — which then fails the linear check.
+
+    Strands appear in two places: as the operands of a crossing (`a > b`), and
+    under a twist (`(~a)`, [T-Twist-Strand]). *)
+let rec strand_uses (sigma : strand_ctx) (e : expr) : (string * Quantity.t) list =
+  let merge xs ys =
+    List.fold_left (fun acc (n, q) ->
+      match List.assoc_opt n acc with
+      | Some q' -> (n, Quantity.add q q') :: List.remove_assoc n acc
+      | None    -> (n, q) :: acc) xs ys
+  in
+  let go = strand_uses sigma in
+  let use n = if strand_lookup sigma n <> None then [(n, Quantity.one)] else [] in
+  match e with
+  | Crossing (a, _, b) -> merge (use a) (use b)
+  | Twist (Var a)      -> use a
+  | Var a              -> use a
+  | BinOp (_, x, y) | Pipeline (x, y) | Cap (x, y) | Cup (x, y)
+  | Pair (x, y) | EchoAdd (x, y) | EchoEq (x, y) -> merge (go x) (go y)
+  | UnaryOp (_, x) | Close x | Mirror x | Reverse x | Simplify x | Twist x
+  | EchoClose x | Lower x | Residue x | Fst x | Snd x | Evidence x -> go x
+  | Warrant (_, c, ev) | EpiVal (_, c, ev) -> merge (go c) (go ev)
+  | Let (_, a, b) -> merge (go a) (go b)
+  | Match (sc, arms) ->
+    List.fold_left (fun acc a -> merge acc (go a.arm_body)) (go sc) arms
+  | Call (_, args) -> List.fold_left (fun acc a -> merge acc (go a)) [] args
+  | Weave wb -> go wb.weave_body
+  | AddBlock _ | BraidLit _ | Identity | BoolLit _ | IntLit _ | FloatLit _
+  | StringLit _ -> []
+
+(** Enforce that every declared input strand is used EXACTLY ONCE, and that the
+    yielded strands are a permutation of the inputs.
+
+    Both halves are conservation laws of braids, not stylistic rules.  A braid
+    on n strands is a permutation of those n strands: none may be duplicated
+    (contraction) and none may vanish (weakening).  That is why the discipline
+    is LINEAR and not affine — affine would permit the second. *)
+let check_strand_linearity (sigma : strand_ctx) (wb : weave_block) : unit =
+  let uses = strand_uses sigma wb.weave_body in
+  (* 1. Each input is linear: exactly one use. *)
+  List.iter (fun (name, _) ->
+    let actual = match List.assoc_opt name uses with
+      | Some q -> q | None -> Quantity.zero in
+    if not (Quantity.permits ~declared:Quantity.one ~actual) then
+      type_error "strand '%s': %s" name
+        (Quantity.explain ~declared:Quantity.one ~actual)
+  ) sigma;
+  (* 2. The yield must be a permutation of the inputs: same multiset of names,
+     each exactly once.  This is where `yield strands a, b, a` is caught. *)
+  let ins  = List.map fst sigma in
+  let outs = List.map (fun ts -> ts.strand_name) wb.weave_outputs in
+  List.iter (fun n ->
+    let k = List.length (List.filter (( = ) n) outs) in
+    if k = 0 then
+      type_error "strand '%s' is declared but never yielded — a strand cannot \
+                  vanish; braids conserve strand count" n
+    else if k > 1 then
+      type_error "strand '%s' is yielded %d times — a strand cannot be \
+                  duplicated" n k
+  ) ins;
+  List.iter (fun n ->
+    if not (List.mem n ins) then
+      type_error "strand '%s' is yielded but was never declared as an input" n
+  ) outs
+
+(* ================================================================== *)
 (*  Harvard data types and the |-_hd judgement (spec sections 7.1, 9.3)  *)
 (* ================================================================== *)
 
@@ -300,6 +371,11 @@ let rec infer_expr (gamma : env) (sigma : strand_ctx) (e : expr) : ty =
       (ts.strand_name, { strand_pos = i + 1; strand_ty = sty })
     ) wb.weave_inputs in
     let input_boundary = List.map (fun (_, se) -> se.strand_ty) sigma' in
+    (* Strands are LINEAR — see [check_strand_linearity].  This must be applied
+       in BOTH weave forms: `def x = weave ...` reaches the expression rule and
+       never touches the statement rule, so checking only there would leave the
+       ordinary, idiomatic spelling of a weave completely unchecked. *)
+    check_strand_linearity sigma' wb;
     (* The body is checked in the strand context, exactly as the statement
        form does — strand names are only meaningful there. *)
     let body_ty = infer_expr gamma sigma' wb.weave_body in
@@ -998,6 +1074,10 @@ let check_statement (gamma : env) (stmt : statement) : env =
     ) wb.weave_inputs in
     (* Build input boundary A *)
     let input_boundary = List.map (fun (_, se) -> se.strand_ty) sigma in
+    (* Strands are LINEAR (QTT quantity 1): used exactly once, and conserved
+       into the yield.  Checked before the body's type, so the diagnostic names
+       the strand rather than some downstream type mismatch. *)
+    check_strand_linearity sigma wb;
     (* Type-check the body in the strand context *)
     let body_ty = infer_expr gamma sigma wb.weave_body in
     (* Validate the body produces a Tangle type *)

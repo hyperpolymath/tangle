@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: MPL-2.0
+# Conformance (ILL-TYPED): a strand crossed with itself.
+#
+# `a > a` uses the strand 'a' twice.  Strands carry QTT quantity 1 (linear):
+# a strand is a physical thread, not a value, and it cannot be duplicated.
+# This PARSES — it is rejected by the typechecker, not the grammar.
+
+def self_cross =
+  weave strands a:Q, b:Q into
+    (a > a)
+  yield strands a:Q, b:Q

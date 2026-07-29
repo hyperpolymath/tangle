@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: MPL-2.0
+# Conformance (ILL-TYPED): the yield names a strand that was never an input.
+
+def conjuring =
+  weave strands a:Q, b:Q into
+    (a > b)
+  yield strands a:Q, c:Q
