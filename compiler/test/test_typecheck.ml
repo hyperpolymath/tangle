@@ -623,6 +623,81 @@ let test_functions () =
     let r = check_ok prog in
     r.result_ok);
 
+  (* ---------------------------------------------------------------- *)
+  (* #88: recursive functions returning a SCALAR.                       *)
+  (* The return type occurs in its own derivation, so it must be a      *)
+  (* fixpoint. Previously the recursive call was typed at the hard-coded *)
+  (* [TWord 0] "placeholder" seed with nothing checking the result       *)
+  (* against it, so every one of these failed with                       *)
+  (*   "Cannot add Num and Word[0]"                                      *)
+  (* and recursive scalar functions were simply unwritable.              *)
+  (* ---------------------------------------------------------------- *)
+
+  test "#88 recursive fn returning Num (the examples/ `length` shape)" (fun () ->
+    (* def length(w) = match w with
+         | identity  => 0
+         | s1 . rest => 1 + length(rest)
+         | _         => 0 *)
+    let prog = [
+      def_fun "length" ["w"] (Match (Var "w", [
+        { arm_pattern = PatIdentity; arm_body = IntLit 0 };
+        { arm_pattern = PatCons ({ gpat_index = 1; gpat_exponent = 1 }, PatVar "rest");
+          arm_body = BinOp (Add, IntLit 1, Call ("length", [Var "rest"])) };
+        { arm_pattern = PatWildcard; arm_body = IntLit 0 };
+      ]))
+    ] in
+    let r = check_ok prog in
+    r.result_ok);
+
+  test "#88 recursive fn's return type is Num, not the seed" (fun () ->
+    (* Guard: it must not merely typecheck — the signature must be right,
+       otherwise callers would still see Word[0]. *)
+    let prog = [
+      def_fun "length" ["w"] (Match (Var "w", [
+        { arm_pattern = PatIdentity; arm_body = IntLit 0 };
+        { arm_pattern = PatCons ({ gpat_index = 1; gpat_exponent = 1 }, PatVar "rest");
+          arm_body = BinOp (Add, IntLit 1, Call ("length", [Var "rest"])) };
+        { arm_pattern = PatWildcard; arm_body = IntLit 0 };
+      ]))
+    ] in
+    let r = check_ok prog in
+    (match env_lookup r.result_env "length" with
+     | Some (EFun s) -> s.fsig_return = TNum
+     | _ -> false));
+
+  test "#88 recursive fn result is usable at Num by a caller" (fun () ->
+    let prog = [
+      def_fun "length" ["w"] (Match (Var "w", [
+        { arm_pattern = PatIdentity; arm_body = IntLit 0 };
+        { arm_pattern = PatCons ({ gpat_index = 1; gpat_exponent = 1 }, PatVar "rest");
+          arm_body = BinOp (Add, IntLit 1, Call ("length", [Var "rest"])) };
+        { arm_pattern = PatWildcard; arm_body = IntLit 0 };
+      ]));
+      (* Only well-typed if `length` really returns Num. *)
+      def_val "total" (BinOp (Add, Call ("length", [BraidLit [sigma 1]]), IntLit 1));
+    ] in
+    let r = check_ok prog in
+    r.result_ok);
+
+  test "#88 non-recursive definitions are unaffected" (fun () ->
+    (* Regression guard: the fixpoint search must only engage for genuinely
+       recursive bodies. A word-returning function still returns a word. *)
+    let prog = [def_fun "twice" ["x"] (BinOp (Compose, Var "x", Var "x"))] in
+    let r = check_ok prog in
+    r.result_ok &&
+    (match env_lookup r.result_env "twice" with
+     | Some (EFun s) -> s.fsig_return = TWord 0
+     | _ -> false));
+
+  test "#88 a genuinely ill-typed recursive fn still fails" (fun () ->
+    (* The fallback must not turn errors into silent successes: no candidate
+       return type makes `identity + 1` well-formed. *)
+    let prog = [
+      def_fun "bad" ["w"] (BinOp (Add, Identity, Call ("bad", [Var "w"])))
+    ] in
+    let r = check_ok prog in
+    not r.result_ok);
+
   (* [T-App]: function application *)
   test "T-App" (fun () ->
     let prog = [
