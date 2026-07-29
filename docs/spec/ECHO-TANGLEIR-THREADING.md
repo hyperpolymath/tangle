@@ -1,4 +1,5 @@
 <!--
+SPDX-License-Identifier: MPL-2.0
 SPDX-License-Identifier: CC-BY-SA-4.0
 Owner: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
@@ -26,6 +27,10 @@ The seam with QuandleDB is exact, not incidental:
 > object `quandle_presentation(ir::TangleIR)::QuandlePresentation` derives the
 > quandle from.
 
+`echo_distinguishes_collapsed` (Lean) says distinct braids can close to the
+same diagram while keeping distinct residues. Threading the residue therefore
+gives QuandleDB **provenance**: which braid produced a given closed diagram,
+disambiguating cases that plain `close` would conflate.
 **A note on what the Lean model proves.** The mechanized `close`/`lower`
 (`proofs/Tangle.lean`) is a *type-level* collapse: every braid reduces to the
 single `Word[0]` value `.identity` (a collapse to one point), **not** to a knot
@@ -83,6 +88,9 @@ The invariant to preserve: for any braid `b`,
 `quandle_presentation(EchoClosed(b, close(b)))` ≡
 `quandle_presentation(Close(close(b)))` whenever the closed diagram alone
 suffices — the residue path must agree with the diagram path on the quandle,
+and additionally retains `b` for provenance. This mirrors
+`echo_roundtrip_typed` (the residue/result projections are well-typed) and the
+`lower`/`residue` agreement in the Lean model.
 and additionally retains `b` for provenance.
 
 **This quandle invariant is an unproven knot-theoretic obligation** that
