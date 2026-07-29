@@ -44,6 +44,11 @@ type ty =
   | TProd   of ty * ty              (** ρ × σ — product / residue carrier for lossy ops *)
   | TEcho   of ty * ty              (** Echo[ρ, τ] — structured loss: residue ρ, result τ.
                                         Mirrors Ty.echo in proofs/Tangle.lean. *)
+  | TEpi    of int * ty * ty        (** Epi[κ, ρ, τ] — at standpoint κ, evidence ρ
+                                        purporting to support claim τ.  Mirrors
+                                        Ty.epi in proofs/Tangle.lean.  τ appears
+                                        in the type but NO rule eliminates to it:
+                                        a warrant is not knowledge. *)
 
 (** Function signature: (param_types) -> return_type. *)
 type fun_sig = {
@@ -100,6 +105,7 @@ let rec pp_ty = function
   | TStr           -> "Str"
   | TProd (a, b)   -> Printf.sprintf "(%s * %s)" (pp_ty a) (pp_ty b)
   | TEcho (r, t)   -> Printf.sprintf "Echo[%s, %s]" (pp_ty r) (pp_ty t)
+  | TEpi (k, r, t) -> Printf.sprintf "Epi[%d, %s, %s]" k (pp_ty r) (pp_ty t)
 
 (* ================================================================== *)
 (*  Environment operations                                             *)
@@ -217,6 +223,26 @@ let rec infer_expr (gamma : env) (sigma : strand_ctx) (e : expr) : ty =
       | None      -> StrandDefault
     ) wb.weave_outputs in
     TTangle (input_boundary, output_boundary)
+
+  (* [T-Warrant] / [T-Epi-Val] / [T-Evidence] — epistemic.
+     Note the absence: no case here produces τ from an Epi.  `Evidence` yields
+     the token type ρ, and that is the only elimination.  Contrast `Lower`,
+     which DOES deliver an echo's result. *)
+  | Warrant (k, claim, ev) ->
+    let t_claim = infer_expr gamma sigma claim in
+    let t_ev    = infer_expr gamma sigma ev in
+    TEpi (k, t_ev, t_claim)
+
+  | EpiVal (k, claim, ev) ->
+    let t_claim = infer_expr gamma sigma claim in
+    let t_ev    = infer_expr gamma sigma ev in
+    TEpi (k, t_ev, t_claim)
+
+  | Evidence e ->
+    begin match infer_expr gamma sigma e with
+    | TEpi (_, rho, _) -> rho
+    | t -> type_error "evidence requires an Epi[k, rho, tau], got %s" (pp_ty t)
+    end
 
   (* ---- Variables [T-Var] ---- *)
 
@@ -652,6 +678,7 @@ and strand_type_of_ty (t : ty) : strand_type =
   | TTangle _ -> StrandDefault
   | TProd _ -> StrandDefault
   | TEcho _ -> StrandDefault
+  | TEpi _ -> StrandDefault
 
 (** Convert a strand_type to a boundary element for self-crossing. *)
 and strand_to_type (st : strand_type) : strand_type = st
@@ -725,7 +752,9 @@ let rec expr_calls (f : string) (e : expr) : bool =
   | Cap (e1, e2) | Cup (e1, e2) | Pair (e1, e2)
   | EchoAdd (e1, e2) | EchoEq (e1, e2) -> go e1 || go e2
   | UnaryOp (_, e1) | Close e1 | Mirror e1 | Reverse e1 | Simplify e1
-  | Twist e1 | EchoClose e1 | Lower e1 | Residue e1 | Fst e1 | Snd e1 -> go e1
+  | Twist e1 | EchoClose e1 | Lower e1 | Residue e1 | Fst e1 | Snd e1
+  | Evidence e1 -> go e1
+  | Warrant (_, c, ev) | EpiVal (_, c, ev) -> go c || go ev
   | Weave wb -> go wb.weave_body
   | BraidLit _ | Identity | BoolLit _ | IntLit _ | FloatLit _
   | StringLit _ | Var _ | Crossing _ -> false

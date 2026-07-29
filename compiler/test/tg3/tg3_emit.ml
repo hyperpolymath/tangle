@@ -61,6 +61,7 @@ let rec lean_ty (t : ty) : string =
   | TWord n      -> Printf.sprintf "(.word %d)" n
   | TEcho (r, v) -> Printf.sprintf "(.echo %s %s)" (lean_ty r) (lean_ty v)
   | TProd (a, b) -> Printf.sprintf "(.prod %s %s)" (lean_ty a) (lean_ty b)
+  | TEpi (k, r, t) -> Printf.sprintf "(.epi %d %s %s)" k (lean_ty r) (lean_ty t)
   | TTangle _    ->
     failwith "TG-3: TTangle has no Lean image — a non-core term leaked into the corpus"
 
@@ -69,6 +70,7 @@ let rec lean_ty (t : ty) : string =
 let rec ty_tangle_free = function
   | TTangle _              -> false
   | TEcho (a, b) | TProd (a, b) -> ty_tangle_free a && ty_tangle_free b
+  | TEpi (_, r, t) -> ty_tangle_free r && ty_tangle_free t
   | TWord _ | TNum | TStr | TBool -> true
 
 (* ================================================================== *)
@@ -130,6 +132,13 @@ let rec lean_expr (scope : string list) (e : expr) : string =
   | Snd e1       -> Printf.sprintf "(.snd %s)"       (lean_expr scope e1)
   | EchoAdd (a, b) -> Printf.sprintf "(.echoAdd %s %s)" (lean_expr scope a) (lean_expr scope b)
   | EchoEq  (a, b) -> Printf.sprintf "(.echoEq %s %s)"  (lean_expr scope a) (lean_expr scope b)
+  (* Epistemic is IN the mechanised core (proofs/Tangle.lean §EPISTEMIC), so
+     these are translated, not rejected. *)
+  | Warrant (k, c, ev) ->
+    Printf.sprintf "(.warrant %d %s %s)" k (lean_expr scope c) (lean_expr scope ev)
+  | EpiVal (k, c, ev) ->
+    Printf.sprintf "(.epiVal %d %s %s)" k (lean_expr scope c) (lean_expr scope ev)
+  | Evidence e1 -> Printf.sprintf "(.evidence %s)" (lean_expr scope e1)
   (* Non-core: must never appear in the corpus (close is the boundary gateway). *)
   | FloatLit _ | BinOp ((Sub | Mul | Div | Isotopy), _, _) | UnaryOp _
   | Close _ | Mirror _ | Reverse _ | Simplify _ | Cap _ | Cup _ | Twist _
@@ -360,6 +369,17 @@ let check () =
   (* #92: widths need not agree, so this is now WELL-TYPED rather than
      rejected. It is the `identity == braid` shape the Lean step relation has
      always had rules for (eqIdBraid / eqBraidId). *)
+  (* Epistemic pins: OCaml infer_expr must agree with Lean infer on the new
+     constructors. The `evidence` pin is the important one: it must yield the
+     EVIDENCE type, never the claim type. *)
+  pin "warrant num/word"     (Warrant (0, IntLit 1, BraidLit [s 1]))
+    (TEpi (0, TWord 2, TNum));
+  pin "warrant word/str"     (Warrant (3, BraidLit [s 1], StringLit "ev"))
+    (TEpi (3, TStr, TWord 2));
+  pin "evidence yields rho"  (Evidence (Warrant (0, IntLit 1, BraidLit [s 1])))
+    (TWord 2);
+  pin "epi over echo"        (Warrant (1, IntLit 0, EchoClose (BraidLit [s 1])))
+    (TEpi (1, TEcho (TWord 2, TWord 0), TNum));
   pin "eq diff-width word"   (BinOp (Eq, BraidLit [s 1], Identity))            TBool;
 
   (* 3. Reject pins — these must raise Type_error. *)
