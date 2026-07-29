@@ -399,13 +399,38 @@ let rec infer_expr (gamma : env) (sigma : strand_ctx) (e : expr) : ty =
         env_bind_val g name ty) gamma bindings in
       infer_expr gamma' sigma arm.arm_body
     ) arms in
-    let result_ty = List.hd arm_types in
-    List.iteri (fun i ty ->
-      if ty <> result_ty then
-        type_error "Match arm %d has type %s but arm 0 has type %s"
-          i (pp_ty ty) (pp_ty result_ty)
-    ) arm_types;
-    result_ty
+    (* Arms must agree — but for WORDS, "agree" means agree up to width (#92),
+       consistent with `.` (compose) widening to max and with `==` no longer
+       requiring equal widths.  Arms at Word[0] and Word[2] describe the same
+       kind of thing at different strand counts; the join is the wider.
+       Everything else must still match exactly. *)
+    let join_ty a b =
+      match a, b with
+      | TWord n, TWord m -> Some (TWord (max n m))
+      | x, y when x = y  -> Some x
+      | _                -> None
+    in
+    let result_ty =
+      List.fold_left (fun acc ty ->
+        match acc with
+        | None -> None
+        | Some a -> join_ty a ty
+      ) (Some (List.hd arm_types)) arm_types
+    in
+    begin match result_ty with
+    | Some t -> t
+    | None ->
+      (* Report against arm 0, as before, so the message stays familiar. *)
+      let t0 = List.hd arm_types in
+      let i, bad =
+        let rec find i = function
+          | [] -> (0, t0)
+          | ty :: rest -> if join_ty t0 ty = None then (i, ty) else find (i+1) rest
+        in find 0 arm_types
+      in
+      type_error "Match arm %d has type %s but arm 0 has type %s"
+        i (pp_ty bad) (pp_ty t0)
+    end
 
   (* ---- Echo types (structured loss) ----
    * Mirror the HasType rules in proofs/Tangle.lean:
@@ -571,9 +596,13 @@ and infer_binop (op : binop) (t1 : ty) (t2 : ty) : ty =
    * PROOF-NEEDS.md. *)
   | Eq ->
     begin match t1, t2 with
-    | TWord n, TWord m when n = m -> TBool
-    | TWord n, TWord m ->
-      type_error "Cannot compare words of differing width: Word[%d] == Word[%d]" n m
+    (* Widths need not agree (#92).  Braid groups embed Bn -> Bn+1 by adding a
+       strand nothing touches, so a Word[n] IS a Word[max n m]; the comparison
+       is decided in the larger group.  That is already what
+       [Braid_equiv.equiv] computes — it takes two generator lists and has no
+       width parameter — and it is what `~` has always accepted.  Mirrors the
+       widened [tEqWord] in proofs/Tangle.lean. *)
+    | TWord _, TWord _ -> TBool
     | TNum, TNum        -> TBool
     | TStr, TStr        -> TBool
     | TBool, TBool      -> TBool

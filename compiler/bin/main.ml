@@ -49,12 +49,23 @@ let parse_file_recovering (filename : string) : Tangle.Ast.program * parse_diagn
     Lexing.pos_lnum = 1;
   };
   let diagnostics = ref [] in
-  let stmts = ref [] in
+  (* Accumulate SEGMENTS (each a statement list from one parser run), newest
+     first, and flatten in order at the end.
+     The previous code did `stmts := prog @ !stmts` and then `List.rev !stmts`.
+     That reversal is correct for an accumulator built by prepending single
+     items — as `diagnostics` is — but here whole segments are prepended, so
+     reversing the FLATTENED list reversed the statements themselves. On the
+     normal path (one successful parse) every program came out backwards:
+     `def x; def y; def z` parsed to [z; y; x], so any program whose statements
+     depend on order failed at evaluation with "Unbound variable".
+     The test suites never caught it because they call Tangle.Parser.program
+     directly; only the CLI goes through this recovering path. *)
+  let segments = ref [] in
   let at_eof = ref false in
   while not !at_eof do
     (try
        let prog = Tangle.Parser.program Tangle.Lexer.token lexbuf in
-       stmts := prog @ !stmts;
+       segments := prog :: !segments;
        at_eof := true
      with
      | Tangle.Lexer.Lexer_error msg ->
@@ -76,7 +87,8 @@ let parse_file_recovering (filename : string) : Tangle.Ast.program * parse_diagn
        } :: !diagnostics;
        at_eof := synchronize_tangle_lexer lexbuf)
   done;
-  (List.rev !stmts, List.rev !diagnostics)
+  (* Flatten oldest-segment-first, preserving order WITHIN each segment. *)
+  (List.concat (List.rev !segments), List.rev !diagnostics)
 
 (** Parse a TANGLE source file into a program AST. *)
 let parse_file (filename : string) : Tangle.Ast.program =

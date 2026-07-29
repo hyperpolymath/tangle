@@ -265,66 +265,66 @@ example : infer [] (.eq (.str "knot") (.str "ab")) = some .bool := by decide  --
 example : infer [] (.eq (.str "knot") (.str "knot")) = some .bool := by decide  -- 250/490
 example : infer [] (.eq .identity .identity) = some .bool := by decide  -- 251/490
 example : infer [] (.eq .identity (.braidLit [])) = some .bool := by decide  -- 252/490
-example : infer [] (.eq .identity (.braidLit [⟨0, 1⟩])) = none := by decide  -- 253/490
-example : infer [] (.eq .identity (.braidLit [⟨1, 1⟩])) = none := by decide  -- 254/490
-example : infer [] (.eq .identity (.braidLit [⟨1, (-1)⟩])) = none := by decide  -- 255/490
-example : infer [] (.eq .identity (.braidLit [⟨0, 1⟩, ⟨1, 1⟩])) = none := by decide  -- 256/490
-example : infer [] (.eq .identity (.braidLit [⟨2, 1⟩])) = none := by decide  -- 257/490
-example : infer [] (.eq .identity (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩])) = none := by decide  -- 258/490
+example : infer [] (.eq .identity (.braidLit [⟨0, 1⟩])) = some .bool := by decide  -- 253/490
+example : infer [] (.eq .identity (.braidLit [⟨1, 1⟩])) = some .bool := by decide  -- 254/490
+example : infer [] (.eq .identity (.braidLit [⟨1, (-1)⟩])) = some .bool := by decide  -- 255/490
+example : infer [] (.eq .identity (.braidLit [⟨0, 1⟩, ⟨1, 1⟩])) = some .bool := by decide  -- 256/490
+example : infer [] (.eq .identity (.braidLit [⟨2, 1⟩])) = some .bool := by decide  -- 257/490
+example : infer [] (.eq .identity (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩])) = some .bool := by decide  -- 258/490
 example : infer [] (.eq (.braidLit []) .identity) = some .bool := by decide  -- 259/490
 example : infer [] (.eq (.braidLit []) (.braidLit [])) = some .bool := by decide  -- 260/490
-example : infer [] (.eq (.braidLit []) (.braidLit [⟨0, 1⟩])) = none := by decide  -- 261/490
-example : infer [] (.eq (.braidLit []) (.braidLit [⟨1, 1⟩])) = none := by decide  -- 262/490
-example : infer [] (.eq (.braidLit []) (.braidLit [⟨1, (-1)⟩])) = none := by decide  -- 263/490
-example : infer [] (.eq (.braidLit []) (.braidLit [⟨0, 1⟩, ⟨1, 1⟩])) = none := by decide  -- 264/490
-example : infer [] (.eq (.braidLit []) (.braidLit [⟨2, 1⟩])) = none := by decide  -- 265/490
-example : infer [] (.eq (.braidLit []) (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩])) = none := by decide  -- 266/490
-example : infer [] (.eq (.braidLit [⟨0, 1⟩]) .identity) = none := by decide  -- 267/490
-example : infer [] (.eq (.braidLit [⟨0, 1⟩]) (.braidLit [])) = none := by decide  -- 268/490
+example : infer [] (.eq (.braidLit []) (.braidLit [⟨0, 1⟩])) = some .bool := by decide  -- 261/490
+example : infer [] (.eq (.braidLit []) (.braidLit [⟨1, 1⟩])) = some .bool := by decide  -- 262/490
+example : infer [] (.eq (.braidLit []) (.braidLit [⟨1, (-1)⟩])) = some .bool := by decide  -- 263/490
+example : infer [] (.eq (.braidLit []) (.braidLit [⟨0, 1⟩, ⟨1, 1⟩])) = some .bool := by decide  -- 264/490
+example : infer [] (.eq (.braidLit []) (.braidLit [⟨2, 1⟩])) = some .bool := by decide  -- 265/490
+example : infer [] (.eq (.braidLit []) (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩])) = some .bool := by decide  -- 266/490
+example : infer [] (.eq (.braidLit [⟨0, 1⟩]) .identity) = some .bool := by decide  -- 267/490
+example : infer [] (.eq (.braidLit [⟨0, 1⟩]) (.braidLit [])) = some .bool := by decide  -- 268/490
 example : infer [] (.eq (.braidLit [⟨0, 1⟩]) (.braidLit [⟨0, 1⟩])) = some .bool := by decide  -- 269/490
-example : infer [] (.eq (.braidLit [⟨0, 1⟩]) (.braidLit [⟨1, 1⟩])) = none := by decide  -- 270/490
-example : infer [] (.eq (.braidLit [⟨0, 1⟩]) (.braidLit [⟨1, (-1)⟩])) = none := by decide  -- 271/490
-example : infer [] (.eq (.braidLit [⟨0, 1⟩]) (.braidLit [⟨0, 1⟩, ⟨1, 1⟩])) = none := by decide  -- 272/490
-example : infer [] (.eq (.braidLit [⟨0, 1⟩]) (.braidLit [⟨2, 1⟩])) = none := by decide  -- 273/490
-example : infer [] (.eq (.braidLit [⟨0, 1⟩]) (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩])) = none := by decide  -- 274/490
-example : infer [] (.eq (.braidLit [⟨1, 1⟩]) .identity) = none := by decide  -- 275/490
-example : infer [] (.eq (.braidLit [⟨1, 1⟩]) (.braidLit [])) = none := by decide  -- 276/490
-example : infer [] (.eq (.braidLit [⟨1, 1⟩]) (.braidLit [⟨0, 1⟩])) = none := by decide  -- 277/490
+example : infer [] (.eq (.braidLit [⟨0, 1⟩]) (.braidLit [⟨1, 1⟩])) = some .bool := by decide  -- 270/490
+example : infer [] (.eq (.braidLit [⟨0, 1⟩]) (.braidLit [⟨1, (-1)⟩])) = some .bool := by decide  -- 271/490
+example : infer [] (.eq (.braidLit [⟨0, 1⟩]) (.braidLit [⟨0, 1⟩, ⟨1, 1⟩])) = some .bool := by decide  -- 272/490
+example : infer [] (.eq (.braidLit [⟨0, 1⟩]) (.braidLit [⟨2, 1⟩])) = some .bool := by decide  -- 273/490
+example : infer [] (.eq (.braidLit [⟨0, 1⟩]) (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩])) = some .bool := by decide  -- 274/490
+example : infer [] (.eq (.braidLit [⟨1, 1⟩]) .identity) = some .bool := by decide  -- 275/490
+example : infer [] (.eq (.braidLit [⟨1, 1⟩]) (.braidLit [])) = some .bool := by decide  -- 276/490
+example : infer [] (.eq (.braidLit [⟨1, 1⟩]) (.braidLit [⟨0, 1⟩])) = some .bool := by decide  -- 277/490
 example : infer [] (.eq (.braidLit [⟨1, 1⟩]) (.braidLit [⟨1, 1⟩])) = some .bool := by decide  -- 278/490
 example : infer [] (.eq (.braidLit [⟨1, 1⟩]) (.braidLit [⟨1, (-1)⟩])) = some .bool := by decide  -- 279/490
 example : infer [] (.eq (.braidLit [⟨1, 1⟩]) (.braidLit [⟨0, 1⟩, ⟨1, 1⟩])) = some .bool := by decide  -- 280/490
-example : infer [] (.eq (.braidLit [⟨1, 1⟩]) (.braidLit [⟨2, 1⟩])) = none := by decide  -- 281/490
-example : infer [] (.eq (.braidLit [⟨1, 1⟩]) (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩])) = none := by decide  -- 282/490
-example : infer [] (.eq (.braidLit [⟨1, (-1)⟩]) .identity) = none := by decide  -- 283/490
-example : infer [] (.eq (.braidLit [⟨1, (-1)⟩]) (.braidLit [])) = none := by decide  -- 284/490
-example : infer [] (.eq (.braidLit [⟨1, (-1)⟩]) (.braidLit [⟨0, 1⟩])) = none := by decide  -- 285/490
+example : infer [] (.eq (.braidLit [⟨1, 1⟩]) (.braidLit [⟨2, 1⟩])) = some .bool := by decide  -- 281/490
+example : infer [] (.eq (.braidLit [⟨1, 1⟩]) (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩])) = some .bool := by decide  -- 282/490
+example : infer [] (.eq (.braidLit [⟨1, (-1)⟩]) .identity) = some .bool := by decide  -- 283/490
+example : infer [] (.eq (.braidLit [⟨1, (-1)⟩]) (.braidLit [])) = some .bool := by decide  -- 284/490
+example : infer [] (.eq (.braidLit [⟨1, (-1)⟩]) (.braidLit [⟨0, 1⟩])) = some .bool := by decide  -- 285/490
 example : infer [] (.eq (.braidLit [⟨1, (-1)⟩]) (.braidLit [⟨1, 1⟩])) = some .bool := by decide  -- 286/490
 example : infer [] (.eq (.braidLit [⟨1, (-1)⟩]) (.braidLit [⟨1, (-1)⟩])) = some .bool := by decide  -- 287/490
 example : infer [] (.eq (.braidLit [⟨1, (-1)⟩]) (.braidLit [⟨0, 1⟩, ⟨1, 1⟩])) = some .bool := by decide  -- 288/490
-example : infer [] (.eq (.braidLit [⟨1, (-1)⟩]) (.braidLit [⟨2, 1⟩])) = none := by decide  -- 289/490
-example : infer [] (.eq (.braidLit [⟨1, (-1)⟩]) (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩])) = none := by decide  -- 290/490
-example : infer [] (.eq (.braidLit [⟨0, 1⟩, ⟨1, 1⟩]) .identity) = none := by decide  -- 291/490
-example : infer [] (.eq (.braidLit [⟨0, 1⟩, ⟨1, 1⟩]) (.braidLit [])) = none := by decide  -- 292/490
-example : infer [] (.eq (.braidLit [⟨0, 1⟩, ⟨1, 1⟩]) (.braidLit [⟨0, 1⟩])) = none := by decide  -- 293/490
+example : infer [] (.eq (.braidLit [⟨1, (-1)⟩]) (.braidLit [⟨2, 1⟩])) = some .bool := by decide  -- 289/490
+example : infer [] (.eq (.braidLit [⟨1, (-1)⟩]) (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩])) = some .bool := by decide  -- 290/490
+example : infer [] (.eq (.braidLit [⟨0, 1⟩, ⟨1, 1⟩]) .identity) = some .bool := by decide  -- 291/490
+example : infer [] (.eq (.braidLit [⟨0, 1⟩, ⟨1, 1⟩]) (.braidLit [])) = some .bool := by decide  -- 292/490
+example : infer [] (.eq (.braidLit [⟨0, 1⟩, ⟨1, 1⟩]) (.braidLit [⟨0, 1⟩])) = some .bool := by decide  -- 293/490
 example : infer [] (.eq (.braidLit [⟨0, 1⟩, ⟨1, 1⟩]) (.braidLit [⟨1, 1⟩])) = some .bool := by decide  -- 294/490
 example : infer [] (.eq (.braidLit [⟨0, 1⟩, ⟨1, 1⟩]) (.braidLit [⟨1, (-1)⟩])) = some .bool := by decide  -- 295/490
 example : infer [] (.eq (.braidLit [⟨0, 1⟩, ⟨1, 1⟩]) (.braidLit [⟨0, 1⟩, ⟨1, 1⟩])) = some .bool := by decide  -- 296/490
-example : infer [] (.eq (.braidLit [⟨0, 1⟩, ⟨1, 1⟩]) (.braidLit [⟨2, 1⟩])) = none := by decide  -- 297/490
-example : infer [] (.eq (.braidLit [⟨0, 1⟩, ⟨1, 1⟩]) (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩])) = none := by decide  -- 298/490
-example : infer [] (.eq (.braidLit [⟨2, 1⟩]) .identity) = none := by decide  -- 299/490
-example : infer [] (.eq (.braidLit [⟨2, 1⟩]) (.braidLit [])) = none := by decide  -- 300/490
-example : infer [] (.eq (.braidLit [⟨2, 1⟩]) (.braidLit [⟨0, 1⟩])) = none := by decide  -- 301/490
-example : infer [] (.eq (.braidLit [⟨2, 1⟩]) (.braidLit [⟨1, 1⟩])) = none := by decide  -- 302/490
-example : infer [] (.eq (.braidLit [⟨2, 1⟩]) (.braidLit [⟨1, (-1)⟩])) = none := by decide  -- 303/490
-example : infer [] (.eq (.braidLit [⟨2, 1⟩]) (.braidLit [⟨0, 1⟩, ⟨1, 1⟩])) = none := by decide  -- 304/490
+example : infer [] (.eq (.braidLit [⟨0, 1⟩, ⟨1, 1⟩]) (.braidLit [⟨2, 1⟩])) = some .bool := by decide  -- 297/490
+example : infer [] (.eq (.braidLit [⟨0, 1⟩, ⟨1, 1⟩]) (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩])) = some .bool := by decide  -- 298/490
+example : infer [] (.eq (.braidLit [⟨2, 1⟩]) .identity) = some .bool := by decide  -- 299/490
+example : infer [] (.eq (.braidLit [⟨2, 1⟩]) (.braidLit [])) = some .bool := by decide  -- 300/490
+example : infer [] (.eq (.braidLit [⟨2, 1⟩]) (.braidLit [⟨0, 1⟩])) = some .bool := by decide  -- 301/490
+example : infer [] (.eq (.braidLit [⟨2, 1⟩]) (.braidLit [⟨1, 1⟩])) = some .bool := by decide  -- 302/490
+example : infer [] (.eq (.braidLit [⟨2, 1⟩]) (.braidLit [⟨1, (-1)⟩])) = some .bool := by decide  -- 303/490
+example : infer [] (.eq (.braidLit [⟨2, 1⟩]) (.braidLit [⟨0, 1⟩, ⟨1, 1⟩])) = some .bool := by decide  -- 304/490
 example : infer [] (.eq (.braidLit [⟨2, 1⟩]) (.braidLit [⟨2, 1⟩])) = some .bool := by decide  -- 305/490
 example : infer [] (.eq (.braidLit [⟨2, 1⟩]) (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩])) = some .bool := by decide  -- 306/490
-example : infer [] (.eq (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩]) .identity) = none := by decide  -- 307/490
-example : infer [] (.eq (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩]) (.braidLit [])) = none := by decide  -- 308/490
-example : infer [] (.eq (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩]) (.braidLit [⟨0, 1⟩])) = none := by decide  -- 309/490
-example : infer [] (.eq (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩]) (.braidLit [⟨1, 1⟩])) = none := by decide  -- 310/490
-example : infer [] (.eq (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩]) (.braidLit [⟨1, (-1)⟩])) = none := by decide  -- 311/490
-example : infer [] (.eq (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩]) (.braidLit [⟨0, 1⟩, ⟨1, 1⟩])) = none := by decide  -- 312/490
+example : infer [] (.eq (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩]) .identity) = some .bool := by decide  -- 307/490
+example : infer [] (.eq (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩]) (.braidLit [])) = some .bool := by decide  -- 308/490
+example : infer [] (.eq (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩]) (.braidLit [⟨0, 1⟩])) = some .bool := by decide  -- 309/490
+example : infer [] (.eq (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩]) (.braidLit [⟨1, 1⟩])) = some .bool := by decide  -- 310/490
+example : infer [] (.eq (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩]) (.braidLit [⟨1, (-1)⟩])) = some .bool := by decide  -- 311/490
+example : infer [] (.eq (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩]) (.braidLit [⟨0, 1⟩, ⟨1, 1⟩])) = some .bool := by decide  -- 312/490
 example : infer [] (.eq (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩]) (.braidLit [⟨2, 1⟩])) = some .bool := by decide  -- 313/490
 example : infer [] (.eq (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩]) (.braidLit [⟨1, 1⟩, ⟨2, (-1)⟩, ⟨0, 1⟩])) = some .bool := by decide  -- 314/490
 example : infer [] (.echoClose .identity) = some (.echo (.word 0) (.word 0)) := by decide  -- 315/490

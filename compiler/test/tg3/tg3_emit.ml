@@ -357,11 +357,15 @@ let check () =
   pin "let shadowing inner"  (Let (x, IntLit 1, Let (x, BraidLit [s 2], BinOp (Compose, Var x, Var x))))
     (TWord 3);
   pin "nested pair fst.fst"  (Fst (Fst (Pair (Pair (IntLit 1, StringLit "a"), BoolLit true)))) TNum;
+  (* #92: widths need not agree, so this is now WELL-TYPED rather than
+     rejected. It is the `identity == braid` shape the Lean step relation has
+     always had rules for (eqIdBraid / eqBraidId). *)
+  pin "eq diff-width word"   (BinOp (Eq, BraidLit [s 1], Identity))            TBool;
 
   (* 3. Reject pins — these must raise Type_error. *)
   let rejects name e = ok name (infer_opt e = None) in
   rejects "add word+num"        (BinOp (Add, BraidLit [], IntLit 1));
-  rejects "eq diff-width word"  (BinOp (Eq, BraidLit [s 1], Identity));
+
   rejects "eq num vs str"       (BinOp (Eq, IntLit 1, StringLit "a"));
   rejects "lower non-echo"      (Lower (IntLit 1));
   rejects "fst non-prod"        (Fst (IntLit 1));

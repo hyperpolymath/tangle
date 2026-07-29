@@ -1062,8 +1062,39 @@ let test_echo_types () =
     infer [] (BinOp (Eq, BraidLit [sigma 1], BraidLit [sigma 1])) = TBool);
   test "Eq: Bool == Bool ok (extra-core)" (fun () ->
     infer [] (BinOp (Eq, BoolLit true, BoolLit false)) = TBool);
-  test "Eq: unequal-width words rejected" (fun () ->
-    raises (fun () -> infer [] (BinOp (Eq, BraidLit [sigma 1], BraidLit [sigma 1; sigma 2]))))
+  (* #92: unequal widths are now WELL-TYPED. Bn embeds in Bn+1, the comparison
+     is decided in the larger group, and `Braid_equiv.equiv` has no width
+     parameter — it is only the typing rule that used to forbid this. *)
+  test "#92 Eq: unequal-width words are accepted" (fun () ->
+    infer [] (BinOp (Eq, BraidLit [sigma 1], BraidLit [sigma 1; sigma 2])) = TBool);
+
+  test "#92 Eq: identity == braid is accepted (the 'is it trivial?' shape)" (fun () ->
+    infer [] (BinOp (Eq, Identity, BraidLit [sigma 1])) = TBool);
+
+  test "#92 Eq: == and ~ now agree on what they accept" (fun () ->
+    (* They evaluate through the same Braid_equiv.equiv since TG-7; before #92
+       the typechecker accepted one and rejected the other. *)
+    let a = BraidLit [sigma 1] and b = BraidLit [sigma 2] in
+    infer [] (BinOp (Eq, a, b)) = infer [] (BinOp (Isotopy, a, b)));
+
+  test "#92 Eq: genuinely mismatched types are STILL rejected" (fun () ->
+    (* Widening must not become "anything compares to anything". *)
+    raises (fun () -> infer [] (BinOp (Eq, IntLit 1, BraidLit [sigma 1]))));
+
+  test "#92 match arms join on width instead of failing" (fun () ->
+    (* turing_complete.tangle's shape: arms at Word[0] and Word[2]. *)
+    let arms = [
+      { arm_pattern = PatIdentity;  arm_body = Identity };
+      { arm_pattern = PatWildcard;  arm_body = BraidLit [sigma 1] };
+    ] in
+    infer [] (Match (BraidLit [sigma 1], arms)) = TWord 2);
+
+  test "#92 match arms of genuinely different KINDS still fail" (fun () ->
+    let arms = [
+      { arm_pattern = PatIdentity;  arm_body = IntLit 1 };
+      { arm_pattern = PatWildcard;  arm_body = BraidLit [sigma 1] };
+    ] in
+    raises (fun () -> infer [] (Match (BraidLit [sigma 1], arms))))
 
 (* ================================================================== *)
 (*  Main: run all test groups                                          *)
