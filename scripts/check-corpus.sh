@@ -44,6 +44,7 @@ fi
 # Examples that must fully TYPECHECK and EVALUATE (all their asserts hold).
 EXAMPLES_MUST_RUN=(
   braids_as_data.tangle
+  epistemic.tangle        # TG-11 — warranted claims, non-factive
   compositional_pd.tangle
   echo_pd.tangle
   isotopy.tangle          # the TG-7 witness — see header

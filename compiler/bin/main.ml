@@ -187,7 +187,9 @@ let dump_tokens (filename : string) : unit =
      | FST         -> print_string "FST"
      | SND         -> print_string "SND"
      | ECHOADD     -> print_string "ECHOADD"
-     | ECHOEQ      -> print_string "ECHOEQ");
+     | ECHOEQ      -> print_string "ECHOEQ"
+     | WARRANT     -> print_string "WARRANT"
+     | EVIDENCE    -> print_string "EVIDENCE");
     print_newline ();
     if tok <> EOF then loop ()
   in

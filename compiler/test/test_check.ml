@@ -72,6 +72,24 @@ let () =
   test "a single type error yields exactly one diagnostic (no duplicate)" (fun () ->
     let ds = check_source "def bad = braid[s1] + 3\n" in
     List.length (List.filter (fun d -> d.level = Error) ds) = 1);
+  (* Statement ORDER through the recovering parser. This path (check.ml) is
+     what --check and the LSP use, and it reversed every program: the copy in
+     bin/main.ml was fixed in #95, this one was not. A definition referring to
+     an earlier definition was therefore checked BEFORE that definition was
+     refined past its Word[0] placeholder. *)
+  test "cross-definition reference typechecks (statement order)" (fun () ->
+    not (has_error (check_source
+      "def a = braid[s1]\ndef b = a . a\n")));
+
+  test "echo cross-reference typechecks" (fun () ->
+    (* Was broken: "residue requires Echo[_, _], got Word[0]". *)
+    not (has_error (check_source
+      "def e = echoClose(braid[s1])\ndef r = residue(e)\n")));
+
+  test "epistemic cross-reference typechecks" (fun () ->
+    not (has_error (check_source
+      "def w = warrant[0](42, braid[s1])\ndef tok = evidence(w)\n")));
+
   test "format_diag is tab-separated with 4 fields" (fun () ->
     let line = format_diag { level = Error; line = 3; col = 5; message = "boom" } in
     String.split_on_char '\t' line = ["ERROR"; "3"; "5"; "boom"]);

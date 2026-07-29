@@ -35,12 +35,25 @@ let parse_with_recovery (source : string) : Ast.program * diag list =
   lexbuf.Lexing.lex_curr_p <-
     { lexbuf.Lexing.lex_curr_p with Lexing.pos_lnum = 1 };
   let diags = ref [] in
-  let stmts = ref [] in
+  (* Accumulate SEGMENTS (each a statement list from one parser run), newest
+     first, and flatten in order at the end.
+
+     This is the SECOND copy of this bug. bin/main.ml had the identical
+     `stmts := prog @ !stmts` followed by `List.rev` on the flattened list —
+     correct for an accumulator built by prepending single items (as `diags`
+     is) but wrong when whole segments are prepended, so every program came out
+     with its statements REVERSED. That copy was fixed in #95; this one feeds
+     `--check` AND the LSP, so both have been analysing reversed programs:
+     `def w = ...` / `def tok = f(w)` reported "In definition 'tok': ... got
+     Word[0]" because `tok` was checked before `w` was refined past its
+     placeholder. The test suites missed it — they call Parser.program
+     directly. *)
+  let segments = ref [] in
   let at_eof = ref false in
   while not !at_eof do
     (try
        let prog = Parser.program Lexer.token lexbuf in
-       stmts := prog @ !stmts;
+       segments := prog :: !segments;
        at_eof := true
      with
      | Lexer.Lexer_error msg ->
@@ -56,7 +69,8 @@ let parse_with_recovery (source : string) : Ast.program * diag list =
                   message = "Parse error: unexpected token" } :: !diags;
        at_eof := synchronize lexbuf)
   done;
-  (List.rev !stmts, List.rev !diags)
+  (* Flatten oldest-segment-first, preserving order WITHIN each segment. *)
+  (List.concat (List.rev !segments), List.rev !diags)
 
 (* The full diagnostic set for a source string: parse diagnostics followed by
    type-checker diagnostics.  This is exactly the set of failures that would

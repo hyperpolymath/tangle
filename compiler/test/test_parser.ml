@@ -210,6 +210,51 @@ let test_weave_blocks () =
     let p2 = parse_ok printed in
     assert_eq "pretty then re-parse yields the same AST" p1 p2);
 
+  (* TG-11 surface syntax: warrant[k](claim, evidence) and evidence(e). *)
+  test "TG-11 warrant parses with a bracketed standpoint" (fun () ->
+    let prog = parse_ok "def w = warrant[3](42, braid[s1])" in
+    match prog with
+    | [Definition d] ->
+      (match d.def_body with
+       | Warrant (3, IntLit 42, BraidLit _) -> ()
+       | _ -> failwith "expected Warrant with standpoint 3")
+    | _ -> failwith "expected a single Definition");
+
+  test "TG-11 evidence parses" (fun () ->
+    let prog = parse_ok "def t = evidence(w)" in
+    match prog with
+    | [Definition d] ->
+      (match d.def_body with
+       | Evidence (Var "w") -> ()
+       | _ -> failwith "expected Evidence")
+    | _ -> failwith "expected a single Definition");
+
+  test "TG-11 there is NO surface form extracting the claim" (fun () ->
+    (* Non-factivity reaches the syntax. `evidence` is a KEYWORD and becomes
+       the Evidence form; `claim` is not a keyword, so `claim(w)` is just an
+       ordinary call to an undefined function — it can never be an elimination
+       the proofs forbid. If a `Claim` form ever appears here, someone has
+       added a rule that contradicts epi_only_yields_evidence. *)
+    (match parse "def c = claim(w)" with
+     | Some [Definition d] ->
+       (match d.def_body with
+        | Call ("claim", _) -> ()          (* plain call — correct *)
+        | _ -> failwith "claim(w) must parse as an ordinary Call, not a form")
+     | _ -> failwith "expected claim(w) to parse as a call");
+    (* Whereas `evidence` IS a form: *)
+    match parse "def c = evidence(w)" with
+    | Some [Definition d] ->
+      (match d.def_body with
+       | Evidence _ -> ()
+       | _ -> failwith "evidence(w) must parse as the Evidence form")
+    | _ -> failwith "expected evidence(w) to parse");
+
+  test "TG-11 warrant round-trips (TG-4 property)" (fun () ->
+    let src = "def w = warrant[0](42, braid[s1])" in
+    let p1 = parse_ok src in
+    let p2 = parse_ok (Tangle.Pretty.program_to_string p1) in
+    assert_eq "pretty then re-parse" p1 p2);
+
   test "#88 weave is still valid as a statement" (fun () ->
     (* Regression guard: the change is additive. *)
     let prog = parse_ok
