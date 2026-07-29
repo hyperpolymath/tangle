@@ -1089,6 +1089,40 @@ let test_echo_types () =
     ] in
     infer [] (Match (BraidLit [sigma 1], arms)) = TWord 2);
 
+  (* ---------------------------------------------------------------- *)
+  (* EPISTEMIC TYPES. The commitment is NON-FACTIVITY: holding a warrant  *)
+  (* is not holding the fact. `Evidence` is the ONLY elimination, and it  *)
+  (* yields the token type, never the claim type.                        *)
+  (* ---------------------------------------------------------------- *)
+
+  test "epi: warrant types as Epi[k, rho, tau]" (fun () ->
+    infer [] (Warrant (0, IntLit 1, BraidLit [sigma 1]))
+      = TEpi (0, TWord 2, TNum));
+
+  test "epi: evidence yields the EVIDENCE type, not the claim" (fun () ->
+    (* The heart of it. Claim is Num, evidence is Word[2]; the projection
+       must give Word[2]. If it gave Num, the warrant would be factive. *)
+    infer [] (Evidence (Warrant (0, IntLit 1, BraidLit [sigma 1])))
+      = TWord 2);
+
+  test "epi: NO elimination delivers the claim type" (fun () ->
+    (* Guard: evidence must never return the claim type when the two differ. *)
+    infer [] (Evidence (Warrant (0, StringLit "claimed", BraidLit [sigma 1])))
+      <> TStr);
+
+  test "epi: standpoints are distinguished" (fun () ->
+    infer [] (Warrant (1, IntLit 1, IntLit 2))
+      <> infer [] (Warrant (2, IntLit 1, IntLit 2)));
+
+  test "epi: composes over echo without collapsing into it" (fun () ->
+    (* EpistemicEcho from EchoBridge.agda: standpoint k with access to an
+       echo. The two modalities nest; neither absorbs the other. *)
+    infer [] (Warrant (1, IntLit 0, EchoClose (BraidLit [sigma 1])))
+      = TEpi (1, TEcho (TWord 2, TWord 0), TNum));
+
+  test "epi: evidence of a non-warrant is rejected" (fun () ->
+    raises (fun () -> infer [] (Evidence (IntLit 1))));
+
   test "#92 match arms of genuinely different KINDS still fail" (fun () ->
     let arms = [
       { arm_pattern = PatIdentity;  arm_body = IntLit 1 };

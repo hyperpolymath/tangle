@@ -276,6 +276,17 @@ let rec pp_expr ctx = function
     emit ctx " yield strands ";
     pp_strand_list ctx w.weave_outputs
 
+  | Warrant (k, c, ev) ->
+    emit ctx "warrant["; emit ctx (string_of_int k); emit ctx "](";
+    pp_expr ctx c; emit ctx ", "; pp_expr ctx ev; emit ctx ")"
+
+  | EpiVal (k, c, ev) ->
+    emit ctx "epiVal["; emit ctx (string_of_int k); emit ctx "](";
+    pp_expr ctx c; emit ctx ", "; pp_expr ctx ev; emit ctx ")"
+
+  | Evidence e ->
+    emit ctx "evidence("; pp_expr ctx e; emit ctx ")"
+
   | Crossing (a, op, b) ->
     emit ctx "(";
     emit ctx a;

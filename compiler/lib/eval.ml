@@ -42,6 +42,11 @@ type value =
   | VFun       of string list * expr * env  (** Closure: params, body, captured env *)
   | VUnit                             (** Unit / void result *)
   | VInvariant of string * string     (** Invariant name, result string *)
+  | VEpi       of int * value * value  (** Formed warrant: standpoint, claim, token.
+                                          The claim is CARRIED but has no
+                                          projection — `Evidence` is the only
+                                          elimination.  Mirrors epiVal in
+                                          proofs/Tangle.lean. *)
   | VEcho      of value * value       (** Formed echo: residue, result —
                                           mirrors [echoVal] in proofs/Tangle.lean *)
   | VPair      of value * value       (** Product value *)
@@ -92,6 +97,8 @@ let rec pp_value (v : value) : string =
   | VFun _        -> "<function>"
   | VUnit         -> "()"
   | VInvariant (name, result) -> Printf.sprintf "%s = %s" name result
+  | VEpi (k, c, ev) ->
+    Printf.sprintf "warrant[%d](%s, %s)" k (pp_value c) (pp_value ev)
   | VEcho (res, result) ->
     "echo(" ^ pp_value res ^ ", " ^ pp_value result ^ ")"
   | VPair (a, b) ->
@@ -394,6 +401,21 @@ let rec eval_expr (env : env) (e : expr) : value =
     | VBraid gens    -> VTangle { tv_word = gens; tv_closed = false }
     | v -> eval_error "Weave body must evaluate to a braid or tangle, got %s"
              (pp_value v)
+    end
+
+  (* Epistemic.  `warrant` forms the value; `evidence` is the sole projection
+     and yields the TOKEN.  There is deliberately no operation returning the
+     claim — holding a warrant is not holding the fact. *)
+  | Warrant (k, claim, ev) ->
+    VEpi (k, eval_expr env claim, eval_expr env ev)
+
+  | EpiVal (k, claim, ev) ->
+    VEpi (k, eval_expr env claim, eval_expr env ev)
+
+  | Evidence e ->
+    begin match eval_expr env e with
+    | VEpi (_, _, ev) -> ev
+    | v -> eval_error "evidence requires a warrant, got %s" (pp_value v)
     end
 
   | Cap (_e1, _e2) ->

@@ -93,6 +93,14 @@ and expr =
   | EchoAdd   of expr * expr          (* echo-preserving addition (residue = summand pair) *)
   | EchoEq    of expr * expr          (* echo-preserving equality (residue = operand pair) *)
 
+  (* ---- Epistemic (warranted claim) — mirrors §EPISTEMIC in
+   *      proofs/Tangle.lean and epistemic-types' Warrant.agda.
+   *      NON-FACTIVE: `Evidence` is the only elimination.  There is no
+   *      operation taking a warrant to the thing warranted. ---- *)
+  | Warrant   of int * expr * expr    (* warrant κ claim evidence (redex) *)
+  | EpiVal    of int * expr * expr    (* formed warrant: standpoint, claim, token *)
+  | Evidence  of expr                 (* project the evidence token (ONLY elimination) *)
+
   (* ---- Literals ---- *)
   | BraidLit  of generator list
   | Identity
