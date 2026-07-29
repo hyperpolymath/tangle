@@ -75,14 +75,10 @@ CONFORMANCE_KNOWN_UNPARSED=(
 )
 
 # conformance/valid programs that PARSE but do not yet TYPECHECK+EVALUATE.
-#   v09_twist : `(~a)` — twisting a named strand inside a weave. spec/grammar.ebnf
-#               says "In weave context: (~a) twists named strand a", but
-#               infer_expr rejects any strand name used as an expression, so the
-#               construct is specified and unimplemented. Tracked in #96.
-#   v11       : does not parse at all (see above); listed here too so the eval
-#               loop does not double-report it.
+#   v11 : does not parse at all (see above); listed here too so the eval loop
+#         does not double-report it.
+# (v09_twist was listed here for [T-Twist-Strand] until #96 implemented it.)
 CONFORMANCE_KNOWN_UNRUNNABLE=(
-  v09_twist.tangle
   v11_add_block.tangle
 )
 

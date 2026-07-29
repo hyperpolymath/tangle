@@ -357,6 +357,31 @@ let test_isotopy () =
     infer gamma (BinOp (Isotopy, Var "t1", Var "t2")) = TBool);
 
   (* Isotopy: non-topological types -> error *)
+  (* #96 [T-Twist-Strand] (D1.18): `(~a)` on a NAMED STRAND inside a weave.
+     Specified in FORMAL-SEMANTICS section 3.10 and in spec/grammar.ebnf, but
+     infer_expr rejected any strand name used as an expression, so the
+     construct was licensed by the spec and unimplemented.  Parallel to
+     [T-Self-Cross], which the spec presents alongside it. *)
+  test "#96 T-Twist-Strand: (~a) on a strand is Tangle[[T],[T]]" (fun () ->
+    let sigma = [("a", { strand_pos = 1; strand_ty = StrandNamed "Q" })] in
+    infer_expr [] sigma (Twist (Var "a"))
+      = TTangle ([StrandNamed "Q"], [StrandNamed "Q"]));
+
+  test "#96 twist agrees with the self-crossing rule it parallels" (fun () ->
+    (* [T-Self-Cross] types (a > a) the same way; the two must not diverge. *)
+    let sigma = [("a", { strand_pos = 1; strand_ty = StrandNamed "Q" })] in
+    infer_expr [] sigma (Twist (Var "a"))
+      = infer_expr [] sigma (Crossing ("a", Over, "a")));
+
+  test "#96 standalone twist on a Word is unchanged" (fun () ->
+    (* Regression guard: [T-Twist-Word] must still apply outside a weave. *)
+    infer [] (Twist (BraidLit [sigma 1])) = TWord 2);
+
+  test "#96 twist of a non-strand, non-word is still rejected" (fun () ->
+    (* `raises` is defined in a later group; inline it here. *)
+    try let _ = infer [] (Twist (StringLit "x")) in false
+    with Type_error _ -> true);
+
   test "T-Isotopy (type error)" (fun () ->
     try
       let _ = infer [] (BinOp (Isotopy, IntLit 1, IntLit 2)) in
