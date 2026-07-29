@@ -99,6 +99,7 @@ let rec derive (gamma : env) (e : expr) : derivation =
       (derive gamma scrut :: List.map (fun a -> derive gamma a.arm_body) arms)
 
   | Call (f, args)   -> node "T-App" gamma [f] e ty (List.map (derive gamma) args)
+  | AddBlock _       -> leaf "T-Add-Block"
   | Crossing _       -> leaf "T-Crossing"
   | Weave _          -> leaf "T-Weave"
 
@@ -225,6 +226,9 @@ let rec check_node (d : derivation) : unit =
   | "T-Pipeline" | "T-Unary" | "T-Close" | "T-Mirror" | "T-Reverse"
   | "T-Simplify" | "T-Twist" | "T-Cap" | "T-Cup" | "T-Echo-Add" | "T-Echo-Eq"
   | "T-Let" | "T-Match" | "T-App" | "T-Crossing" | "T-Weave" -> ()
+  (* T-Add-Block: the island has its own judgement (|-_hd), so re-deriving it
+     here would mean re-implementing that checker. Deferred, and listed. *)
+  | "T-Add-Block" -> ()
   | r -> fail r "unknown rule name" c
 
 let check (d : derivation) : (unit, check_error list) result =

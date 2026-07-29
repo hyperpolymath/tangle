@@ -142,7 +142,10 @@ let rec lean_expr (scope : string list) (e : expr) : string =
   (* Non-core: must never appear in the corpus (close is the boundary gateway). *)
   | FloatLit _ | BinOp ((Sub | Mul | Div | Isotopy), _, _) | UnaryOp _
   | Close _ | Mirror _ | Reverse _ | Simplify _ | Cap _ | Cup _ | Twist _
-  | Match _ | Call _ | Crossing _ | Weave _ ->
+  (* add{} is NOT in the mechanised core: the Harvard judgement |-_hd has no
+     Lean image (0 occurrences in proofs/Tangle.lean), so an island must never
+     appear in the TG-3 corpus. *)
+  | Match _ | Call _ | Crossing _ | Weave _ | AddBlock _ ->
     failwith "TG-3: non-core constructor in corpus term"
 
 (* ================================================================== *)

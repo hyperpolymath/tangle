@@ -382,6 +382,24 @@ let test_isotopy () =
     try let _ = infer [] (Twist (StringLit "x")) in false
     with Type_error _ -> true);
 
+  (* #94 JTV island typing: the Harvard judgement |-_hd, then Embed. *)
+  test "#94 add{} embeds Int as Num" (fun () ->
+    infer [] (AddBlock (HvBin (HvAdd, HvInt 1, HvInt 2))) = TNum);
+
+  test "#94 add{} embeds Bool as Bool" (fun () ->
+    infer [] (AddBlock (HvBool true)) = TBool);
+
+  test "#94 add{} comparison yields Bool" (fun () ->
+    infer [] (AddBlock (HvBin (HvLt, HvInt 1, HvInt 2))) = TBool);
+
+  test "#94 add{} rejects arithmetic on a Bool" (fun () ->
+    try let _ = infer [] (AddBlock (HvBin (HvAdd, HvBool true, HvInt 1))) in false
+    with Type_error _ -> true);
+
+  test "#94 add{} rejects if-branches that disagree (totality)" (fun () ->
+    try let _ = infer [] (AddBlock (HvIf (HvBool true, HvInt 1, HvStr "x"))) in false
+    with Type_error _ -> true);
+
   test "T-Isotopy (type error)" (fun () ->
     try
       let _ = infer [] (BinOp (Isotopy, IntLit 1, IntLit 2)) in

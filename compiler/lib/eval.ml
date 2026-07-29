@@ -282,6 +282,85 @@ let gens_of_value (v : value) : gen list =
   | VTangle tv     -> tv.tv_word
   | _ -> eval_error "Expected a braid or tangle value, got %s" (pp_value v)
 
+(** Harvard data VALUES — the island's own value space, kept separate from
+    TANGLE's [value] so the two cannot be confused. *)
+type hv_value =
+  | HvVInt   of int
+  | HvVFloat of float
+  | HvVBool  of bool
+  | HvVStr   of string
+
+(** Evaluate a Harvard data expression.  Total by construction (D2.1): no
+    loops, no assignment, no side effects — every case is structural recursion
+    on a finite term, so this terminates.  Division by zero is the one runtime
+    error the fragment admits. *)
+let rec eval_hv (e : hv_expr) : hv_value =
+  let num2 f g a b =
+    match a, b with
+    | HvVInt x,   HvVInt y   -> HvVInt (f x y)
+    | HvVInt x,   HvVFloat y -> HvVFloat (g (float_of_int x) y)
+    | HvVFloat x, HvVInt y   -> HvVFloat (g x (float_of_int y))
+    | HvVFloat x, HvVFloat y -> HvVFloat (g x y)
+    | _ -> eval_error "add{}: arithmetic on non-numbers"
+  in
+  let cmp2 f g a b =
+    match a, b with
+    | HvVInt x,   HvVInt y   -> HvVBool (f x y)
+    | HvVInt x,   HvVFloat y -> HvVBool (g (float_of_int x) y)
+    | HvVFloat x, HvVInt y   -> HvVBool (g x (float_of_int y))
+    | HvVFloat x, HvVFloat y -> HvVBool (g x y)
+    | _ -> eval_error "add{}: comparison on non-numbers"
+  in
+  match e with
+  | HvInt n   -> HvVInt n
+  | HvFloat f -> HvVFloat f
+  | HvStr s   -> HvVStr s
+  | HvBool b  -> HvVBool b
+  | HvUn (HvNeg, a) ->
+    (match eval_hv a with
+     | HvVInt n -> HvVInt (-n) | HvVFloat f -> HvVFloat (-.f)
+     | _ -> eval_error "add{}: negation of a non-number")
+  | HvUn (HvNot, a) ->
+    (match eval_hv a with
+     | HvVBool b -> HvVBool (not b)
+     | _ -> eval_error "add{}: ! of a non-boolean")
+  | HvBin (op, a, b) ->
+    let va = eval_hv a and vb = eval_hv b in
+    begin match op with
+    | HvAdd -> num2 ( + ) ( +. ) va vb
+    | HvSub -> num2 ( - ) ( -. ) va vb
+    | HvMul -> num2 ( * ) ( *. ) va vb
+    | HvDiv ->
+      (match va, vb with
+       | _, HvVInt 0 -> eval_error "add{}: division by zero"
+       | _, HvVFloat 0.0 -> eval_error "add{}: division by zero"
+       | _ -> num2 ( / ) ( /. ) va vb)
+    | HvMod ->
+      (match va, vb with
+       | HvVInt _, HvVInt 0 -> eval_error "add{}: modulo by zero"
+       | HvVInt x, HvVInt y -> HvVInt (x mod y)
+       | _ -> eval_error "add{}: modulo requires integers")
+    | HvLt -> cmp2 ( < ) ( < ) va vb
+    | HvLe -> cmp2 ( <= ) ( <= ) va vb
+    | HvGt -> cmp2 ( > ) ( > ) va vb
+    | HvGe -> cmp2 ( >= ) ( >= ) va vb
+    | HvEq -> HvVBool (va = vb)
+    | HvNe -> HvVBool (va <> vb)
+    | HvAnd ->
+      (match va, vb with
+       | HvVBool x, HvVBool y -> HvVBool (x && y)
+       | _ -> eval_error "add{}: && on non-booleans")
+    | HvOr ->
+      (match va, vb with
+       | HvVBool x, HvVBool y -> HvVBool (x || y)
+       | _ -> eval_error "add{}: || on non-booleans")
+    end
+  | HvIf (c, t, e2) ->
+    (match eval_hv c with
+     | HvVBool true  -> eval_hv t
+     | HvVBool false -> eval_hv e2
+     | _ -> eval_error "add{}: if condition is not a boolean")
+
 (** Evaluate an expression in the given environment. *)
 let rec eval_expr (env : env) (e : expr) : value =
   match e with
@@ -406,6 +485,16 @@ let rec eval_expr (env : env) (e : expr) : value =
   (* Epistemic.  `warrant` forms the value; `evidence` is the sole projection
      and yields the TOKEN.  There is deliberately no operation returning the
      claim — holding a warrant is not holding the fact. *)
+  (* The add{} island evaluates in its own world and crosses back as a TANGLE
+     value.  Total and pure: every case terminates, nothing escapes. *)
+  | AddBlock he ->
+    begin match eval_hv he with
+    | HvVInt n   -> VInt n
+    | HvVFloat f -> VFloat f
+    | HvVBool b  -> VBool b
+    | HvVStr s   -> VString s
+    end
+
   | Warrant (k, claim, ev) ->
     VEpi (k, eval_expr env claim, eval_expr env ev)
 

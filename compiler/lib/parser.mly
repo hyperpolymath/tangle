@@ -35,6 +35,8 @@
 (* Echo / product forms — surface syntax mirrors pretty.ml output *)
 %token ECHOCLOSE LOWER RESIDUE PAIR FST SND ECHOADD ECHOEQ
 %token WARRANT EVIDENCE
+%token ADDBRACE IF THEN ELSE
+%token AMPAMP BARBAR BANGEQ LE GE PERCENT BANG
 
 (* Invariant names *)
 %token JONES ALEXANDER HOMFLY KAUFFMAN WRITHE LINKING
@@ -302,6 +304,12 @@ unary_expr:
     { Warrant (k, c, ev) }
   | EVIDENCE LPAREN e = expr RPAREN
     { Evidence e }
+  (* ---- JTV injection island (D2.1) ----
+     `add{ he }` switches to the Harvard DATA grammar entirely. The island is
+     delimited precisely so its operators cannot conflict with TANGLE's:
+     `+` here is arithmetic, `+` outside is connect-sum. *)
+  | ADDBRACE he = hv_expr RBRACE
+    { AddBlock he }
   | t = twist_expr                     { t }
   | MINUS e = primary_expr             { UnaryOp (Neg, e) }
   | e = primary_expr                   { e }
@@ -345,6 +353,66 @@ primary_expr:
     { e }
   | LBRACE e = expr RBRACE
     { e }
+  ;
+
+(* ================================================================== *)
+(*  JTV Harvard DATA grammar (spec section 6.2)                        *)
+(* ================================================================== *)
+(* A SEPARATE hierarchy from TANGLE's. Precedence, loosest to tightest:
+     if/then/else  <  ||  <  &&  <  comparison  <  + -  <  * / %  <  unary
+   Note `if` is total: both branches are required (D2.1). *)
+
+hv_expr:
+  | IF c = hv_expr THEN t = hv_expr ELSE e = hv_expr  { HvIf (c, t, e) }
+  | e = hv_or                                          { e }
+  ;
+
+hv_or:
+  | a = hv_or BARBAR b = hv_and   { HvBin (HvOr, a, b) }
+  | e = hv_and                    { e }
+  ;
+
+hv_and:
+  | a = hv_and AMPAMP b = hv_cmp  { HvBin (HvAnd, a, b) }
+  | e = hv_cmp                    { e }
+  ;
+
+hv_cmp:
+  | a = hv_sum EQEQ   b = hv_sum  { HvBin (HvEq, a, b) }
+  | a = hv_sum BANGEQ b = hv_sum  { HvBin (HvNe, a, b) }
+  | a = hv_sum LT     b = hv_sum  { HvBin (HvLt, a, b) }
+  | a = hv_sum LE     b = hv_sum  { HvBin (HvLe, a, b) }
+  | a = hv_sum GT     b = hv_sum  { HvBin (HvGt, a, b) }
+  | a = hv_sum GE     b = hv_sum  { HvBin (HvGe, a, b) }
+  | e = hv_sum                    { e }
+  ;
+
+hv_sum:
+  | a = hv_sum PLUS  b = hv_prod  { HvBin (HvAdd, a, b) }
+  | a = hv_sum MINUS b = hv_prod  { HvBin (HvSub, a, b) }
+  | e = hv_prod                   { e }
+  ;
+
+hv_prod:
+  | a = hv_prod STAR    b = hv_unary { HvBin (HvMul, a, b) }
+  | a = hv_prod SLASH   b = hv_unary { HvBin (HvDiv, a, b) }
+  | a = hv_prod PERCENT b = hv_unary { HvBin (HvMod, a, b) }
+  | e = hv_unary                     { e }
+  ;
+
+hv_unary:
+  | MINUS e = hv_unary  { HvUn (HvNeg, e) }
+  | BANG  e = hv_unary  { HvUn (HvNot, e) }
+  | e = hv_atom         { e }
+  ;
+
+hv_atom:
+  | n = INT                      { HvInt n }
+  | f = FLOAT                    { HvFloat f }
+  | s = STRING                   { HvStr s }
+  | TRUE                         { HvBool true }
+  | FALSE                        { HvBool false }
+  | LPAREN e = hv_expr RPAREN    { e }
   ;
 
 (* ---- Crossings: (a > b) or (a < b) ---- *)
