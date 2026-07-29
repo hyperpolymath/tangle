@@ -205,6 +205,32 @@ let test_reverse () =
     eval (Reverse (BraidLit [sigma 1; sigma 2]))
       = VBraid [rgen 2 (-1); rgen 1 (-1)]);
 
+  (* Reverse is the INVERSE braid: order reversed AND exponents negated.
+     Two separate corpus programs (examples/trefoil.tangle and
+     conformance/valid/v16) asserted that it merely reverses order. Both were
+     mathematically false and both went undetected for want of anything that
+     ran them. These pin the semantics so the misunderstanding cannot return. *)
+  test "reverse is the INVERSE, not just order-reversal" (fun () ->
+    (* reverse(s1 s2) = s2^-1 s1^-1, NOT s2 s1 *)
+    eval (Reverse (BraidLit [sigma 1; sigma 2]))
+      <> VBraid [rgen 2 1; rgen 1 1]);
+
+  test "reverse composed with itself is the identity map" (fun () ->
+    (* (w^-1)^-1 = w — a property that only holds if reverse really inverts. *)
+    let w = BraidLit [sigma 1; sigma 2; sigma_inv 1] in
+    eval (Reverse (Reverse w)) = eval w);
+
+  test "reverse negates writhe (the invariant that disproved the false claims)" (fun () ->
+    match eval (BraidLit [sigma 1; sigma 1; sigma 1]),
+          eval (Reverse (BraidLit [sigma 1; sigma 1; sigma 1])) with
+    | VBraid a, VBraid b -> writhe a = 3 && writhe b = -3
+    | _ -> false);
+
+  test "mirror negates IN PLACE, unlike reverse" (fun () ->
+    (* The contrast that makes the two easy to confuse. *)
+    eval (Mirror (BraidLit [sigma 1; sigma 2]))
+      = VBraid [rgen 1 (-1); rgen 2 (-1)]);
+
   (* Reverse identity is identity *)
   test "Reverse identity" (fun () ->
     eval (Reverse Identity) = VBraid []);

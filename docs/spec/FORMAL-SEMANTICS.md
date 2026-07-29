@@ -57,7 +57,7 @@ e  ::=  x                                    -- variable reference
      |  cap                                  -- cap primitive
      |  cup                                  -- cup primitive
      |  mirror(e)                            -- mirror image
-     |  reverse(e)                           -- reverse word
+     |  reverse(e)                           -- inverse braid (see §Reverse)
      |  simplify(e)                          -- Reidemeister simplification
      |  f(e₁, ..., eₖ)                      -- function application
      |  match e with arm₁ | ... | armₖ end  -- pattern matching
@@ -372,7 +372,22 @@ With explicit strand types (in weave context):
 Γ ⊢ mirror(e) : Word[n]
 ```
 
-**Reverse** — inverts all generators in a word:
+**Reverse** — the INVERSE braid. It reverses the word **and** negates every
+exponent:
+
+```
+reverse(g₁ g₂ … gₙ)  =  gₙ⁻¹ … g₂⁻¹ g₁⁻¹        i.e.  reverse(w) = w⁻¹
+```
+
+So `reverse(braid[s1, s2]) = braid[s2^-1, s1^-1]` — NOT `braid[s2, s1]`.
+
+This is easy to get wrong, and was: both `examples/trefoil.tangle` and
+`conformance/valid/v16_close_mirror_reverse.tangle` asserted that `reverse`
+merely reverses order, which is false. `writhe` disproves it — writhe is the
+exponent sum and is invariant under the braid relations, so `w` and `w⁻¹`
+differ in writhe by twice the writhe of `w` and cannot be equal unless the
+writhe is 0. Contrast **mirror**, which negates exponents *in place* and
+leaves the order alone.
 
 ```
 Γ ⊢ e : Word[n]

@@ -73,6 +73,18 @@ CONFORMANCE_KNOWN_UNPARSED=(
   v11_add_block.tangle
 )
 
+# conformance/valid programs that PARSE but do not yet TYPECHECK+EVALUATE.
+#   v09_twist : `(~a)` — twisting a named strand inside a weave. spec/grammar.ebnf
+#               says "In weave context: (~a) twists named strand a", but
+#               infer_expr rejects any strand name used as an expression, so the
+#               construct is specified and unimplemented. Tracked in #96.
+#   v11       : does not parse at all (see above); listed here too so the eval
+#               loop does not double-report it.
+CONFORMANCE_KNOWN_UNRUNNABLE=(
+  v09_twist.tangle
+  v11_add_block.tangle
+)
+
 fail=0
 note() { printf '  %-34s %s\n' "$1" "$2"; }
 
@@ -149,6 +161,36 @@ for f in "${ROOT}"/conformance/valid/*.tangle; do
     fi
   fi
 done
+# conformance/valid must also RUN, not merely parse.
+# Parsing alone was never enough: `examples/trefoil.tangle` and
+# `conformance/valid/v16_close_mirror_reverse.tangle` BOTH asserted
+# `reverse(w) == <w with order reversed>`, forgetting that `reverse` also
+# negates exponents and so yields the inverse braid. Both were mathematically
+# false — disproved by writhe, which is invariant under the braid relations —
+# and both sat undetected because the gate only checked that they parsed.
+echo "== conformance: valid programs must EVALUATE =="
+for f in "${ROOT}"/conformance/valid/*.tangle; do
+  n="$(basename "$f")"
+  if "${BIN}" --eval "$f" >/dev/null 2>&1; then
+    if in_list "$n" "${CONFORMANCE_KNOWN_UNRUNNABLE[@]}"; then
+      note "valid/$n" "NOW RUNS"
+      echo "::error::conformance/valid/${n} now evaluates — drop it from CONFORMANCE_KNOWN_UNRUNNABLE."
+      fail=1
+    else
+      note "valid/$n" "evaluates ok"
+    fi
+  else
+    if in_list "$n" "${CONFORMANCE_KNOWN_UNRUNNABLE[@]}"; then
+      note "valid/$n" "still not runnable (expected)"
+    else
+      note "valid/$n" "EVAL FAILED"
+      echo "::error::conformance/valid/${n} parses but does not evaluate:"
+      "${BIN}" --eval "$f" 2>&1 | head -3
+      fail=1
+    fi
+  fi
+done
+
 for f in "${ROOT}"/conformance/invalid/*.tangle; do
   n="$(basename "$f")"
   if "${BIN}" "$f" >/dev/null 2>&1; then
