@@ -34,6 +34,7 @@
 
 (* Echo / product forms — surface syntax mirrors pretty.ml output *)
 %token ECHOCLOSE LOWER RESIDUE PAIR FST SND ECHOADD ECHOEQ
+%token WARRANT EVIDENCE
 
 (* Invariant names *)
 %token JONES ALEXANDER HOMFLY KAUFFMAN WRITHE LINKING
@@ -290,6 +291,17 @@ unary_expr:
     { EchoAdd (e1, e2) }
   | ECHOEQ LPAREN e1 = expr COMMA e2 = expr RPAREN
     { EchoEq (e1, e2) }
+  (* ---- Epistemic (TG-11) ----
+     `warrant[k](claim, evidence)` — at standpoint k, evidence purporting to
+     support claim.  The standpoint is bracketed like a braid index because it
+     is an index, not an operand.
+     `evidence(e)` is the sole elimination: it yields the TOKEN.  There is no
+     surface form that extracts the claim, because there is no such rule —
+     see epi_only_yields_evidence in proofs/Tangle.lean. *)
+  | WARRANT LBRACKET k = INT RBRACKET LPAREN c = expr COMMA ev = expr RPAREN
+    { Warrant (k, c, ev) }
+  | EVIDENCE LPAREN e = expr RPAREN
+    { Evidence e }
   | t = twist_expr                     { t }
   | MINUS e = primary_expr             { UnaryOp (Neg, e) }
   | e = primary_expr                   { e }

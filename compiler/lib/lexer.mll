@@ -54,6 +54,10 @@
     | "snd"       -> SND
     | "echoAdd"   -> ECHOADD
     | "echoEq"    -> ECHOEQ
+    (* Epistemic forms (TG-11). `evidence` is the ONLY elimination — there is
+       deliberately no keyword that extracts the claim from a warrant. *)
+    | "warrant"   -> WARRANT
+    | "evidence"  -> EVIDENCE
     | "jones"     -> JONES
     | "alexander" -> ALEXANDER
     | "homfly"    -> HOMFLY

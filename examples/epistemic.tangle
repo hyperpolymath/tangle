@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: MPL-2.0
+# epistemic.tangle — warranted claims (TG-11)
+#
+# A warrant is EVIDENCE FOR a claim, not the claim itself. Holding one does
+# not give you the thing warranted. That is the difference between knowing
+# something and having a reason to believe it.
+#
+# Demonstrates:
+#   - warrant[k](claim, evidence) — at standpoint k
+#   - evidence(w) — the ONLY elimination
+#   - non-factivity: nothing extracts the claim
+
+# --- A warrant at standpoint 0 ---
+
+# "At standpoint 0, this braid is my evidence for the claim 42."
+def w = warrant[0](42, braid[s1, s2])
+
+# The evidence can be recovered.
+def token = evidence(w)
+assert token == braid[s1, s2]
+
+# --- The claim is NOT recoverable ---
+#
+# There is no `claim(w)`. It is not a language form, and no typing rule
+# produces the claim's type from a warrant. See epi_only_yields_evidence
+# and epi_claim_is_opaque in proofs/Tangle.lean.
+#
+# If it were extractable, anything anyone attested would become true by
+# fiat — which is exactly the bug you do not want in a provenance system.
+
+# --- Standpoints are distinct positions ---
+#
+# The same evidence for the same claim, held at different standpoints, is a
+# different warrant. Who holds it is part of what it is.
+
+def w1 = warrant[1](42, braid[s1, s2])
+def w2 = warrant[2](42, braid[s1, s2])
+
+# Both still yield their evidence.
+assert evidence(w1) == braid[s1, s2]
+assert evidence(w2) == braid[s1, s2]
+
+# --- Epistemic composes over echo ---
+#
+# A warrant whose evidence is an echo: standpoint 1 has access to an echo of
+# a braid. The two modalities nest — echo grades irrecoverability, epi
+# indexes standpoints. Neither absorbs the other.
+
+def we = warrant[1](0, echoClose(braid[s1]))
+assert residue(evidence(we)) == braid[s1]
