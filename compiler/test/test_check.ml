@@ -43,11 +43,16 @@ let () =
     not (has_error (check_source "def b = true == false\n")));
 
   Printf.printf "\n=== Type errors are reported ===\n";
-  test "unequal-width word eq is rejected" (fun () ->
-    let ds = check_source "def bad = braid[s1] == braid[s1, s2]\n" in
-    has_error ds && mentions "width" ds);
+  (* #92: unequal-width `==` is now WELL-TYPED, so it is no longer a source of
+     type errors. Adding a word to a number still is. *)
+  test "unequal-width word eq is ACCEPTED (#92)" (fun () ->
+    not (has_error (check_source "def ok = braid[s1] == braid[s1, s2]\n")));
   test "add of word and num is rejected" (fun () ->
-    has_error (check_source "def bad = braid[s1] + 3\n"));
+    let ds = check_source "def bad = braid[s1] + 3\n" in
+    (* Also check the message is the specific one, not just that something
+       failed — `mentions` was left unused when #92 made width mismatches
+       legal, and an unused assertion helper is a smell. *)
+    has_error ds && mentions "add" ds);
 
   Printf.printf "\n=== Parse errors are reported ===\n";
   test "empty body is a parse error" (fun () ->
@@ -61,11 +66,11 @@ let () =
     List.exists (fun d -> d.level = Error && d.line >= 1) ds);
   test "type error is located at the def line, not the file top" (fun () ->
     (* `def bad` is on line 2; the diagnostic must point there, not line 1. *)
-    let src = "def a = braid[s1]\ndef bad = braid[s1] == braid[s1, s2]\n" in
+    let src = "def a = braid[s1]\ndef bad = braid[s1] + 3\n" in
     let ds = check_source src in
     List.exists (fun d -> d.level = Error && d.line = 2) ds);
   test "a single type error yields exactly one diagnostic (no duplicate)" (fun () ->
-    let ds = check_source "def bad = braid[s1] == braid[s1, s2]\n" in
+    let ds = check_source "def bad = braid[s1] + 3\n" in
     List.length (List.filter (fun d -> d.level = Error) ds) = 1);
   test "format_diag is tab-separated with 4 fields" (fun () ->
     let line = format_diag { level = Error; line = 3; col = 5; message = "boom" } in

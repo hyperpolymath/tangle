@@ -66,7 +66,15 @@ assert length(double_trefoil) == 6
 # --- Reverse ---
 
 def reversed = reverse(trefoil)
-assert reversed == braid[s1, s1, s1]
+
+# `reverse` reverses the word AND negates each exponent, so it yields the
+# INVERSE braid: reverse(s1 s1 s1) = s1^-1 s1^-1 s1^-1.
+#
+# This file previously asserted `reversed == braid[s1, s1, s1]`, which is false
+# — writhe(trefoil) = 3 but writhe(reversed) = -3, and writhe is invariant
+# under the braid relations, so they cannot be the same element. The assertion
+# had been wrong since it was written; nothing ran the examples until #89.
+assert reversed == braid[s1^-1, s1^-1, s1^-1]
 
 # --- Close to form a knot ---
 

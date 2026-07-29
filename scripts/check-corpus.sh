@@ -43,23 +43,20 @@ fi
 # ── MANIFEST ───────────────────────────────────────────────────────────────
 # Examples that must fully TYPECHECK and EVALUATE (all their asserts hold).
 EXAMPLES_MUST_RUN=(
-  echo_pd.tangle
-  isotopy.tangle          # the TG-7 witness — see header
-)
-
-# Examples that PARSE but do not yet TYPECHECK. Cause is recorded per entry so
-# the list cannot quietly become a dumping ground. Tracked in #88.
-#   braids_as_data / trefoil : recursive fn returning Num — `1 + length(rest)`
-#                              infers the recursive call as Word[0], not Num
-#   compositional_pd / tensor_product : `identity == braid[...]` is a width
-#                              mismatch (Word[0] vs Word[n]) under T-Eq-Word
-#   turing_complete          : match arms disagree in width (Word[0] vs Word[2])
-EXAMPLES_KNOWN_UNTYPED=(
   braids_as_data.tangle
   compositional_pd.tangle
+  echo_pd.tangle
+  isotopy.tangle          # the TG-7 witness — see header
   tensor_product.tangle
   trefoil.tangle
   turing_complete.tangle
+)
+
+# Examples that parse but do not yet typecheck. EMPTY as of #92 + the
+# statement-order fix: all seven examples now typecheck AND evaluate, so they
+# are all in EXAMPLES_MUST_RUN above. Keep this list empty — an entry here is
+# debt, and the ratchet fails the build if a listed file starts working.
+EXAMPLES_KNOWN_UNTYPED=(
 )
 
 # conformance/valid programs the parser does not yet accept.

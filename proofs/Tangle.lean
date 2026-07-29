@@ -374,9 +374,26 @@ inductive HasType : Ctx → Expr → Ty → Prop where
       HasType Γ e₁ .num →
       HasType Γ e₂ .num →
       HasType Γ (.add e₁ e₂) .num
-  | tEqWord (Γ : Ctx) (e₁ e₂ : Expr) (n : Nat) :            -- [T-Eq-Word]
+  -- [T-Eq-Word].  The two operands need NOT have the same width (#92).
+  --
+  -- Braid groups embed: Bₙ ↪ Bₙ₊₁ by adding a strand nothing touches.  A word
+  -- on n strands IS a word on max(n,m) strands, so the comparison is asked in
+  -- the larger group — which is exactly what `braidEquiv` already computes: it
+  -- takes two generator lists and has no width parameter at all.
+  --
+  -- Requiring n = n was inconsistent with the rest of the language:
+  --   * `tComposeWord` (below) already WIDENS to max n m, so a program could
+  --     compose two braids it was then forbidden to compare;
+  --   * `~` (isotopy) accepted differing widths in OCaml and, since TG-7,
+  --     evaluates through the SAME `braidEquiv` — identical operands and
+  --     identical answer, one rejected by the typechecker and one not;
+  --   * `eqIdBraid`/`eqBraidId` below decide "is this braid trivial?" against
+  --     `identity : word 0`, which under the old rule could only ever type
+  --     when the braid was empty.  The step relation had rules for a question
+  --     the typing rule forbade asking.
+  | tEqWord (Γ : Ctx) (e₁ e₂ : Expr) (n m : Nat) :          -- [T-Eq-Word]
       HasType Γ e₁ (.word n) →
-      HasType Γ e₂ (.word n) →
+      HasType Γ e₂ (.word m) →
       HasType Γ (.eq e₁ e₂) .bool
   | tEqNum (Γ : Ctx) (e₁ e₂ : Expr) :                       -- [T-Eq-Num]
       HasType Γ e₁ .num →
@@ -687,7 +704,7 @@ theorem weakening {Γ₁ Γ₂ : Ctx} {e : Expr} {τ σ : Ty} :
     cases h; rename_i h₁ h₂; simp only [shift]; exact .tAddNum _ _ _ (iha h₁) (ihb h₂)
   | eq a b iha ihb =>
     cases h <;> simp only [shift]
-    · rename_i n h₁ h₂; exact .tEqWord _ _ _ n (iha h₁) (ihb h₂)
+    · rename_i n m h₁ h₂; exact .tEqWord _ _ _ n m (iha h₁) (ihb h₂)
     · rename_i h₁ h₂; exact .tEqNum _ _ _ (iha h₁) (ihb h₂)
     · rename_i h₁ h₂; exact .tEqStr _ _ _ (iha h₁) (ihb h₂)
   | echoClose a iha =>
@@ -765,7 +782,7 @@ theorem subst_preserves {Γ₁ Γ₂ : Ctx} {e s : Expr} {τ σ : Ty} :
     cases h; rename_i h₁ h₂; simp only [subst]; exact .tAddNum _ _ _ (iha h₁ hs) (ihb h₂ hs)
   | eq a b iha ihb =>
     cases h <;> simp only [subst]
-    · rename_i n h₁ h₂; exact .tEqWord _ _ _ n (iha h₁ hs) (ihb h₂ hs)
+    · rename_i n m h₁ h₂; exact .tEqWord _ _ _ n m (iha h₁ hs) (ihb h₂ hs)
     · rename_i h₁ h₂; exact .tEqNum _ _ _ (iha h₁ hs) (ihb h₂ hs)
     · rename_i h₁ h₂; exact .tEqStr _ _ _ (iha h₁ hs) (ihb h₂ hs)
   | echoClose a iha =>
@@ -1052,21 +1069,21 @@ theorem preservation : HasType [] e τ → Step e e' → HasType [] e' τ := by
   | addNums => cases ht with | tAddNum => exact .tNum _ _
   | eqLeft hs ih =>
     cases ht with
-    | tEqWord _ _ _ n h₁ h₂ => exact .tEqWord _ _ _ n (ih h₁) h₂
+    | tEqWord _ _ _ n m h₁ h₂ => exact .tEqWord _ _ _ n m (ih h₁) h₂
     | tEqNum _ _ _ h₁ h₂ => exact .tEqNum _ _ _ (ih h₁) h₂
     | tEqStr _ _ _ h₁ h₂ => exact .tEqStr _ _ _ (ih h₁) h₂
   | eqRight _ hs ih =>
     cases ht with
-    | tEqWord _ _ _ n h₁ h₂ => exact .tEqWord _ _ _ n h₁ (ih h₂)
+    | tEqWord _ _ _ n m h₁ h₂ => exact .tEqWord _ _ _ n m h₁ (ih h₂)
     | tEqNum _ _ _ h₁ h₂ => exact .tEqNum _ _ _ h₁ (ih h₂)
     | tEqStr _ _ _ h₁ h₂ => exact .tEqStr _ _ _ h₁ (ih h₂)
   | eqNums => cases ht with
     | tEqNum => exact .tBool _ _
-    | tEqWord _ _ _ _ _ h₁ => cases h₁
+    | tEqWord _ _ _ _ _ _ h₁ => cases h₁
     | tEqStr _ _ _ _ h₁ => cases h₁
   | eqStrs => cases ht with
     | tEqStr => exact .tBool _ _
-    | tEqWord _ _ _ _ _ h₁ => cases h₁
+    | tEqWord _ _ _ _ _ _ h₁ => cases h₁
     | tEqNum _ _ _ _ h₁ => cases h₁
   | eqBraids => cases ht with
     | tEqWord => exact .tBool _ _
@@ -1569,7 +1586,9 @@ def infer (Γ : Ctx) : Expr → Option Ty
       | _, _ => none
   | .eq e₁ e₂ =>
       match infer Γ e₁, infer Γ e₂ with
-      | some (.word n), some (.word m) => if n = m then some .bool else none
+      -- Widths need not agree (#92): Bₙ ↪ Bₙ₊₁, so the comparison is decided
+      -- in the larger group. Mirrors the widened `tEqWord`.
+      | some (.word _), some (.word _) => some .bool
       | some .num, some .num => some .bool
       | some .str, some .str => some .bool
       | _, _ => none
@@ -1658,12 +1677,11 @@ theorem infer_sound {Γ : Ctx} {e : Expr} {τ : Ty} :
       all_goals simp at h
   | eq e₁ e₂ ih₁ ih₂ =>
       intro h; simp only [infer] at h; split at h
+      -- No inner `split`: with widths free (#92) there is no `if n = m`
+      -- condition left to case on, so the word branch is now direct.
       next n m he₁ he₂ =>
-        split at h
-        next hnm =>
-          injection h with h; subst h; subst hnm
-          exact .tEqWord _ _ _ _ (ih₁ he₁) (ih₂ he₂)
-        next => simp at h
+        injection h with h; subst h
+        exact .tEqWord _ _ _ n m (ih₁ he₁) (ih₂ he₂)
       next he₁ he₂ => injection h with h; subst h; exact .tEqNum _ _ _ (ih₁ he₁) (ih₂ he₂)
       next he₁ he₂ => injection h with h; subst h; exact .tEqStr _ _ _ (ih₁ he₁) (ih₂ he₂)
       all_goals simp at h

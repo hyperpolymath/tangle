@@ -90,6 +90,18 @@ definition:
     { { def_name = name; def_params = ps; def_body = body; def_line = $startpos(name).Lexing.pos_lnum } }
   | DEF name = IDENT EQ body = expr
     { { def_name = name; def_params = []; def_body = body; def_line = $startpos(name).Lexing.pos_lnum } }
+  (* Weave as a DEFINITION BODY specifically, rather than as a general
+     primary_expr.  Admitting it into primary_expr made the grammar ambiguous:
+     inside a comma context such as `pair(weave ... yield strands a, b)` the
+     parser cannot tell whether the comma continues the strand list or
+     separates arguments, and menhir resolved that arbitrarily.  Definition
+     bodies are not comma-delimited, so this position is unambiguous — and it
+     is the only position the construct is actually used in
+     (conformance/valid/v02, v08, v09, v12). *)
+  | DEF name = IDENT EQ w = weave_block
+    { { def_name = name; def_params = []; def_body = Weave w; def_line = $startpos(name).Lexing.pos_lnum } }
+  | DEF name = IDENT LPAREN ps = param_list RPAREN EQ w = weave_block
+    { { def_name = name; def_params = ps; def_body = Weave w; def_line = $startpos(name).Lexing.pos_lnum } }
   ;
 
 param_list:
@@ -321,8 +333,6 @@ primary_expr:
     { e }
   | LBRACE e = expr RBRACE
     { e }
-  | w = weave_block
-    { Weave w }
   ;
 
 (* ---- Crossings: (a > b) or (a < b) ---- *)
