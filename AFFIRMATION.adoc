@@ -313,7 +313,7 @@ search-and-replace would have damaged them:
   the debt.
 
 The *genuine* residue was: `{{DEPS}}`, `{{BUILD_OUTPUT_PATH}}`,
-`{{PACKAGE_NAME}}` in `QUICKSTART-MAINTAINER.adoc`; `{{LANG_STACK}}`,
+`tangle` in `QUICKSTART-MAINTAINER.adoc`; `{{LANG_STACK}}`,
 `{{BUILD_CMD}}`, `{{TEST_CMD}}`, `{{MUST_INVARIANTS}}` in
 `QUICKSTART-DEV.adoc`; `{{PROJECT_UNIQUE_STRENGTH}}` in `methodology.a2ml`;
 and four contractiles (`Intentfile`, `Trustfile`, `Mustfile`, `Adjustfile`)

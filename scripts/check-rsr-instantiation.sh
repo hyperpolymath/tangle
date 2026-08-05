@@ -6,7 +6,7 @@
 # ── Why this exists ────────────────────────────────────────────────────────
 # `.machine_readable/bot_directives/methodology.a2ml` already declares:
 #
-#     reject-if-contains = ["{{PLACEHOLDER}}", "{{PROJECT}}", "rsr-template-repo"]
+#     reject-if-contains = ["{{PLACEHOLDER}}", "TANGLE", "rsr-template-repo"]
 #
 # ...and NOTHING enforced it, so the repository violated its own stated rule
 # indefinitely: four contractiles still named `rsr-template-repo` as their
