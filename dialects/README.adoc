@@ -1,0 +1,78 @@
+== Tangle Dialects — hosted DSL scaffolds
+
+Tangle is a Turing-complete topological programming language. It is NOT
+a DSL host by accident — it was designed to support compositional
+calculi grounded in knot theory, category theory, and related algebraic
+structures.
+
+This directory holds _scaffolds_ for DSLs that could be hosted on
+Tangle. Each scaffold is an EBNF grammar sketch — evidence that the idea
+is coherent and could be built out, not a complete implementation.
+
+=== The pattern
+
+When a DSL matures from sketch → alpha implementation:
+
+[arabic]
+. Start with an EBNF grammar sketch here (`+grammar-sketch.ebnf+`)
+. Write 1-3 example programs
+. When ready to implement, decide whether it stays in-tree or graduates
+to its own repository
+. Implement the parser in Tangle’s OCaml front end or a sibling language
+. Define its IR type
+
+No dialect has yet made this journey, so there is no precedent to follow
+— these are all still at step 1.
+
+These sketches set out what a general multi-DSL host _would_ cover. They
+do not yet evidence the claim: nothing here is implemented, and nothing
+is currently built on Tangle. Implementing one of them end to end is
+what would turn the claim into evidence.
+
+=== Current scaffolds
+
+[width="100%",cols="34%,33%,33%",options="header",]
+|===
+|Dialect |Status |Domain
+|link:braid-calculus/[braid-calculus] |sketch |Artin braid group Bn
+calculus
+
+|link:quantum-circuit/[quantum-circuit] |sketch |Quantum circuit
+compositional calculus
+
+|link:string-diagram/[string-diagram] |sketch |Monoidal/braided category
+string diagrams
+
+|link:virtual-knot/[virtual-knot] |sketch |Kauffman virtual knot
+calculus (extends braid-calculus with virtual crossings)
+
+|link:skein-algebra/[skein-algebra] |sketch |Skein algebra calculus
+(Jones/HOMFLY-PT/Alexander; connects to Skein.jl + KnotTheory.jl)
+|===
+
+=== Relationship to KRL
+
+*KRL is not a Tangle dialect and never was.* It was previously listed
+here as one that had "`graduated`" to its own repository; that was part
+of a wider conflation of the two projects, corrected in `+README.adoc+`
+and in the erratum to `+AFFIRMATION.adoc+`.
+
+KRL is the resolution language for
+https://github.com/hyperpolymath/quandledb[QuandleDB], developed jointly
+with it, and lives at
+https://github.com/hyperpolymath/krl[hyperpolymath/krl]. It does not
+compile to, lower into, or otherwise depend on Tangle. The two share a
+subject matter, not an architecture.
+
+The scaffolds listed above are Tangle’s own dialects.
+
+=== Contribution
+
+To propose a new DSL scaffold:
+
+[arabic]
+. Create `+dialects/<name>/+` with at minimum `+grammar-sketch.ebnf+`
+. Write `+dialects/<name>/README.md+` explaining the domain + 1-2
+example programs
+. Link from this README
+. Keep it to a sketch — no implementation yet
