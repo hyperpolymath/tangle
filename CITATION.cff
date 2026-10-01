@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "tangle"
+abstract: "Tangle — topological programming language"
+authors:
+  - family-names: "Jewell"
+    given-names: "Jonathan D.A."
+    orcid: "https://orcid.org/0000-0002-3078-6652"
+repository-code: "https://github.com/hyperpolymath/tangle"
+keywords:
+  - "open-source"
+  - "rust"
+  - "choreographic-interaction"
+  - "epistemic-computing"
+  - "epistemic-infrastructure"
+  - "equivalence-aware-computing"
+  - "hyperpolymath"
+  - "knot-theory"
+  - "language-design"
+  - "ocaml"
+  - "programming-language"
+  - "reproducible-research"
+  - "research-software"
+  - "topological-programming"
+  - "type-theory"
+  - "typed-provenance"
+  - "veridical-computing"
