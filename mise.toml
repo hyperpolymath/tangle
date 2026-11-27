@@ -38,10 +38,12 @@ description = "Install pinned JS dev tools (Prettier) from bun.lock"
 run = "bun install --frozen-lockfile"
 
 [tasks.build]
-run = "cargo build --release"
+dir = "compiler"
+run = "dune build"
 
 [tasks.test]
-run = "cargo test"
+dir = "compiler"
+run = "dune test --force"
 
 [tasks.lint]
 depends = ["setup"]
